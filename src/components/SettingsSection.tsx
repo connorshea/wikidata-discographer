@@ -66,9 +66,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
       <p className="hint">Applied to newly created items.</p>
       <div className="grid">
         <div className="f">
-          <label htmlFor="langSel">
-            Label language <span className="sub">Also used for the P1476 title</span>
-          </label>
+          <label htmlFor="langSel">Label language</label>
           <select
             id="langSel"
             value={labelLang}
@@ -95,26 +93,25 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
               onChange={(e) => set("lang", e.target.value.toLowerCase().trim())}
             />
           )}
+          <span className="sub">Also used for the P1476 title</span>
           <FieldErr id="lang" msg={errs.lang} />
         </div>
         <label className="f">
-          Publication date (P577){" "}
-          <span className="sub">
-            Album release date, also used for compositions and tracks. YYYY, YYYY-MM or YYYY-MM-DD;
-            blank to skip
-          </span>
+          Publication date (P577)
           <input
             type="text"
             spellCheck={false}
             value={S.date}
             onChange={(e) => set("date", e.target.value)}
           />
+          <span className="sub">
+            Album release date, also used for compositions and tracks. YYYY, YYYY-MM or YYYY-MM-DD;
+            blank to skip
+          </span>
           <FieldErr id="date" msg={errs.date} />
         </label>
         <div className="f">
-          <label htmlFor="p407Sel">
-            Language of work (P407) <span className="sub">Added to compositions and tracks</span>
-          </label>
+          <label htmlFor="p407Sel">Language of work (P407)</label>
           <select
             id="p407Sel"
             value={workLang}
@@ -149,6 +146,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
               onChange={(e) => set("p407", normalizeQid(e.target.value))}
             />
           )}
+          <span className="sub">Added to compositions and tracks</span>
           <FieldErr id="p407" msg={errs.p407} />
         </div>
       </div>
@@ -189,9 +187,9 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
         Singles
       </h3>
       <p className="hint">
-        Use "Add single" on a track in the disc tables. Each single gets P31 single (Q134556),
-        P1476, P175, its own P577 release date, P407, a P658 tracklist pointing at the track, and
-        P13602 single taken from the album.
+        Tick "Single" on a track in the disc tables. Each single gets P31 single (Q134556), P1476,
+        P175, its own P577 release date, P407, a P658 tracklist pointing at the track, and P13602
+        single taken from the album.
       </p>
       <div className="grid">
         {template(

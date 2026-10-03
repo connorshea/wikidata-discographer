@@ -101,7 +101,8 @@ export default function RunSection({ update, plan, state }: SectionProps) {
     <section className="block">
       <h2>Create on Wikidata</h2>
       {plan.messages.map(([kind, text], i) => (
-        <p key={i} className={`msg ${kind}`}>
+        // The summary is neutral: green stands for compositions elsewhere.
+        <p key={i} className={`msg ${kind === "ok" ? "summary" : kind}`}>
           {text}
         </p>
       ))}
