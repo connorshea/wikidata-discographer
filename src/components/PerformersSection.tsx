@@ -111,10 +111,11 @@ function Suggestions({
       {items.slice(0, 5).map((i) => (
         <li key={i.qid}>
           <button type="button" className="ghost small" onClick={() => onPick(i.qid)}>
-            Use {i.qid}
+            Use this artist
           </button>
           <WikiLink base={wikiBaseUrl} qid={i.qid} />
-          <span className="muted">{i.description ?? "(no description)"}</span>
+          <span>{i.label ?? "(no label)"}</span>
+          {i.description && <span className="muted">{i.description}</span>}
         </li>
       ))}
     </ul>
