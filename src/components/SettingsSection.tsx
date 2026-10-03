@@ -57,7 +57,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
     </div>
   );
   const perTrack =
-    "Write the description as plain text. These variables are replaced for each track; anything else in braces is an error.";
+    "Write the description as plain text. These variables are replaced for each track, and anything else in braces is an error.";
   const yearNote = "Year of the publication date above. Needs a publication date.";
 
   return (
@@ -195,7 +195,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
         {template(
           "singleDesc",
           "Description template",
-          "Write the description as plain text. These variables are replaced for each single; anything else in braces is an error.",
+          "Write the description as plain text. These variables are replaced for each single, and anything else in braces is an error.",
           "Year of that single's release date, entered in the disc table. Needs a release date.",
         )}
       </div>

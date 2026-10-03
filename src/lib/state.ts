@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS: Settings = {
   date: "",
   p407: "",
   compDesc: "{year} song by {artists}",
-  trackDesc: "vocal track by {artists}; {year} studio recording",
+  trackDesc: "vocal track by {artists}, {year} studio recording",
   trackType: "Q55850593",
   singleDesc: "{year} single by {artists}",
   albumDesc: "{year} {type} by {artists}",

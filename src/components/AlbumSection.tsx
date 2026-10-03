@@ -61,7 +61,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
             <label className="f">
               Album artists (P175){" "}
               <span className="sub">
-                Names as you'd write them in the tracklist; mapped in Performers
+                Names as you'd write them in the tracklist, mapped in Performers
               </span>
               <input
                 type="text"
@@ -98,14 +98,14 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
               <div className="f-head">
                 <label htmlFor="albumDesc">Description template</label>
                 <InfoTip id="albumDesc">
-                  Write the description as plain text; anything else in braces is an error.
+                  Write the description as plain text. Anything else in braces is an error.
                   <dl>
                     <dt>{"{year}"}</dt>
                     <dd>
                       Year of the publication date in Item settings. Needs a publication date.
                     </dd>
                     <dt>{"{type}"}</dt>
-                    <dd>The form, e.g. “studio album”; with no form, “album” or “EP”.</dd>
+                    <dd>The form, e.g. “studio album”, or “album” or “EP” when there's no form.</dd>
                     <dt>{"{artists}"}</dt>
                     <dd>The album artists, joined like “A, B and C”.</dd>
                   </dl>
@@ -122,7 +122,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
             {ALBUM_ID_FIELDS.map((f) => (
               <label className="f" key={f.key}>
                 {f.label} ({f.property}){" "}
-                <span className="sub">Optional; ID or URL. Checked for duplicates.</span>
+                <span className="sub">Optional. ID or URL, checked for duplicates.</span>
                 <input
                   type="text"
                   spellCheck={false}

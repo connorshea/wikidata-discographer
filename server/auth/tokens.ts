@@ -200,7 +200,7 @@ async function refreshAndStore(userId: number, now: Date): Promise<string> {
   if ("revoked" in result) {
     // Done outside the transaction: a throw inside it would roll the delete back.
     await deleteTokens(userId);
-    throw new TokenError("revoked", "The Wikimedia authorization was revoked; log in again");
+    throw new TokenError("revoked", "The Wikimedia authorization was revoked. Log in again");
   }
   return result.token;
 }

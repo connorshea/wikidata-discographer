@@ -95,8 +95,8 @@ everything but artists: about a million rows. The lists are in
 `src/lib/music.ts`. The mirror is used to:
 
 - block creating an album whose Spotify, MusicBrainz or Apple Music ID is
-  already on Wikidata, and warn about albums with the same title;
-- suggest QIDs for the performers;
+  already on Wikidata, and warn about albums with the same title
+- suggest QIDs for the performers
 - suggest existing compositions, tracks and singles for each tracklist row
   (`server/matches.ts`): items with the row's title (ignoring case and curly
   quotes) that share one of its performers, or that are on the existing album.

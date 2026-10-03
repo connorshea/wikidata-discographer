@@ -512,7 +512,7 @@ export function buildPlan(state: State): Plan {
         const errs: string[] = [];
         if (!sd.ok) errs.push(sd.error);
         else if (!sd.val && singleUsesYear && !sq)
-          errs.push("Enter a release date; the description uses {year}.");
+          errs.push("Enter a release date, since the description uses {year}.");
         if (sq && !QID.test(sq)) errs.push(`"${sq}" isn't a QID.`);
         if (errs.length) singleErrs[`${di}:${r.n}`] = errs.join(" ");
         single = { date: sd, qid: QID.test(sq) ? sq : null };
@@ -541,25 +541,25 @@ export function buildPlan(state: State): Plan {
   parsed.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
       err(
-        `Disc ${di + 1} has ${rows.length} tracks; a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
+        `Disc ${di + 1} has ${rows.length} tracks, but a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
           "Split it into more discs, or into separate runs.",
       );
   });
   const trackCount = parsed.reduce((n, rows) => n + rows.length, 0);
   if (trackCount > MAX_TRACKS)
     err(
-      `That's ${trackCount} tracks across all discs; a run can have at most ${MAX_TRACKS}. ` +
+      `That's ${trackCount} tracks across all discs, but a run can have at most ${MAX_TRACKS}. ` +
         "Split the release into separate runs.",
     );
   if (albumErr) err("Fix the album details at the top of the page.");
   if (readErr)
     err(
-      `${readErr} line(s) couldn't be read. They're marked in the disc tables; fix or remove them.`,
+      `${readErr} line(s) couldn't be read. They're marked in the disc tables. Fix or remove them.`,
     );
   if (dupes.size) err(`Track numbers repeat within a disc: ${[...dupes].join(", ")}.`);
   if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`);
   if (unmapped.size) err(`No performer QID for: ${[...unmapped].join(", ")}.`);
-  if (invalid.length) err(`Not a QID: ${invalid.join("; ")}.`);
+  if (invalid.length) err(`Not a QID: ${invalid.join(", ")}.`);
   const settingsErr =
     !!fieldErrs.lang ||
     !!fieldErrs.date ||
@@ -757,7 +757,7 @@ export function buildPlan(state: State): Plan {
 
   if (ops.length > MAX_OPS) {
     err(
-      `That's ${ops.length} edits; a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
+      `That's ${ops.length} edits, but a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
     );
     return { parsed, fieldErrs, singleErrs, messages, ops: [], ready: false };
   }
@@ -772,7 +772,7 @@ export function buildPlan(state: State): Plan {
       `${creates("track:")} track(s) to create, ${items.length - creates("track:")} reused`,
       `${items.length} tracklist statement(s)`,
       ...(made || reused ? [`${made} single(s) to create, ${reused} reused`] : []),
-    ].join("; ") + ".",
+    ].join(". ") + ".",
   ]);
   return { parsed, fieldErrs, singleErrs, messages, ops, ready: ops.length > 0 };
 }

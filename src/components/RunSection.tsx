@@ -307,7 +307,7 @@ function UnknownRunGuard({
       </p>
       <div className="row">
         <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
-          I checked; it wasn't created. Run anyway
+          I checked and it wasn't created. Run anyway
         </button>
       </div>
     </div>
