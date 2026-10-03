@@ -1,12 +1,12 @@
-// The local mirror of Wikidata music items (`music_items` +
-// `music_external_ids`): converting an entity to a row, and writing rows. Used
+// The local mirror of Wikidata music items (`music_items`,
+// `music_external_ids` and `music_links`): converting an entity to a row, and writing rows. Used
 // by the weekly dump import, by runs (each created item is added straight
 // away), and by "add an item" for things created since the last dump.
 import { inArray, sql } from "drizzle-orm";
 import { db, retryOnLockConflict } from "./db.ts";
 import { propertyNumber, qidNumber } from "./ids.ts";
-import { musicExternalIds, musicItems } from "../db/schema.ts";
-import { ID_PROPERTIES, kindOf, type MusicKind } from "../src/lib/music.ts";
+import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
+import { ID_PROPERTIES, kindOf, LINK_PROPERTIES, type MusicKind } from "../src/lib/music.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
 /**
@@ -15,7 +15,7 @@ import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
  * contents change (a new column, a class added or removed): rows from an
  * older version are then re-read from the next dump.
  */
-export const MIRROR_VERSION = 1;
+export const MIRROR_VERSION = 2; // 2: music_links, and curly quotes in label_search
 
 export interface MirrorRow {
   qid: string;
@@ -26,6 +26,8 @@ export interface MirrorRow {
   description: string | null;
   instanceOf: string[];
   ids: { property: string; value: string }[];
+  /** Item-valued statements (LINK_PROPERTIES); none for artists. */
+  links: { property: string; target: string }[];
 }
 
 const clip = (s: string | undefined, n: number) => (s ? Array.from(s).slice(0, n).join("") : null);
@@ -62,6 +64,18 @@ export function entityToRow(entity: Entity): MirrorRow | null {
       ids.push({ property, value });
     }
   }
+  const links: MirrorRow["links"] = [];
+  // Artists are only ever link targets; their own item links aren't needed.
+  // Not capped: the most any music item has is ~100 (a tracklist's P658).
+  if (kind !== "artist")
+    for (const property of Object.keys(LINK_PROPERTIES)) {
+      const targets = new Set<string>();
+      for (const s of claims[property] ?? []) {
+        const id = (s.mainsnak.datavalue?.value as { id?: unknown } | undefined)?.id;
+        if (s.rank !== "deprecated" && typeof id === "string" && /^Q\d+$/.test(id)) targets.add(id);
+      }
+      for (const target of targets) links.push({ property, target });
+    }
   const label = pickText(entity.labels);
   return {
     qid: entity.id,
@@ -71,14 +85,30 @@ export function entityToRow(entity: Entity): MirrorRow | null {
     description: clip(pickText(entity.descriptions), 400),
     instanceOf,
     ids,
+    links,
   };
 }
 
+/**
+ * The key a label is searched and matched by: lowercased, with curly quotes
+ * made straight (tracklists and Wikidata labels use either), clipped to the
+ * index length.
+ */
 export const labelSearchKey = (label: string | null | undefined) =>
-  label ? Array.from(label.toLowerCase()).slice(0, 191).join("") : null;
+  label
+    ? Array.from(
+        label
+          .normalize("NFC")
+          .toLowerCase()
+          .replace(/[’‘]/g, "'")
+          .replace(/[“”]/g, '"'),
+      )
+        .slice(0, 191)
+        .join("")
+    : null;
 
 /**
- * Insert or update rows and make their external ids match. A row older than
+ * Insert or update rows and make their external ids and links match. A row older than
  * the one stored (a lower revid) is left out, so a dump read while the app
  * wrote a newer revision can't undo it. Retried on a deadlock or lock timeout.
  */
@@ -134,6 +164,13 @@ async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "a
       value: id.value,
     })),
   );
+  const links = rows.flatMap((r) =>
+    r.links.map((l) => ({
+      qid: qidNumber(r.qid),
+      property: propertyNumber(l.property),
+      target: qidNumber(l.target),
+    })),
+  );
   await tx
     .insert(musicItems)
     .values(values)
@@ -151,4 +188,6 @@ async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "a
     });
   await tx.delete(musicExternalIds).where(inArray(musicExternalIds.qid, qids));
   if (ids.length) await tx.insert(musicExternalIds).values(ids);
+  await tx.delete(musicLinks).where(inArray(musicLinks.qid, qids));
+  if (links.length) await tx.insert(musicLinks).values(links);
 }
