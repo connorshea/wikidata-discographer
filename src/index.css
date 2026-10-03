@@ -54,7 +54,7 @@ a {
   color: var(--accent);
 }
 main {
-  max-width: 1060px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 28px 18px 64px;
 }
@@ -97,10 +97,29 @@ p.lede {
   max-width: 72ch;
 }
 .flow {
-  font-family: var(--mono);
-  font-size: 0.82rem;
+  list-style: none;
+  padding: 0;
   color: var(--muted);
-  margin: 0 0 12px;
+  margin: 0 0 16px;
+}
+.flow .kind {
+  color: var(--ink);
+  white-space: nowrap;
+}
+.flow .kind i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-right: 5px;
+}
+.flow a.prop {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.flow a.prop:hover {
+  color: var(--accent);
 }
 .row.example {
   margin: 0 0 24px;
