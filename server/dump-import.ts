@@ -93,48 +93,49 @@ export function readHeader(line: Buffer): { qid: number; revid: number } | null 
 }
 
 /**
- * The mirror's Q-numbers and the revision each row was built from, as sorted
- * typed arrays (a JS Map of millions of entries would cost several times as much),
- * plus which ones this pass has seen.
+ * The mirror's Q-numbers and the revision each row was built from, as typed
+ * arrays in QID order (a JS Map or array of objects for millions of items
+ * would cost several times as much, on the capped heap), plus which ones this
+ * pass has seen. Filled a row at a time, so loading never holds the whole
+ * mirror as objects.
  */
 export class MirrorIndex {
-  readonly qids: Float64Array;
+  private qids = new Float64Array(1024);
   /** -1 for a row that must be re-read (unknown revid, or an older MIRROR_VERSION). */
-  readonly revids: Float64Array;
-  readonly seen: Uint8Array;
+  private revids = new Float64Array(1024);
+  private seenFlags = new Uint8Array(1024);
+  private n = 0;
+  /** Rows that can be skipped at their revision. */
+  skippable = 0;
 
-  /** `rows` must be in ascending QID order (the table's primary key order). */
-  constructor(rows: Iterable<{ qid: number; revid: number | null; rowVersion: number }>) {
-    let qids = new Float64Array(1024);
-    let revids = new Float64Array(1024);
-    let n = 0;
-    for (const r of rows) {
-      if (n === qids.length) {
-        const grownQids = new Float64Array(n * 2);
-        grownQids.set(qids);
-        qids = grownQids;
-        const grownRevids = new Float64Array(n * 2);
-        grownRevids.set(revids);
-        revids = grownRevids;
-      }
-      if (n > 0 && r.qid <= qids[n - 1]) throw new Error("MirrorIndex: rows out of order");
-      qids[n] = r.qid;
-      revids[n] = r.revid != null && r.rowVersion >= MIRROR_VERSION ? r.revid : -1;
-      n++;
+  constructor(rows: Iterable<IndexRow> = []) {
+    for (const r of rows) this.add(r);
+  }
+
+  /** Append a row; rows must come in ascending QID order (the primary key's). */
+  add(r: IndexRow): void {
+    const n = this.n;
+    if (n > 0 && r.qid <= this.qids[n - 1]) throw new Error("MirrorIndex: rows out of order");
+    if (n === this.qids.length) {
+      this.qids = grow(this.qids, new Float64Array(n * 2));
+      this.revids = grow(this.revids, new Float64Array(n * 2));
+      this.seenFlags = grow(this.seenFlags, new Uint8Array(n * 2));
     }
-    this.qids = qids.slice(0, n);
-    this.revids = revids.slice(0, n);
-    this.seen = new Uint8Array(n);
+    const current = r.revid != null && r.rowVersion >= MIRROR_VERSION;
+    this.qids[n] = r.qid;
+    this.revids[n] = current ? r.revid! : -1;
+    if (current) this.skippable++;
+    this.n++;
   }
 
   get size(): number {
-    return this.qids.length;
+    return this.n;
   }
 
   /** The position of item `qid` (its Q-number), or -1. */
   find(qid: number): number {
     let lo = 0;
-    let hi = this.qids.length - 1;
+    let hi = this.n - 1;
     while (lo <= hi) {
       const mid = (lo + hi) >>> 1;
       const v = this.qids[mid];
@@ -150,16 +151,20 @@ export class MirrorIndex {
     return this.revids[i] >= revid;
   }
 
+  markSeen(i: number): void {
+    this.seenFlags[i] = 1;
+  }
+
   /** The Q-numbers this pass hasn't seen. */
   unseen(): number[] {
     const out: number[] = [];
-    for (let i = 0; i < this.seen.length; i++) if (!this.seen[i]) out.push(this.qids[i]);
+    for (let i = 0; i < this.n; i++) if (!this.seenFlags[i]) out.push(this.qids[i]);
     return out;
   }
 
   /** Read the whole mirror in QID order, a page at a time. */
   static async load(): Promise<MirrorIndex> {
-    const pages: { qid: number; revid: number | null; rowVersion: number }[][] = [];
+    const index = new MirrorIndex();
     let after = 0;
     for (;;) {
       const page = await db
@@ -169,11 +174,22 @@ export class MirrorIndex {
         .orderBy(asc(musicItems.qid))
         .limit(LOAD_PAGE);
       if (page.length === 0) break;
-      pages.push(page);
+      for (const r of page) index.add(r);
       after = page[page.length - 1].qid;
     }
-    return new MirrorIndex(pages.flat());
+    return index;
   }
+}
+
+interface IndexRow {
+  qid: number;
+  revid: number | null;
+  rowVersion: number;
+}
+
+function grow<T extends Float64Array | Uint8Array>(from: T, to: T): T {
+  to.set(from);
+  return to;
 }
 
 /**
@@ -312,9 +328,8 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
 
   const loadStarted = Date.now();
   const index = await MirrorIndex.load();
-  const current = index.revids.reduce((n, r) => n + (r >= 0 ? 1 : 0), 0);
   console.log(
-    `import-dump: loaded ${index.size} mirrored items (${current} skippable at their revision) ` +
+    `import-dump: loaded ${index.size} mirrored items (${index.skippable} skippable at their revision) ` +
       `in ${formatDuration(Date.now() - loadStarted)}` +
       memoryNote(),
   );
@@ -338,7 +353,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
       const header = readHeader(line);
       const at = header ? index.find(header.qid) : -1;
       if (at !== -1 && index.isCurrent(at, header!.revid)) {
-        index.seen[at] = 1;
+        index.markSeen(at);
         stats.unchanged++;
         continue;
       }
@@ -355,7 +370,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
         continue;
       }
       if (!row) continue;
-      if (at !== -1) index.seen[at] = 1;
+      if (at !== -1) index.markSeen(at);
       stats.matched++;
       batch.push(row);
       if (batch.length >= BATCH_SIZE) await flush();
