@@ -19,14 +19,37 @@ describe("mightMatch", () => {
       ),
     ).toBe(true);
   });
+  it("keeps a music class in any P31 statement, wherever P31 is", () => {
+    const p31 =
+      '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}}},' +
+      '{"mainsnak":{"datavalue":{"value":{"numeric-id":482994}}}}]';
+    expect(mightMatch(line(`{"claims":{"P17":[{"mainsnak":{}}],${p31}}},`))).toBe(true);
+  });
   it("keeps lines with an artist identifier claim", () => {
-    expect(
-      mightMatch(line('{"claims":{"P31":[{"numeric-id":5}],"P434":[{"mainsnak":{}}]}},')),
-    ).toBe(true);
+    const p31 = '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}}}]';
+    expect(mightMatch(line(`{"claims":{${p31},"P434":[{"mainsnak":{}}]}},`))).toBe(true);
+    expect(mightMatch(line('{"claims":{"P1902":[{"mainsnak":{}}]}},'))).toBe(true);
   });
   it("skips everything else, including class numbers that only share a prefix", () => {
-    expect(mightMatch(line('{"claims":{"P31":[{"numeric-id":4829940}]}},'))).toBe(false);
-    expect(mightMatch(line('{"claims":{"P31":[{"numeric-id":5}]}},'))).toBe(false);
+    const p31 = (id: number) => `"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":${id}}}}}]`;
+    expect(mightMatch(line(`{"claims":{${p31(4829940)}}},`))).toBe(false);
+    expect(mightMatch(line(`{"claims":{${p31(5)}}},`))).toBe(false);
+    // A property number that only ends in an artist one, or is P31's prefix.
+    expect(mightMatch(line('{"claims":{"P1434":[{"mainsnak":{}}],"P3":[{"mainsnak":{}}]}},'))).toBe(
+      false,
+    );
+  });
+  it("ignores music classes and artist ids outside P31 and the claims", () => {
+    // A class as another property's value, and as a qualifier on P31.
+    const claims =
+      '"P361":[{"mainsnak":{"datavalue":{"value":{"numeric-id":482994}}}}],' +
+      '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}}}]';
+    expect(mightMatch(line(`{"claims":{${claims}}},`))).toBe(false);
+    // An artist id property as a qualifier or reference: bare snaks, no mainsnak.
+    const qualified =
+      '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}},' +
+      '"qualifiers":{"P434":[{"snaktype":"value"}]}}]';
+    expect(mightMatch(line(`{"claims":{${qualified}}},`))).toBe(false);
   });
 });
 
