@@ -20,6 +20,7 @@
 //
 // Everything is an idempotent upsert, so a job that dies is simply re-run.
 import { createReadStream } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { basename } from "node:path";
 import { createGunzip } from "node:zlib";
 import type { Readable } from "node:stream";
@@ -90,7 +91,8 @@ export interface ImportStats {
 export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
   const started = Date.now();
   const stats: ImportStats = {
-    stamp: dumpStamp(opts.path),
+    // latest-all.json.gz is a symlink; the dated name is on its target.
+    stamp: dumpStamp(await realpath(opts.path)),
     bytes: 0,
     lines: 0,
     parsed: 0,
