@@ -124,7 +124,7 @@ authRoutes.get("/callback", async (c) => {
   deleteCookie(c, LOGIN_COOKIE, loginCookieOptions());
   const pending = parsePending(raw);
   if (!pending || Date.now() - pending.startedAt > LOGIN_TTL_SECONDS * 1000) {
-    return c.json({ error: "Login attempt expired or its cookie is missing; start again" }, 400);
+    return c.json({ error: "Login attempt expired or its cookie is missing. Start again" }, 400);
   }
 
   // The user declined on meta, or meta reported a problem.

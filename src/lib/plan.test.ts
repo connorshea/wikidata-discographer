@@ -122,7 +122,7 @@ describe("buildPlan", () => {
       const plan = buildPlan(withDiscs(3, MAX_TRACKS_PER_DISC + 1));
       expect(plan.ready).toBe(false);
       expect(errors(plan)).toEqual([
-        `Disc 2 has ${MAX_TRACKS_PER_DISC + 1} tracks; a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
+        `Disc 2 has ${MAX_TRACKS_PER_DISC + 1} tracks, but a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
           "Split it into more discs, or into separate runs.",
       ]);
     });
@@ -132,7 +132,7 @@ describe("buildPlan", () => {
       const plan = buildPlan(withDiscs(MAX_TRACKS_PER_DISC, MAX_TRACKS_PER_DISC, 1));
       expect(plan.ready).toBe(false);
       expect(errors(plan)).toEqual([
-        `That's ${MAX_TRACKS + 1} tracks across all discs; a run can have at most ${MAX_TRACKS}. ` +
+        `That's ${MAX_TRACKS + 1} tracks across all discs, but a run can have at most ${MAX_TRACKS}. ` +
           "Split the release into separate runs.",
       ]);
     });
