@@ -11,6 +11,7 @@ import type {
   UnknownRunConflict,
 } from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
+import { UnreviewedNotice } from "./MatchesSection.tsx";
 import PlanPreview from "./PlanPreview.tsx";
 import type { SectionProps, Update } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
@@ -44,7 +45,8 @@ export default function RunSection({
   plan,
   state,
   albumTracklist,
-}: SectionProps & { albumTracklist: AlbumTracklist | null }) {
+  unreviewed,
+}: SectionProps & { albumTracklist: AlbumTracklist | null; unreviewed: number }) {
   const { user } = useAuth();
   const [runId, setRunId] = useState<number | null>(null);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
@@ -112,6 +114,7 @@ export default function RunSection({
           {text}
         </p>
       ))}
+      {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
       {plan.ops.length > 0 && <PlanPreview plan={plan} state={state} />}
       <div className="row">
         <ConfirmRun

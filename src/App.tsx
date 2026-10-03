@@ -134,7 +134,11 @@ export default function App() {
       <DiscsSection {...props} reviews={reviews} />
       <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
       <PerformersSection {...props} />
-      <RunSection {...props} albumTracklist={albumTracklist} />
+      <RunSection
+        {...props}
+        albumTracklist={albumTracklist}
+        unreviewed={reviews.filter((r) => !r.reviewed).length}
+      />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton
           className="danger"
