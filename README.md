@@ -127,14 +127,18 @@ change state must be same-origin.
 
 ## Deploying to Toolforge
 
+The tool is `wikidata-discographer`, served at
+<https://wikidata-discographer.toolforge.org> (so `BASE_URL` is that, and the
+OAuth callback is `https://wikidata-discographer.toolforge.org/api/auth/callback`).
+Run these as the tool (`become wikidata-discographer`).
+
 Create the ToolsDB database with `CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`,
 and set the `DB_*`, `OAUTH_*`, `BASE_URL`, `SESSION_SECRET`, `TOKEN_ENC_KEY` and
-`USER_AGENT` envvars. Then build, migrate and start, replacing
-`tool-discographer` with the tool's name here and in `jobs.yaml`:
+`USER_AGENT` envvars. Then build, migrate and start:
 
 ```sh
 toolforge build start https://github.com/connorshea/wikidata-discographer
-toolforge jobs run migrate --image tool-discographer/tool-discographer:latest \
+toolforge jobs run migrate --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
   --command "node scripts/migrate.ts" --wait
 toolforge webservice buildservice start --mount none
 ```
@@ -146,7 +150,7 @@ After a deploy that adds a migration, run `migrate` again before
 Load the mirror once by hand. The dump is visible only with `--mount all`:
 
 ```sh
-toolforge jobs run import-dump --image tool-discographer/tool-discographer:latest \
+toolforge jobs run import-dump --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
   --command "node --max-old-space-size=384 jobs/import-dump.ts" \
   --mount all --mem 512Mi --cpu 2 --emails onfinish
 ```

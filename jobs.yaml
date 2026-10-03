@@ -1,8 +1,7 @@
 # Toolforge Jobs manifest. Load with:  toolforge jobs load jobs.yaml
 #
 # `image` must be this tool's Build Service image; after a `toolforge build`,
-# `toolforge images` shows it. Rename `tool-discographer` if the tool is named
-# differently.
+# `toolforge images` shows it.
 #
 # Commands call `node` directly rather than `npm run job:*`: the launch image
 # has npm but not pnpm, and npm refuses to run scripts when package.json's
@@ -10,7 +9,7 @@
 
 - name: prune-sessions
   command: node jobs/prune-sessions.ts
-  image: tool-discographer/tool-discographer:latest
+  image: tool-wikidata-discographer/tool-wikidata-discographer:latest
   schedule: "45 2 * * *" # nightly 02:45 UTC
   emails: onfailure
 
@@ -22,7 +21,7 @@
 # idempotent, and the prune refuses to delete more than 20% of the mirror.
 - name: import-dump
   command: node --max-old-space-size=384 jobs/import-dump.ts
-  image: tool-discographer/tool-discographer:latest
+  image: tool-wikidata-discographer/tool-wikidata-discographer:latest
   schedule: "0 6 * * 3" # Wednesdays 06:00 UTC
   mount: all
   mem: 512Mi
