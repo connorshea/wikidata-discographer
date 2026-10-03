@@ -20,7 +20,7 @@
 //
 // Everything is an idempotent upsert, so a job that dies is simply re-run.
 import { createReadStream } from "node:fs";
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { createGunzip } from "node:zlib";
 import type { Readable } from "node:stream";
@@ -68,6 +68,32 @@ export function dumpStamp(path: string, now = new Date()): string {
   return /(\d{8})/.exec(basename(path))?.[1] ?? now.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
+/** "2h 05m", "14m", "<1m". */
+export function formatDuration(ms: number): string {
+  if (ms < 60_000) return "<1m";
+  const min = Math.round(ms / 60_000);
+  const h = Math.floor(min / 60);
+  return h ? `${h}h ${String(min % 60).padStart(2, "0")}m` : `${min}m`;
+}
+
+/**
+ * A progress line for the log. Progress is measured on the compressed file
+ * (bytes read of its size); the ETA assumes the rest goes at the average rate
+ * so far.
+ */
+export function progressLine(
+  stats: Pick<ImportStats, "bytes" | "lines" | "matched">,
+  read: number,
+  size: number,
+  elapsedMs: number,
+): string {
+  const counts = `${(stats.bytes / 1e9).toFixed(1)} GB, ${stats.lines} lines, ${stats.matched} matched`;
+  if (!(size > 0 && read > 0)) return `import-dump: ${counts}`;
+  const done = Math.min(read / size, 1);
+  const eta = (elapsedMs * (1 - done)) / done;
+  return `import-dump: ${(done * 100).toFixed(1)}%, ETA ${formatDuration(eta)} — ${counts}`;
+}
+
 export interface ImportOptions {
   path: string;
   /** Stop after this many matched items (timing runs); disables pruning. */
@@ -110,6 +136,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
     await upsertRows(rows, { lastDump: stats.stamp, source: "dump" });
   };
 
+  const size = (await stat(opts.path)).size;
   const file = createReadStream(opts.path, { highWaterMark: 1 << 20 });
   const input: Readable = opts.path.endsWith(".gz")
     ? file.pipe(createGunzip({ chunkSize: 1 << 20 }))
@@ -150,9 +177,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
     carry = start < buf.length ? Buffer.from(buf.subarray(start)) : null;
     if (Date.now() - lastLog > 60_000) {
       lastLog = Date.now();
-      console.log(
-        `import-dump: ${(stats.bytes / 1e9).toFixed(1)} GB, ${stats.lines} lines, ${stats.matched} matched`,
-      );
+      console.log(progressLine(stats, file.bytesRead, size, lastLog - started));
     }
   }
   if (stats.stopped) file.destroy();
