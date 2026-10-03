@@ -59,11 +59,14 @@ export interface EditLogEntry {
   qid: string | null;
   revid: number | null;
   ok: boolean;
+  /** A create that got no answer and may have been saved (`qid` if it turned up later). */
+  unknown: boolean;
   skipped: number;
   error: string | null;
 }
 
-export type SubmissionStatus = "running" | "done" | "failed" | "interrupted";
+/** "unknown": a create got no answer, so the item may exist; see `UnknownRunConflict`. */
+export type SubmissionStatus = "running" | "done" | "failed" | "interrupted" | "unknown";
 
 export interface SubmissionInfo {
   id: number;
@@ -77,6 +80,31 @@ export interface SubmissionInfo {
   /** Operations in the plan, so the client can show progress. */
   total: number;
   edits: EditLogEntry[];
+}
+
+/** Body of POST /api/submissions. */
+export interface SubmissionRequest {
+  state: unknown;
+  /** The id of the user's "unknown" run, once they've checked its item wasn't created. */
+  confirmUnknown?: number;
+}
+
+/**
+ * The 409 from POST /api/submissions while the user's last run ended
+ * "unknown" and the form doesn't use the item it may have created.
+ */
+export interface UnknownRunConflict {
+  error: string;
+  unknownRun: {
+    id: number;
+    /** The create, e.g. "track “Intro”". */
+    what: string;
+    /** Its plan key, e.g. "track:0:3", to write `qid` back into the form. */
+    key: string | null;
+    editGroupUrl: string;
+    /** The item, if it has turned up since; null if it still can't be found. */
+    qid: string | null;
+  };
 }
 
 export interface SubmissionListResponse {

@@ -10,19 +10,27 @@
 // One run per user at a time. Runs live in this process: a restart marks the
 // ones it cut off as "interrupted" (see markInterrupted), and the client has
 // already been told which items were created, so it can reuse them on a retry.
+//
+// A create that gets no answer may have been saved anyway, so it is never sent
+// again: the run looks for the item (server/recover.ts) and carries on with it
+// if found, or else ends "unknown". The user's next run looks again and, if
+// still nothing turns up, needs them to confirm the item wasn't created.
 import { randomBytes } from "node:crypto";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db.ts";
 import { musicExternalIds, submissions, wikidataEdits } from "../db/schema.ts";
 import { type AuthEnv, type AuthUser, requireUser } from "./auth/session.ts";
-import { toSqlDatetime } from "./auth/time.ts";
+import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
 import { propertyNumber, qidNumber, toQid } from "./ids.ts";
+import { findCreated, waitForCreated } from "./recover.ts";
 import {
+  CREATE_TIMEOUT_MS,
   editRequest,
   type EditUser,
+  type Entity,
   getEntities,
   toStatement,
   valueKey,
@@ -35,7 +43,9 @@ import type {
   EditLogEntry,
   SubmissionInfo,
   SubmissionListResponse,
+  SubmissionRequest,
   SubmissionStatus,
+  UnknownRunConflict,
 } from "../src/lib/api-types.ts";
 
 /** Appended to every edit summary so the edits are traceable to this tool. */
@@ -80,58 +90,87 @@ submissionRoutes.post(
     const user = c.get("user")!;
     if (user.blocked) return c.json({ error: "Your account is blocked on Wikidata." }, 403);
     if (running.has(user.id)) return c.json({ error: "You already have a run in progress." }, 409);
-
-    const body = (await c.req.json().catch(() => null)) as { state?: unknown } | null;
-    const state = coerceState(body?.state);
-    const plan = buildPlan(state);
-    if (!plan.ready) {
-      const first = plan.messages.find((m) => m[0] === "err");
-      return c.json({ error: first?.[1] ?? "Nothing to do." }, 422);
-    }
-
-    // An identifier given for a new album that the mirror already has is a
-    // duplicate for sure; title matches are only warned about in the form.
-    if (state.album.mode === "create") {
-      const given = ALBUM_ID_FIELDS.map(
-        (f) => [f.property, state.album.ids[f.key].trim()] as const,
-      ).filter(([, v]) => v);
-      for (const [property, value] of given) {
-        const [hit] = await db
-          .select({ qid: musicExternalIds.qid })
-          .from(musicExternalIds)
-          .where(
-            and(
-              eq(musicExternalIds.property, propertyNumber(property)),
-              eq(musicExternalIds.value, value),
-            ),
-          )
-          .limit(1);
-        if (hit)
-          return c.json(
-            {
-              error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
-            },
-            409,
-          );
-      }
-    }
-
-    const editGroup = randomBytes(8).toString("hex");
-    const [res] = await db.insert(submissions).values({
-      userId: user.id,
-      editGroup,
-      status: "running",
-      title: state.album.mode === "create" ? state.album.title.trim() : state.album.qid.trim(),
-      // buildPlan has checked it's a QID.
-      albumQid: state.album.mode === "create" ? null : qidNumber(state.album.qid.trim()),
-      input: state,
-    });
-    const id = res.insertId;
+    // Held from here, so a double click can't start two runs during the checks.
     running.add(user.id);
-    void runPlan(id, user, plan.ops, editGroup).finally(() => running.delete(user.id));
-    return c.json({ id }, 202);
+    let started = false;
+    try {
+      const res = await startRun(c, user);
+      started = res.status === 202;
+      return res;
+    } finally {
+      if (!started) running.delete(user.id);
+    }
   },
 );
+
+async function startRun(c: Context<AuthEnv>, user: AuthUser) {
+  const body = (await c.req.json().catch(() => null)) as Partial<SubmissionRequest> | null;
+  const state = coerceState(body?.state);
+  const plan = buildPlan(state);
+  if (!plan.ready) {
+    const first = plan.messages.find((m) => m[0] === "err");
+    return c.json({ error: first?.[1] ?? "Nothing to do." }, 422);
+  }
+
+  // The last run may have created an item it couldn't confirm. Go on only
+  // once the form uses it, or the user says it wasn't created.
+  const unknownRun = await checkUnknownRun(user);
+  if (unknownRun) {
+    const used = unknownRun.qid !== null && JSON.stringify(state).includes(`"${unknownRun.qid}"`);
+    const confirmed = unknownRun.qid === null && body?.confirmUnknown === unknownRun.id;
+    if (!used && !confirmed)
+      return c.json(
+        {
+          error: unknownRun.qid
+            ? `Your last run created ${unknownRun.what} after all, as ${unknownRun.qid}. Use it in the form before running again, so it isn't created twice.`
+            : `Your last run may have created ${unknownRun.what}: Wikidata didn't answer, and it still can't be found. Check your contributions and the EditGroup, then confirm it wasn't created to run again.`,
+          unknownRun,
+        } satisfies UnknownRunConflict,
+        409,
+      );
+  }
+
+  // An identifier given for a new album that the mirror already has is a
+  // duplicate for sure; title matches are only warned about in the form.
+  if (state.album.mode === "create") {
+    const given = ALBUM_ID_FIELDS.map(
+      (f) => [f.property, state.album.ids[f.key].trim()] as const,
+    ).filter(([, v]) => v);
+    for (const [property, value] of given) {
+      const [hit] = await db
+        .select({ qid: musicExternalIds.qid })
+        .from(musicExternalIds)
+        .where(
+          and(
+            eq(musicExternalIds.property, propertyNumber(property)),
+            eq(musicExternalIds.value, value),
+          ),
+        )
+        .limit(1);
+      if (hit)
+        return c.json(
+          {
+            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
+          },
+          409,
+        );
+    }
+  }
+
+  const editGroup = randomBytes(8).toString("hex");
+  const [res] = await db.insert(submissions).values({
+    userId: user.id,
+    editGroup,
+    status: "running",
+    title: state.album.mode === "create" ? state.album.title.trim() : state.album.qid.trim(),
+    // buildPlan has checked it's a QID.
+    albumQid: state.album.mode === "create" ? null : qidNumber(state.album.qid.trim()),
+    input: state,
+  });
+  const id = res.insertId;
+  void runPlan(id, user, plan.ops, editGroup).finally(() => running.delete(user.id));
+  return c.json({ id }, 202);
+}
 
 submissionRoutes.get("/", requireUser, async (c) => {
   const rows = await db
@@ -187,14 +226,38 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
       qid: e.qid == null ? null : toQid(e.qid),
       revid: e.revid,
       ok: e.ok,
+      unknown: e.unknown,
       skipped: e.skipped,
       error: e.errorText,
     })),
   } satisfies SubmissionInfo);
 });
 
-/** On boot: runs still marked running were cut off by the restart. */
+/**
+ * On boot: runs still marked running were cut off by the restart. One that
+ * was looking for an item a create may have made ends "unknown".
+ */
 export async function markInterrupted(): Promise<void> {
+  const pending = await db
+    .select({ id: submissions.id, what: wikidataEdits.what, key: wikidataEdits.key })
+    .from(submissions)
+    .innerJoin(wikidataEdits, eq(wikidataEdits.submissionId, submissions.id))
+    .where(
+      and(
+        eq(submissions.status, "running"),
+        eq(wikidataEdits.unknown, true),
+        eq(wikidataEdits.ok, false),
+      ),
+    );
+  for (const p of pending)
+    await db
+      .update(submissions)
+      .set({
+        status: "unknown",
+        error: unknownMessage(p.what, p.key),
+        finishedAt: toSqlDatetime(new Date()),
+      })
+      .where(eq(submissions.id, p.id));
   await db
     .update(submissions)
     .set({
@@ -203,6 +266,117 @@ export async function markInterrupted(): Promise<void> {
       finishedAt: toSqlDatetime(new Date()),
     })
     .where(eq(submissions.status, "running"));
+}
+
+/** Where in the form a created item's QID goes, by its plan key. */
+function fieldFor(key: string | null): string {
+  const kind = key?.split(":")[0];
+  if (kind === "album") return "the album's “Use an existing album” field";
+  if (kind === "comp") return "the track's “Existing composition” field";
+  if (kind === "track") return "the track's “Existing track” field";
+  if (kind === "single") return "the track's “Single” field";
+  return "the form";
+}
+
+export function unknownMessage(what: string, key: string | null): string {
+  return `Wikidata didn't answer when creating ${what}, so it may have been created anyway. Check your contributions or the EditGroup before running again. If it was created, put its QID in ${fieldFor(key)}.`;
+}
+
+/** A create got no answer and its item couldn't be found: the run ends "unknown". */
+class UnknownOutcome extends Error {}
+
+type CreateOp = Extract<Op, { op: "create" }>;
+
+async function createItem(
+  editUser: EditUser,
+  op: CreateOp,
+  resolve: (key: string) => string,
+  summary: string,
+): Promise<Entity> {
+  const body = await editRequest(
+    editUser,
+    {
+      action: "wbeditentity",
+      new: "item",
+      data: JSON.stringify({
+        labels: Object.fromEntries(
+          Object.entries(op.labels).map(([l, v]) => [l, { language: l, value: v }]),
+        ),
+        descriptions: Object.fromEntries(
+          Object.entries(op.descriptions).map(([l, v]) => [l, { language: l, value: v }]),
+        ),
+        claims: op.claims.map((cl) => toStatement(cl, resolve)),
+      }),
+      summary,
+    },
+    { timeoutMs: CREATE_TIMEOUT_MS },
+  );
+  const entity = body.entity as Entity | undefined;
+  // A success without the item's id: it was probably saved, but which is it?
+  if (!entity?.id)
+    throw new WikidataEditError("unexpected-response", "Wikidata returned no item id", {
+      ambiguous: true,
+    });
+  return entity;
+}
+
+/**
+ * The user's last run, if it ended "unknown", with the item it may have
+ * created looked for again (the replicas have caught up by now).
+ */
+async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unknownRun"] | null> {
+  const [last] = await db
+    .select()
+    .from(submissions)
+    .where(eq(submissions.userId, user.id))
+    .orderBy(desc(submissions.id))
+    .limit(1);
+  if (last?.status !== "unknown") return null;
+  const edits = await db
+    .select()
+    .from(wikidataEdits)
+    .where(eq(wikidataEdits.submissionId, last.id))
+    .orderBy(wikidataEdits.id);
+  const pending = edits.findLast((e) => e.unknown);
+  if (!pending) return null;
+  let qid = pending.qid == null ? null : toQid(pending.qid);
+  const op = buildPlan(coerceState(last.input)).ops.find(
+    (o): o is CreateOp => o.op === "create" && o.key === pending.key,
+  );
+  if (!qid && op && pending.startedAt) {
+    try {
+      const found = await findCreated({
+        username: user.username,
+        summary: editSummary(`Create ${pending.what}`, last.editGroup),
+        labels: op.labels,
+        startedAt: fromSqlDatetime(pending.startedAt),
+        exclude: new Set(edits.filter((e) => e.ok && e.qid != null).map((e) => toQid(e.qid!))),
+      });
+      if (found.length === 1) {
+        const entity = found[0];
+        qid = entity.id;
+        await db
+          .update(wikidataEdits)
+          .set({ qid: qidNumber(qid), revid: entity.lastrevid ?? null })
+          .where(eq(wikidataEdits.id, pending.id));
+        const row = entityToRow(entity);
+        if (row)
+          await upsertRows([row], { source: "app" }).catch((e: unknown) =>
+            console.error("mirror write failed", e),
+          );
+      }
+    } catch (err) {
+      // Wikidata is still struggling; the user can check by hand.
+      console.warn(`submission ${last.id}: looking for ${pending.what} failed`, err);
+    }
+  }
+  return {
+    id: last.id,
+    what: pending.what,
+    key: pending.key,
+    editGroupUrl: editGroupUrl(last.editGroup),
+    qid,
+  };
 }
 
 function describe(op: Op): string {
@@ -244,42 +418,81 @@ export async function runPlan(
     const what = describe(op);
     try {
       if (op.op === "create") {
-        const body = await editRequest(editUser, {
-          action: "wbeditentity",
-          new: "item",
-          data: JSON.stringify({
-            labels: Object.fromEntries(
-              Object.entries(op.labels).map(([l, v]) => [l, { language: l, value: v }]),
-            ),
-            descriptions: Object.fromEntries(
-              Object.entries(op.descriptions).map(([l, v]) => [l, { language: l, value: v }]),
-            ),
-            claims: op.claims.map((cl) => toStatement(cl, resolve)),
-          }),
-          summary: editSummary(`Create ${what}`, editGroup),
-        });
-        const entity = body.entity as { id?: string; lastrevid?: number } | undefined;
-        if (!entity?.id)
-          throw new WikidataEditError("unexpected-response", "Wikidata returned no item id");
+        const summary = editSummary(`Create ${what}`, editGroup);
+        const startedAt = new Date();
+        let entity: Entity;
+        let pendingId: number | null = null;
+        try {
+          entity = await createItem(editUser, op, resolve, summary);
+        } catch (err) {
+          if (!(err instanceof WikidataEditError && err.ambiguous)) throw err;
+          // It may have been saved, so it is never sent again. Log it as
+          // unknown before looking, so a restart meanwhile ends the run
+          // "unknown" (markInterrupted) rather than inviting a rerun.
+          const [res] = await log({
+            op: "create",
+            key: op.key,
+            kind: op.kind,
+            what,
+            ok: false,
+            unknown: true,
+            startedAt: toSqlDatetime(startedAt),
+            errorCode: err.code.slice(0, 64),
+            errorText: `Wikidata didn't answer (${err.message}), so it may have been created anyway.`,
+          });
+          pendingId = res.insertId;
+          const found = await waitForCreated(
+            {
+              username: user.username,
+              summary,
+              labels: op.labels,
+              startedAt,
+              exclude: new Set(created.values()),
+            },
+            new Date(),
+          );
+          if (found.length !== 1) {
+            if (found.length > 1)
+              await db
+                .update(wikidataEdits)
+                .set({
+                  errorText: `Wikidata didn't answer, and ${found.length} items match it: ${found.map((e) => e.id).join(", ")}.`,
+                })
+                .where(eq(wikidataEdits.id, pendingId));
+            throw new UnknownOutcome(unknownMessage(what, op.key));
+          }
+          entity = found[0];
+        }
         created.set(op.key, entity.id);
-        await log({
-          op: "create",
-          key: op.key,
-          kind: op.kind,
-          what,
-          qid: entity.id,
-          revid: entity.lastrevid ?? null,
-          ok: true,
-        });
+        if (pendingId === null)
+          await log({
+            op: "create",
+            key: op.key,
+            kind: op.kind,
+            what,
+            qid: entity.id,
+            revid: entity.lastrevid ?? null,
+            ok: true,
+          });
+        // Found it: carry on as if it had answered. `error_code` keeps what went wrong.
+        else
+          await db
+            .update(wikidataEdits)
+            .set({
+              ok: true,
+              unknown: false,
+              qid: qidNumber(entity.id),
+              revid: entity.lastrevid ?? null,
+              errorText: null,
+            })
+            .where(eq(wikidataEdits.id, pendingId));
         if (op.key === "album")
           await db
             .update(submissions)
             .set({ albumQid: qidNumber(entity.id) })
             .where(eq(submissions.id, submissionId));
         // Add it to the mirror now, so duplicate checks see it before the next dump.
-        const row = entityToRow({ ...(body.entity as object), id: entity.id } as Parameters<
-          typeof entityToRow
-        >[0]);
+        const row = entityToRow(entity);
         if (row)
           await upsertRows([row], { source: "app" }).catch((e: unknown) =>
             console.error("mirror write failed", e),
@@ -327,6 +540,11 @@ export async function runPlan(
           );
       }
     } catch (err) {
+      if (err instanceof UnknownOutcome) {
+        status = "unknown";
+        error = err.message;
+        break;
+      }
       const code = err instanceof WikidataEditError ? err.code : "internal";
       const text = err instanceof Error ? err.message : String(err);
       if (!(err instanceof WikidataEditError))

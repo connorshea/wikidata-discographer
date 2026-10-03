@@ -6,14 +6,17 @@
 // the user, like edits made in the Wikidata UI, not by an automated process.
 //
 // An edit is only retried when Wikidata refused it before saving (a bad token
-// or a rate limit). A timeout or 5xx may have saved, so those fail instead.
-// Reads (`read`) also retry timeouts and 5xx: repeating one changes nothing.
+// or a rate limit). A timeout or 5xx may have saved, so those fail instead,
+// marked `ambiguous` (server/recover.ts looks for an item a create may have
+// made). Reads (`read`) also retry timeouts and 5xx: repeating one changes nothing.
 import { wikidataApiUrl } from "./auth/config.ts";
 import { deleteTokens, getAccessToken, TokenError } from "./auth/tokens.ts";
 import { userAgent } from "./auth/user-agent.ts";
 import type { Claim, Snak, Value } from "../src/lib/plan.ts";
 
 const TIMEOUT_MS = 30_000;
+/** For creates: one with many statements can be slow, and a timeout leaves it in doubt. */
+export const CREATE_TIMEOUT_MS = 90_000;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_WAIT_MS = 60_000;
 const MAX_READ_RETRIES = 3;
@@ -25,10 +28,13 @@ export interface EditUser {
 
 export class WikidataEditError extends Error {
   code: string;
-  constructor(code: string, message: string) {
+  /** The edit was sent but no answer came back, so it may have been saved. */
+  ambiguous: boolean;
+  constructor(code: string, message: string, { ambiguous = false } = {}) {
     super(message);
     this.name = "WikidataEditError";
     this.code = code;
+    this.ambiguous = ambiguous;
   }
 }
 
@@ -44,6 +50,7 @@ async function call(
   method: "GET" | "POST",
   params: Record<string, string>,
   accessToken?: string,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<ApiResponse> {
   const query = new URLSearchParams({
     format: "json",
@@ -61,7 +68,7 @@ async function call(
         ...(method === "POST" ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
       },
       body: method === "POST" ? query : undefined,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     throw new WikidataEditError(
@@ -177,10 +184,15 @@ function retryAfterMs(headers: Headers, fallback: number): number {
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 60_000) : fallback;
 }
 
-/** Perform one write action as `user`; resolves to the API's JSON body. */
+/**
+ * Perform one write action as `user`; resolves to the API's JSON body. A
+ * timeout, dropped connection or 5xx once the edit is sent throws an
+ * `ambiguous` error: the edit may have been saved anyway.
+ */
 export async function editRequest(
   user: EditUser,
   params: Record<string, string>,
+  { timeoutMs = TIMEOUT_MS }: { timeoutMs?: number } = {},
 ): Promise<Record<string, unknown>> {
   let accessToken: string;
   try {
@@ -197,13 +209,23 @@ export async function editRequest(
   let tokenRetries = 0;
   let rateRetries = 0;
   for (;;) {
-    const res = await call(
-      "POST",
-      { ...params, token: csrf, assert: "user", assertuser: user.username },
-      accessToken,
-    );
+    let res: ApiResponse;
+    try {
+      res = await call(
+        "POST",
+        { ...params, token: csrf, assert: "user", assertuser: user.username },
+        accessToken,
+        timeoutMs,
+      );
+    } catch (err) {
+      if (err instanceof WikidataEditError)
+        throw new WikidataEditError(err.code, err.message, { ambiguous: true });
+      throw err;
+    }
     const err = apiError(res);
     if (!err) return res.body;
+    if (/^http-5\d\d$/.test(err.code))
+      throw new WikidataEditError(err.code, `Wikidata answered ${err.text}`, { ambiguous: true });
     if (err.code === "badtoken" && tokenRetries++ < 1) {
       csrf = await csrfToken(user, accessToken);
       continue;
@@ -269,6 +291,52 @@ export async function getEntities(
     if (!entity.missing && entity.claims) out.set(id, entity);
   }
   return out;
+}
+
+export interface Contribution {
+  /** The item's id, e.g. "Q123". */
+  title: string;
+  timestamp: string;
+  comment: string;
+}
+
+/**
+ * Items `username` created between `from` and `to`, oldest first. Served from
+ * replicas, so an item created moments ago may not be listed yet.
+ */
+export async function itemsCreatedBy(
+  username: string,
+  from: Date,
+  to: Date,
+  { retries }: { retries?: number } = {},
+): Promise<Contribution[]> {
+  const out: Contribution[] = [];
+  let cont: Record<string, string> = {};
+  for (;;) {
+    const res = await read(
+      {
+        action: "query",
+        list: "usercontribs",
+        ucuser: username,
+        ucshow: "new",
+        ucnamespace: "0",
+        ucdir: "newer",
+        ucstart: from.toISOString(),
+        ucend: to.toISOString(),
+        ucprop: "title|timestamp|comment",
+        uclimit: "max",
+        ...cont,
+      },
+      { retries },
+    );
+    const err = apiError(res);
+    if (err) throw new WikidataEditError(err.code, err.text);
+    const page = (res.body.query as { usercontribs?: Contribution[] } | undefined)?.usercontribs;
+    out.push(...(page ?? []));
+    const next = res.body.continue as Record<string, string> | undefined;
+    if (!next) return out;
+    cont = next;
+  }
 }
 
 // ---------------------------------------------------------------------------
