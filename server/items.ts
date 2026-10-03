@@ -14,7 +14,7 @@ import { type AuthEnv, requireUser } from "./auth/session.ts";
 import { rankDuplicates, titleReasons } from "./duplicates.ts";
 import { findMatches } from "./matches.ts";
 import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
-import { getEntities, WikidataEditError } from "./wikidata-client.ts";
+import { getEntities, getStatementItems, WikidataEditError } from "./wikidata-client.ts";
 import { ID_PROPERTIES, MUSIC_KINDS, type MusicKind } from "../src/lib/music.ts";
 import type {
   AddItemResponse,
@@ -25,6 +25,7 @@ import type {
   MatchesResponse,
   MirrorItem,
   SearchResponse,
+  TracklistResponse,
 } from "../src/lib/api-types.ts";
 
 export const items = new Hono<AuthEnv>();
@@ -141,6 +142,19 @@ items.post("/duplicates", async (c) => {
 items.post("/matches", bodyLimit({ maxSize: 256 << 10 }), async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Partial<MatchesRequest>;
   return c.json((await findMatches(body)) satisfies MatchesResponse);
+});
+
+items.get("/:qid/tracklist", async (c) => {
+  const qid = c.req.param("qid").toUpperCase();
+  if (!/^Q\d+$/.test(qid)) return c.json({ error: "Not a QID" }, 400);
+  try {
+    // Asked live, not from the mirror: a tracklist added since the last dump counts.
+    const tracks = await getStatementItems(qid, "P658", { retries: 0 });
+    return c.json({ tracks } satisfies TracklistResponse);
+  } catch (err) {
+    if (err instanceof WikidataEditError) return c.json({ error: err.message }, 502);
+    throw err;
+  }
 });
 
 items.post("/:qid", requireUser, async (c) => {

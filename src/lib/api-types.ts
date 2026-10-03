@@ -53,6 +53,11 @@ export interface AddItemResponse {
   item: MirrorItem;
 }
 
+/** GET /api/items/:qid/tracklist: the item's tracks (P658) on Wikidata now. */
+export interface TracklistResponse {
+  tracks: string[];
+}
+
 export interface EditLogEntry {
   op: "create" | "addClaims";
   key: string | null;

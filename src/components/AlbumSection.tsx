@@ -8,8 +8,15 @@ import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../l
 import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import type { SectionProps } from "./types.ts";
+import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
-export default function AlbumSection({ state, update, plan }: SectionProps) {
+export default function AlbumSection({
+  state,
+  update,
+  plan,
+  albumTracklist,
+}: SectionProps & { albumTracklist: AlbumTracklist | null }) {
+  const { wikiBaseUrl } = useAuth();
   const A = state.album;
   const errs = plan.fieldErrs;
   return (
@@ -35,19 +42,29 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
         ))}
       </div>
       {A.mode === "existing" ? (
-        <div className="grid" style={{ marginTop: 12 }}>
-          <label className="f">
-            Album QID
-            <QidInput
-              id="albumQid"
-              placeholder="Q…"
-              value={A.qid}
-              aria-invalid={!!errs.albumQid}
-              onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
-            />
-            <span className="sub">Q-number or Wikidata URL</span>
-            <FieldErr id="albumQid" msg={errs.albumQid} />
-          </label>
+        <div style={{ marginTop: 12 }}>
+          <div className="grid">
+            <label className="f">
+              Album QID
+              <QidInput
+                id="albumQid"
+                placeholder="Q…"
+                value={A.qid}
+                aria-invalid={!!errs.albumQid}
+                onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
+              />
+              <span className="sub">Q-number or Wikidata URL</span>
+              <FieldErr id="albumQid" msg={errs.albumQid} />
+            </label>
+          </div>
+          {albumTracklist && (
+            <p className="msg err">
+              <WikiLink base={wikiBaseUrl} qid={albumTracklist.qid} /> already has a tracklist with{" "}
+              {albumTracklist.foreign.length} track
+              {albumTracklist.foreign.length === 1 ? "" : "s"} not in this form. Adding another
+              would list its songs twice, so the run is disabled. Use an album without a tracklist.
+            </p>
+          )}
         </div>
       ) : (
         <div style={{ marginTop: 12 }}>

@@ -10,6 +10,7 @@ import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
+import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 
 /** An item type's name with its colour swatch. */
 function Kind({ edge, children }: { edge: string; children: string }) {
@@ -89,6 +90,7 @@ export default function App() {
     }
   }, [state]);
 
+  const albumTracklist = useAlbumTracklist(state);
   const props = { state, update, plan };
   return (
     <main>
@@ -120,11 +122,11 @@ export default function App() {
         />
         <span className="hint">A filled-in album, to see how the form works.</span>
       </div>
-      <AlbumSection {...props} />
+      <AlbumSection {...props} albumTracklist={albumTracklist} />
       <SettingsSection {...props} />
       <DiscsSection {...props} />
       <PerformersSection {...props} />
-      <RunSection {...props} />
+      <RunSection {...props} albumTracklist={albumTracklist} />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton
           className="danger"
