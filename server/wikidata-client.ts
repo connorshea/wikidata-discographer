@@ -83,7 +83,7 @@ async function call(
 interface PlaintextError {
   code?: string;
   text?: string;
-  data?: { messages?: { text?: string; name?: string }[] };
+  data?: { id?: string; messages?: { text?: string; name?: string }[] };
 }
 
 /** The API's error, if the response is one: code and every message it gave. */
@@ -291,6 +291,84 @@ export async function getEntities(
     if (!entity.missing && entity.claims) out.set(id, entity);
   }
   return out;
+}
+
+/** Whether an item exists: `missing` covers deleted and never-created ids. */
+export type ItemCheck =
+  | { status: "ok" }
+  | { status: "missing" }
+  | { status: "redirect"; to: string };
+
+/** The most ids `wbgetentities` takes in one request without the apihighlimits right. */
+const ENTITY_BATCH = 50;
+
+/**
+ * Whether each QID is an item that exists, or redirects to another. Only page
+ * info is fetched, 50 ids per request, one request at a time. `retries` is
+ * as for `getEntities`.
+ */
+export async function checkItems(
+  qids: readonly string[],
+  { retries }: { retries?: number } = {},
+): Promise<Map<string, ItemCheck>> {
+  const out = new Map<string, ItemCheck>();
+  let todo = [...new Set(qids)];
+  while (todo.length > 0) {
+    const batch = todo.slice(0, ENTITY_BATCH);
+    const res = await read(
+      { action: "wbgetentities", ids: batch.join("|"), props: "info" },
+      { retries },
+    );
+    const err = apiError(res);
+    if (err) {
+      // An id past the newest item fails the whole request, naming that id.
+      const id = (res.body.errors as PlaintextError[] | undefined)?.[0]?.data?.id;
+      if (err.code === "no-such-entity" && id && batch.includes(id)) {
+        out.set(id, { status: "missing" });
+        todo = todo.filter((q) => q !== id);
+        continue;
+      }
+      throw new WikidataEditError(err.code, err.text);
+    }
+    const entities =
+      (res.body.entities as
+        | Record<string, { id?: string; missing?: unknown; redirects?: { to?: string } }>
+        | undefined) ?? {};
+    for (const q of batch) {
+      const e = entities[q];
+      // A redirect comes back under the id asked for, as its target.
+      const to = e?.redirects?.to ?? (e?.id && e.id !== q ? e.id : undefined);
+      out.set(
+        q,
+        !e || "missing" in e
+          ? { status: "missing" }
+          : to
+            ? { status: "redirect", to }
+            : { status: "ok" },
+      );
+    }
+    todo = todo.slice(ENTITY_BATCH);
+  }
+  return out;
+}
+
+/**
+ * The item values of one item's statements for one property (`wbgetclaims`),
+ * deprecated ones left out. Nothing else about the item is fetched.
+ */
+export async function getStatementItems(
+  qid: string,
+  property: string,
+  { retries }: { retries?: number } = {},
+): Promise<string[]> {
+  const res = await read({ action: "wbgetclaims", entity: qid, property }, { retries });
+  const err = apiError(res);
+  if (err) throw new WikidataEditError(err.code, err.text);
+  const claims = (res.body.claims as Record<string, WikibaseStatement[]> | undefined) ?? {};
+  return (claims[property] ?? [])
+    .filter((s) => s.rank !== "deprecated")
+    .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
+    .filter((id): id is string => id !== undefined);
 }
 
 export interface Contribution {

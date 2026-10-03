@@ -110,7 +110,7 @@ export default function RunSection({ update, plan, state }: SectionProps) {
         <ConfirmRun
           label={
             starting
-              ? "Starting…"
+              ? "Checking the QIDs…"
               : running
                 ? "Running…"
                 : `Make ${edits} edit${edits === 1 ? "" : "s"} as ${user?.username ?? "you"}`

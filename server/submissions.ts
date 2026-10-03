@@ -25,6 +25,7 @@ import { type AuthEnv, type AuthUser, requireUser } from "./auth/session.ts";
 import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
 import { propertyNumber, qidNumber, toQid } from "./ids.ts";
+import { checkPlanQids } from "./check-qids.ts";
 import { findCreated, waitForCreated } from "./recover.ts";
 import {
   CREATE_TIMEOUT_MS,
@@ -156,6 +157,22 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
         );
     }
   }
+
+  // Every item the run edits or links to must exist, or it would fail
+  // partway, after creating the items before it.
+  let problems: string[];
+  try {
+    problems = await checkPlanQids(plan.ops, state);
+  } catch (err) {
+    console.warn("checking the QIDs failed", err);
+    return c.json(
+      {
+        error: `Couldn't check the QIDs on Wikidata (${err instanceof Error ? err.message : String(err)}). Try again in a minute.`,
+      },
+      503,
+    );
+  }
+  if (problems.length > 0) return c.json({ error: problems.join(" ") }, 422);
 
   const editGroup = randomBytes(8).toString("hex");
   const [res] = await db.insert(submissions).values({
