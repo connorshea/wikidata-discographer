@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   buildPlan,
+  MAX_TERM_LENGTH,
   MAX_TRACKS,
   MAX_TRACKS_PER_DISC,
   normalizeQid,
@@ -101,6 +102,49 @@ describe("buildPlan", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";
     expect(buildPlan(state).ready).toBe(false);
+  });
+
+  describe("label and description length", () => {
+    const errors = (plan: ReturnType<typeof buildPlan>) =>
+      plan.messages.filter((m) => m[0] === "err").map((m) => m[1]);
+    const titled = (title: string) => {
+      const state = structuredClone(EXAMPLE);
+      state.album = { ...state.album, mode: "create", title };
+      return state;
+    };
+
+    it("allows exactly the limit", () => {
+      const state = titled("x".repeat(MAX_TERM_LENGTH));
+      expect(buildPlan(state).ready).toBe(true);
+    });
+
+    it("marks an over-long album title on its field", () => {
+      const state = titled("x".repeat(MAX_TERM_LENGTH + 1));
+      const plan = buildPlan(state);
+      expect(plan.ready).toBe(false);
+      expect(plan.fieldErrs.albumTitle).toBe(
+        `Wikidata allows ${MAX_TERM_LENGTH} characters at most. This title has ${MAX_TERM_LENGTH + 1}.`,
+      );
+    });
+
+    it("counts characters, not UTF-16 units", () => {
+      const state = titled("🎵".repeat(MAX_TERM_LENGTH));
+      expect(buildPlan(state).ready).toBe(true);
+    });
+
+    it("names each over-long track title and filled-in description once", () => {
+      const state = structuredClone(EXAMPLE);
+      const long = "x".repeat(MAX_TERM_LENGTH + 10);
+      state.discs = [{ ...emptyDisc(), text: `1. ${long} - Carly Rae Jepsen (3:00)` }];
+      state.settings.trackDesc = `${"y".repeat(MAX_TERM_LENGTH)} by {artists}`;
+      const plan = buildPlan(state);
+      expect(plan.ready).toBe(false);
+      expect(errors(plan)).toEqual([
+        `Wikidata allows ${MAX_TERM_LENGTH} characters at most in a label or description. ` +
+          `Too long: the title of track 1.1 (${MAX_TERM_LENGTH + 10}), ` +
+          `the track description for track 1.1 (${MAX_TERM_LENGTH + 20}).`,
+      ]);
+    });
   });
 
   describe("size limits", () => {

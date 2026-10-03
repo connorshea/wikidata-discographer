@@ -386,6 +386,11 @@ interface PlanItem {
   single: { date: ParsedDate; qid: string | null } | null;
 }
 
+/** Wikidata's limit on a label or description. */
+export const MAX_TERM_LENGTH = 250;
+/** Length as Wikidata counts it, in code points rather than UTF-16 units. */
+const chars = (s: string) => s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "_").length;
+
 /** More tracks than this on one disc is likely a paste gone wrong. */
 export const MAX_TRACKS_PER_DISC = 50;
 /** Tracks per run, across all discs; a bigger release goes in several runs. */
@@ -470,6 +475,8 @@ export function buildPlan(state: State): Plan {
     else if (!QID.test(aq)) fieldErrs.albumQid = `"${aq}" isn't a QID.`;
   } else {
     if (!albumTitle) fieldErrs.albumTitle = "Enter the album title.";
+    else if (chars(albumTitle) > MAX_TERM_LENGTH)
+      fieldErrs.albumTitle = `Wikidata allows ${MAX_TERM_LENGTH} characters at most. This title has ${chars(albumTitle)}.`;
     if (!albumArtists.length) fieldErrs.albumArtists = "Enter at least one album artist.";
     fieldErrs.albumDesc = checkTemplate(S.albumDesc, date, ["year", "type", "artists"]).join(" ");
     for (const f of ALBUM_ID_FIELDS) {
@@ -753,6 +760,30 @@ export function buildPlan(state: State): Plan {
         what: where(it),
         claims: [claim("P1433", single)],
       });
+  }
+
+  // Wikidata rejects an over-long label or description, which would stop the run partway.
+  const tooLong = new Set<string>();
+  for (const o of ops) {
+    if (o.op !== "create") continue;
+    const [kind, di, n] = o.key.split(":");
+    const row = n ? `track ${Number(di) + 1}.${n}` : "";
+    for (const t of Object.values(o.labels))
+      if (chars(t) > MAX_TERM_LENGTH) tooLong.add(`the title of ${row} (${chars(t)})`);
+    for (const t of Object.values(o.descriptions))
+      if (chars(t) > MAX_TERM_LENGTH)
+        tooLong.add(
+          row
+            ? `the ${kind === "comp" ? "composition" : kind} description for ${row} (${chars(t)})`
+            : `the album description (${chars(t)})`,
+        );
+  }
+  if (tooLong.size) {
+    err(
+      `Wikidata allows ${MAX_TERM_LENGTH} characters at most in a label or description. ` +
+        `Too long: ${[...tooLong].join(", ")}.`,
+    );
+    return { parsed, fieldErrs, singleErrs, messages, ops: [], ready: false };
   }
 
   if (ops.length > MAX_OPS) {
