@@ -302,6 +302,8 @@ export interface ImportStats {
   pruned: number;
   stopped: boolean;
   seconds: number;
+  /** Time the read loop spent waiting on writes. */
+  writeWaitSeconds: number;
 }
 
 export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
@@ -318,13 +320,27 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
     pruned: 0,
     stopped: false,
     seconds: 0,
+    writeWaitSeconds: 0,
   };
+  // One batch is written while the next is read, so the dump doesn't stall
+  // on each round trip to the database. No item is in the dump twice, so two
+  // batches never touch the same rows.
   let batch: MirrorRow[] = [];
+  let writing: Promise<void> = Promise.resolve();
+  const settle = async () => {
+    const waitStarted = Date.now();
+    await writing;
+    stats.writeWaitSeconds += (Date.now() - waitStarted) / 1000;
+  };
   const flush = async () => {
     if (batch.length === 0) return;
     const rows = batch;
     batch = [];
-    await upsertRows(rows, { source: "dump" });
+    await settle();
+    writing = upsertRows(rows, { source: "dump" });
+    // Handled when it's awaited next; this keeps a failure from counting as
+    // unhandled in the meantime.
+    writing.catch(() => {});
   };
 
   const loadStarted = Date.now();
@@ -389,6 +405,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
   }
   if (stats.stopped) file.destroy();
   await flush();
+  await settle();
 
   if (!stats.stopped && opts.prune !== false)
     stats.pruned = await prune(index, stats.stamp, !!opts.forcePrune);
