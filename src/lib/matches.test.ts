@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { Match, RowMatches, TrackMatch } from "./api-types.ts";
 import {
+  candidateId,
   fillUnambiguous,
+  isStrong,
   NO_ARTIST,
   openMatches,
+  otherArtists,
   pickSingle,
   pickTrack,
+  reviewTracks,
   stillValid,
+  withoutDismissed,
 } from "./matches.ts";
+import type { Row } from "./plan.ts";
 import { emptyDisc } from "./state.ts";
 
 const match = (qid: string): Match => ({
@@ -138,5 +144,90 @@ describe("stillValid", () => {
   it("drops everything when the album changes, or before any answer", () => {
     expect(stillValid(answered, { ...answered.request, albumQid: "Q5" })).toEqual({});
     expect(stillValid(null, answered.request)).toEqual({});
+  });
+});
+
+describe("isStrong", () => {
+  it("is false for a same-title item with nothing else in common", () => {
+    expect(isStrong({ ...match("Q1"), reasons: ["same title"] })).toBe(false);
+    expect(isStrong({ ...match("Q1"), reasons: ["same title", NO_ARTIST] })).toBe(false);
+    expect(isStrong({ ...match("Q1"), reasons: ["same title", "same performer"] })).toBe(true);
+    expect(isStrong({ ...match("Q1"), reasons: ["recorded as Q2"] })).toBe(true);
+  });
+});
+
+describe("otherArtists", () => {
+  it("names the artists after “by” that aren't the track's", () => {
+    expect(otherArtists("2022 single by the Black Keys", ["Carly Rae Jepsen"])).toEqual([
+      "the Black Keys",
+    ]);
+    expect(otherArtists("1985 single by W.A.S.P band", ["Carly Rae Jepsen"])).toEqual(["W.A.S.P"]);
+    expect(otherArtists("17th November 2015 Song By Naeto-C", [])).toEqual(["Naeto-C"]);
+  });
+  it("leaves out the track's own artists, loosely", () => {
+    expect(otherArtists("song by Carly Rae Jepsen", ["Carly Rae Jepsen"])).toEqual([]);
+    expect(
+      otherArtists("song by Carly Rae Jepsen and Owl City from the album Kiss", [
+        "Carly Rae Jepsen",
+      ]),
+    ).toEqual(["Owl City"]);
+    expect(otherArtists("song by The Beatles", ["Beatles"])).toEqual([]);
+    expect(otherArtists("song by Earth, Wind & Fire", ["Earth, Wind & Fire"])).toEqual([]);
+  });
+  it("is empty without a “by”", () => {
+    expect(otherArtists("hymn tune", ["X"])).toEqual([]);
+    expect(otherArtists(null, ["X"])).toEqual([]);
+  });
+});
+
+describe("reviewTracks", () => {
+  const row = (n: number, title = `T${n}`): Row => ({
+    n,
+    title,
+    artists: ["A"],
+    seconds: 0,
+    raw: "",
+  });
+  const rows = {
+    "0:1": rm({ comp: [match("Q1"), match("Q2")], single: [match("Q3")] }),
+    "0:2": rm({ comp: [{ ...match("Q4"), description: "song by B" }] }),
+  };
+  const parsed = [[row(1), row(2), { error: "bad", raw: "x" }]];
+
+  it("lists each track's candidates, open until one is used", () => {
+    const disc = emptyDisc();
+    const [t1, t2] = reviewTracks([disc], parsed, rows, new Set());
+    expect(t1.candidates.map((c) => c.id)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
+    expect(t1.reviewed).toBe(false);
+    expect(t2.candidates[0].others).toEqual(["B"]);
+    disc.comp[1] = "Q2";
+    const [used] = reviewTracks([disc], parsed, rows, new Set());
+    expect(used.reviewed).toBe(true);
+    expect(used.candidates.map((c) => [c.used, c.taken])).toEqual([
+      [false, true],
+      [true, false],
+      [false, false],
+    ]);
+  });
+
+  it("counts a track reviewed once every candidate is dismissed or its field filled", () => {
+    const disc = emptyDisc();
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q1"), candidateId(0, 1, "comp", "Q2")]);
+    const [t1] = reviewTracks([disc], parsed, rows, dismissed);
+    expect([t1.candidates.length, t1.dismissed, t1.reviewed]).toEqual([1, 2, false]);
+    disc.single[1] = { date: "", qid: "Q9" };
+    expect(reviewTracks([disc], parsed, rows, dismissed)[0].reviewed).toBe(true);
+    dismissed.add(candidateId(0, 2, "comp", "Q4"));
+    expect(reviewTracks([emptyDisc()], parsed, rows, dismissed)[1]).toMatchObject({
+      candidates: [],
+      dismissed: 1,
+      reviewed: true,
+    });
+  });
+
+  it("drops dismissed candidates from the matches", () => {
+    const left = withoutDismissed(rows, new Set([candidateId(0, 1, "comp", "Q1")]));
+    expect(left["0:1"].comp).toEqual([match("Q2")]);
+    expect(left["0:2"]).toEqual(rows["0:2"]);
   });
 });
