@@ -24,8 +24,11 @@
 #
 # Noon, not 06:00: mergers-and-acquisitions imports the same dump on
 # Wednesdays at 06:00 (six shards, ~40 min, 3 h timeout) and labels the new
-# QIDs at 10:00, both against the same NFS mount and ToolsDB server. Even at
-# the 8 h timeout this run ends before its nightly jobs start at 02:30.
+# QIDs at 10:00, both against the same NFS mount and ToolsDB server.
+#
+# A full pass takes about an hour (reading the dump is the bottleneck, not the
+# writes), so a 3 h timeout leaves room for a slow NFS day and still catches a
+# hung run.
 - name: import-dump
   command: node --max-old-space-size=384 jobs/import-dump.ts
   image: tool-wikidata-discographer/tool-wikidata-discographer:latest
@@ -34,5 +37,5 @@
   mem: 1Gi
   cpu: 2
   retry: 1
-  timeout: 28800 # 8 h
+  timeout: 10800 # 3 h
   emails: onfailure
