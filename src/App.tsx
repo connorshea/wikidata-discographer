@@ -18,8 +18,11 @@ function loadState(): State {
   } catch {
     // unavailable or corrupt: start fresh
   }
-  return structuredClone(EXAMPLE);
+  return structuredClone(EMPTY);
 }
+
+/** Whether the form is as Clear leaves it, so replacing it loses nothing. */
+const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
 
 export default function App() {
   const [state, setState] = useState<State>(loadState);
@@ -55,12 +58,28 @@ export default function App() {
         <AuthBar />
       </header>
       <p className="flow">album —P658→ track —P2550→ composition · single —P658→ track</p>
+      <div className="row example">
+        <ConfirmButton
+          className="ghost"
+          label="Load the example"
+          confirm={!isEmpty(state)}
+          onConfirm={() => setState(structuredClone(EXAMPLE))}
+        />
+        <span className="hint">A filled-in album, to see how the form works.</span>
+      </div>
       <AlbumSection {...props} />
       <SettingsSection {...props} />
       <DiscsSection {...props} />
       <PerformersSection {...props} />
       <RunSection {...props} />
-      <ResetButtons onSet={(s) => setState(structuredClone(s))} />
+      <div className="row" style={{ marginBottom: 24 }}>
+        <ConfirmButton
+          className="danger"
+          label="Clear the form"
+          confirm={!isEmpty(state)}
+          onConfirm={() => setState(structuredClone(EMPTY))}
+        />
+      </div>
       <footer>
         <a href="https://github.com/connorshea/wikidata-discographer">Source</a> · MIT License
       </footer>
@@ -68,31 +87,36 @@ export default function App() {
   );
 }
 
-/** Clear and load-the-example, each needing a second click to confirm. */
-function ResetButtons({ onSet }: { onSet: (s: State) => void }) {
-  const [armed, setArmed] = useState<"clear" | "example" | null>(null);
+/** A button that replaces the form, needing a second click to confirm when
+ * that would throw away what's filled in. */
+function ConfirmButton({
+  label,
+  className,
+  confirm,
+  onConfirm,
+}: {
+  label: string;
+  className: string;
+  confirm: boolean;
+  onConfirm: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
-    const t = setTimeout(() => setArmed(null), 4000);
+    const t = setTimeout(() => setArmed(false), 4000);
     return () => clearTimeout(t);
   }, [armed]);
-  const button = (which: "clear" | "example", label: string, target: State) => (
+  return (
     <button
       type="button"
-      className="danger"
+      className={className}
       onClick={() => {
-        if (armed !== which) return setArmed(which);
-        setArmed(null);
-        onSet(target);
+        if (confirm && !armed) return setArmed(true);
+        setArmed(false);
+        onConfirm();
       }}
     >
-      {armed === which ? "Click again to confirm" : label}
+      {armed ? "Click again to confirm" : label}
     </button>
-  );
-  return (
-    <div className="row" style={{ marginBottom: 24 }}>
-      {button("clear", "Clear the form", EMPTY)}
-      {button("example", "Load the example", EXAMPLE)}
-    </div>
   );
 }
