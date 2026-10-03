@@ -8,7 +8,7 @@ import type {
   RowMatches,
   TrackMatch,
 } from "./api-types.ts";
-import type { Disc } from "./plan.ts";
+import type { Disc, Row } from "./plan.ts";
 
 /**
  * The reason given for a same-title item with no performer, composer or
@@ -70,17 +70,6 @@ export function pickSingle(disc: Disc, n: number, qid: string): void {
   disc.single[n] = { date: disc.single[n]?.date ?? "", qid };
 }
 
-/** The matches still worth showing for track `n`: those for fields left empty. */
-export function openMatches(disc: Disc, n: number, m: RowMatches | undefined): RowMatches | null {
-  if (!m) return null;
-  const open: RowMatches = {
-    comp: disc.comp[n] ? [] : m.comp,
-    track: disc.track[n] ? [] : m.track,
-    single: disc.single[n]?.qid ? [] : m.single,
-  };
-  return open.comp.length || open.track.length || open.single.length ? open : null;
-}
-
 /**
  * Fill every empty field of disc `di` that has exactly one match, and return
  * how many were filled. A single is only filled in for a track already marked
@@ -126,4 +115,153 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     }
   }
   return filled;
+}
+
+/** A field a candidate fills: the row's existing composition, track or single. */
+export type Slot = keyof RowMatches;
+
+/** Identifies a candidate for dismissing it, e.g. "0:3:comp:Q42". */
+export const candidateId = (di: number, n: number, slot: Slot, qid: string) =>
+  `${di}:${n}:${slot}:${qid}`;
+
+/** The id of a track's group in the Possible matches card, to link to it. */
+export const groupId = (di: number, n: number) => `match-${di}-${n}`;
+
+/** What's in a row's field for `slot`, or "" when it's empty. */
+export function slotValue(disc: Disc, n: number, slot: Slot): string {
+  return (slot === "single" ? disc.single[n]?.qid : disc[slot][n])?.trim() ?? "";
+}
+
+/**
+ * Whether a match ties the item to the form beyond its title: a shared
+ * performer, composer or lyricist, the existing album, or a link to one that
+ * does. Anything else is only a same-title item.
+ */
+export const isStrong = (m: Match) => m.reasons.some((r) => r !== "same title" && r !== NO_ARTIST);
+
+// Where a description's "by …" phrase ends, e.g. "song by X from the album Y".
+const BY_END =
+  /\s+(?:from|on|off|for|in|at|released|recorded|written|composed|produced)\b|\s*[(;:[]/i;
+const BY_SPLIT = /\s*(?:,|&|\+|\band\b|\bfeat\.?|\bft\.|\bfeaturing\b|\bwith\b|\bx\b)\s*/i;
+const ACT_WORD = /\s+(?:band|group|duo|trio)$/i;
+const squash = (s: string) =>
+  s
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/^the\s+/, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * The artists a description names after "by" that aren't among `artists`, e.g.
+ * ["the Black Keys"] for "2022 single by the Black Keys" on a track by
+ * someone else. Loose on purpose: a name counts as the track's when either
+ * contains the other.
+ */
+export function otherArtists(description: string | null, artists: readonly string[]): string[] {
+  const by = description?.match(/\bby\s+(.+)$/i)?.[1];
+  if (!by) return [];
+  const own = artists.map(squash).filter(Boolean);
+  return by
+    .split(BY_END)[0]
+    .split(BY_SPLIT)
+    .map((name) =>
+      name
+        .replace(ACT_WORD, "")
+        .replace(/[.\s]+$/, "")
+        .trim(),
+    )
+    .filter((name) => {
+      const s = squash(name);
+      return s && !own.some((o) => o.includes(s) || s.includes(o));
+    });
+}
+
+export interface Candidate {
+  id: string;
+  slot: Slot;
+  match: Match | TrackMatch;
+  strong: boolean;
+  /** Artists the description names other than the track's. */
+  others: string[];
+  /** Its QID is in the row's field. */
+  used: boolean;
+  /** The field holds another QID, so it can't be used as it is. */
+  taken: boolean;
+}
+
+export interface TrackReview {
+  di: number;
+  n: number;
+  title: string;
+  /** The candidates not dismissed. */
+  candidates: Candidate[];
+  dismissed: number;
+  /** A candidate is used, or none is left to decide on. */
+  reviewed: boolean;
+}
+
+/**
+ * Each track's candidates and whether it's been reviewed: a candidate is
+ * used, or every one is dismissed or has its field filled with something else.
+ */
+export function reviewTracks(
+  discs: readonly Disc[],
+  parsed: readonly (readonly Row[])[],
+  rows: Record<string, RowMatches>,
+  dismissed: ReadonlySet<string>,
+): TrackReview[] {
+  const out: TrackReview[] = [];
+  parsed.forEach((tracks, di) => {
+    const disc = discs[di];
+    if (!disc) return;
+    for (const r of tracks) {
+      if (r.error !== undefined) continue;
+      const m = rows[`${di}:${r.n}`];
+      if (!m) continue;
+      const all = (["comp", "track", "single"] as const).flatMap((slot) =>
+        m[slot].map((match): Candidate => {
+          const value = slotValue(disc, r.n, slot);
+          return {
+            id: candidateId(di, r.n, slot, match.qid),
+            slot,
+            match,
+            strong: isStrong(match),
+            others: otherArtists(match.description, r.artists),
+            used: value === match.qid,
+            taken: value !== "" && value !== match.qid,
+          };
+        }),
+      );
+      if (!all.length) continue;
+      const candidates = all.filter((c) => !dismissed.has(c.id));
+      out.push({
+        di,
+        n: r.n,
+        title: r.title,
+        candidates,
+        dismissed: all.length - candidates.length,
+        reviewed: all.some((c) => c.used) || candidates.every((c) => c.taken),
+      });
+    }
+  });
+  return out;
+}
+
+/** The matches left once the dismissed candidates are taken out. */
+export function withoutDismissed(
+  rows: Record<string, RowMatches>,
+  dismissed: ReadonlySet<string>,
+): Record<string, RowMatches> {
+  const out: Record<string, RowMatches> = {};
+  for (const [key, m] of Object.entries(rows)) {
+    const [di, n] = key.split(":").map(Number);
+    const keep = <T extends Match>(slot: Slot, list: T[]) =>
+      list.filter((x) => !dismissed.has(candidateId(di, n, slot, x.qid)));
+    out[key] = {
+      comp: keep("comp", m.comp),
+      track: keep("track", m.track),
+      single: keep("single", m.single),
+    };
+  }
+  return out;
 }

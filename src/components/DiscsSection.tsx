@@ -1,15 +1,6 @@
-import { Fragment, useEffect, useState } from "react";
-import { api } from "../lib/client.ts";
-import { useAuth } from "../lib/auth-context.ts";
+import { Fragment } from "react";
 import { emptyDisc } from "../lib/state.ts";
-import {
-  type Answered,
-  fillUnambiguous,
-  openMatches,
-  pickSingle,
-  pickTrack,
-  stillValid,
-} from "../lib/matches.ts";
+import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
   isCustomPart,
   normalizeQid,
@@ -20,78 +11,14 @@ import {
   splitArtists,
   type State,
 } from "../lib/plan.ts";
-import type { Match, MatchesRequest, MatchesResponse, RowMatches } from "../lib/api-types.ts";
-import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
-import { useDebounced } from "./use-debounced.ts";
+import { InfoTip, Pids, QidInput } from "./common.tsx";
+import { UnreviewedNotice } from "./MatchesSection.tsx";
 import type { SectionProps } from "./types.ts";
 
 const cls = (...names: (string | false | null | undefined)[]) =>
   names.filter(Boolean).join(" ") || undefined;
 
 const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
-
-type Matches = MatchesResponse["rows"];
-
-/** Where the lookup for existing items stands, for the line above each table. */
-type MatchStatus = "off" | "pending" | "done" | "failed";
-
-/**
- * Existing compositions, tracks and singles in the mirror for the parsed
- * rows: same title and a shared performer, or on the existing album.
- */
-function useMatches(state: State, plan: Plan): { matches: Matches; status: MatchStatus } {
-  const albumQid = state.album.qid.trim();
-  const request: MatchesRequest = {
-    albumQid: state.album.mode === "existing" && QID.test(albumQid) ? albumQid : "",
-    rows: plan.parsed.flatMap((rows, di) =>
-      rows.flatMap((r) =>
-        r.error !== undefined
-          ? []
-          : [
-              {
-                key: `${di}:${r.n}`,
-                title: r.title,
-                performers: r.artists
-                  .map((a) => (state.artists[a] ?? "").trim())
-                  .filter((q) => QID.test(q)),
-              },
-            ],
-      ),
-    ),
-  };
-  // Debounce the serialized request: a fresh object every render would never settle.
-  const current = JSON.stringify(request);
-  const key = useDebounced(current, 600);
-  const [answered, setAnswered] = useState<Answered | null>(null);
-  // The request last answered (or failed), to tell when one is in flight.
-  const [settled, setSettled] = useState<{ key: string; failed: boolean } | null>(null);
-  useEffect(() => {
-    const body = JSON.parse(key) as MatchesRequest;
-    // The server only matches by a performer or the album; without either, don't ask.
-    if (!body.albumQid && !body.rows.some((r) => r.performers.length)) return;
-    const abort = new AbortController();
-    api<MatchesResponse>("/api/items/matches", { method: "POST", body, signal: abort.signal })
-      .then((r) => {
-        setAnswered({ request: body, rows: r.rows });
-        setSettled({ key, failed: false });
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setSettled({ key, failed: true });
-      });
-    return () => abort.abort();
-  }, [key]);
-  // Rows edited since the last answer drop their matches at once; the rest
-  // keep them while the next request is in flight.
-  const canAsk = !!request.albumQid || request.rows.some((r) => r.performers.length);
-  const status: MatchStatus = !canAsk
-    ? "off"
-    : key !== current || settled?.key !== key
-      ? "pending"
-      : settled.failed
-        ? "failed"
-        : "done";
-  return { matches: stillValid(answered, request), status };
-}
 
 /**
  * The album's artists, to dim on each row so features stand out: as entered
@@ -105,8 +32,12 @@ function albumArtists(state: State, plan: Plan): Set<string> {
   return new Set(rows[0].artists.filter((a) => rows.every((r) => r.artists.includes(a))));
 }
 
-export default function DiscsSection({ state, update, plan }: SectionProps) {
-  const { matches, status } = useMatches(state, plan);
+export default function DiscsSection({
+  state,
+  update,
+  plan,
+  reviews,
+}: SectionProps & { reviews: TrackReview[] }) {
   const mainArtists = albumArtists(state, plan);
   return (
     <section className="block">
@@ -114,15 +45,14 @@ export default function DiscsSection({ state, update, plan }: SectionProps) {
       <p className="hint">
         One tracklist per disc or side, a line per track: <code>1. Title - Artist (3:45)</code>.
         Fill in a composition or track QID to reuse an existing item instead of creating one. Items
-        already on Wikidata with a track's title and performer are suggested under it.
+        already on Wikidata with a track's title are listed under Possible matches.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
           key={di}
           di={di}
           rows={plan.parsed[di] ?? []}
-          matches={matches}
-          status={status}
+          reviews={reviews.filter((r) => r.di === di)}
           mainArtists={mainArtists}
           {...{ state, update, plan }}
         />
@@ -141,8 +71,7 @@ export default function DiscsSection({ state, update, plan }: SectionProps) {
 function DiscBlock({
   di,
   rows,
-  matches,
-  status,
+  reviews,
   mainArtists,
   state,
   update,
@@ -150,15 +79,11 @@ function DiscBlock({
 }: SectionProps & {
   di: number;
   rows: Row[];
-  matches: Matches;
-  status: MatchStatus;
+  reviews: TrackReview[];
   mainArtists: Set<string>;
 }) {
   const d = state.discs[di];
-  const fillable = fillUnambiguous(structuredClone(d), di, matches);
-  const suggested = rows.filter(
-    (r) => r.error === undefined && openMatches(d, r.n, matches[`${di}:${r.n}`]),
-  ).length;
+  const open = new Map(reviews.filter((r) => !r.reviewed).map((r) => [r.n, r]));
   const custom = isCustomPart(d);
   const setDisc = (fn: (disc: (typeof state.discs)[number]) => void) =>
     update((s) => fn(s.discs[di]));
@@ -220,35 +145,7 @@ function DiscBlock({
           onChange={(e) => setDisc((disc) => void (disc.text = e.target.value))}
         />
       </label>
-      {rows.length > 0 && suggested === 0 && (
-        <p className="msg muted match-summary">
-          {status === "off"
-            ? "Give the performers QIDs to see items already on Wikidata, suggested under each track."
-            : status === "pending"
-              ? "Looking for items already on Wikidata…"
-              : status === "failed"
-                ? "Couldn't look for items already on Wikidata."
-                : "No items already on Wikidata match these tracks."}
-        </p>
-      )}
-      {suggested > 0 && (
-        <div className="row match-summary">
-          <p className="msg warn">
-            {suggested === 1 ? "1 track" : `${suggested} tracks`} may already be on Wikidata. Check
-            the suggestions under {suggested === 1 ? "it" : "them"}, so you reuse those items
-            instead of creating duplicates.
-          </p>
-          {fillable > 0 && (
-            <button
-              type="button"
-              className="ghost small"
-              onClick={() => update((s) => void fillUnambiguous(s.discs[di], di, matches))}
-            >
-              Fill in {fillable} unambiguous match{fillable === 1 ? "" : "es"}
-            </button>
-          )}
-        </div>
-      )}
+      {open.size > 0 && <UnreviewedNotice count={open.size} />}
       {rows.length > 0 && (
         <div className="tablewrap">
           <table>
@@ -281,15 +178,14 @@ function DiscBlock({
                   </tr>
                 ) : (
                   <Fragment key={i}>
-                    <tr
-                      className={cls(
-                        (d.single[r.n] || openMatches(d, r.n, matches[`${di}:${r.n}`])) &&
-                          "has-sub",
-                        d.single[r.n] && "is-single",
-                      )}
-                    >
+                    <tr className={cls(d.single[r.n] && "has-sub", d.single[r.n] && "is-single")}>
                       <td className="num">{r.n}</td>
-                      <td>{r.title}</td>
+                      <td>
+                        <span className="title-cell">
+                          {r.title}
+                          {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
+                        </span>
+                      </td>
                       <td>
                         {r.artists.map((a, j) => (
                           <Fragment key={j}>
@@ -334,25 +230,6 @@ function DiscBlock({
                         />
                       </td>
                     </tr>
-                    {openMatches(d, r.n, matches[`${di}:${r.n}`]) && (
-                      <tr
-                        className={cls(
-                          "sub-row",
-                          d.single[r.n] && "has-sub",
-                          d.single[r.n] && "is-single",
-                        )}
-                      >
-                        <td />
-                        <td colSpan={6}>
-                          <RowMatchList
-                            n={r.n}
-                            m={openMatches(d, r.n, matches[`${di}:${r.n}`])!}
-                            hasSingle={!!d.single[r.n]}
-                            update={(fn) => update((s) => fn(s.discs[di]))}
-                          />
-                        </td>
-                      </tr>
-                    )}
                     {d.single[r.n] && (
                       <tr className="sub-row is-single">
                         <td />
@@ -406,49 +283,28 @@ function SingleFields({ di, n, state, update, plan }: SectionProps & { di: numbe
   );
 }
 
-/** A track's suggested existing items, each with a button to use it. */
-function RowMatchList({
-  n,
-  m,
-  hasSingle,
-  update,
-}: {
-  n: number;
-  m: RowMatches;
-  hasSingle: boolean;
-  update: (fn: (disc: State["discs"][number]) => void) => void;
-}) {
-  const { wikiBaseUrl } = useAuth();
-  const item = (what: string, x: Match, button: string, onUse: () => void) => (
-    <li key={`${what}:${x.qid}`}>
-      <span className="match-kind">{what}</span>
-      <WikiLink base={wikiBaseUrl} qid={x.qid} />
-      <span>{x.label ?? "(no label)"}</span>
-      {x.description && <span className="muted">{x.description}</span>}
-      <span className="muted">({x.reasons.join(", ")})</span>
-      <button type="button" className="ghost small" onClick={onUse}>
-        {button}
-      </button>
-    </li>
-  );
+/** A warning icon on a track with possible matches to review, linked to them. */
+function MatchFlag({ review }: { review: TrackReview }) {
+  const n = review.candidates.length;
+  const what = `${n} possible match${n === 1 ? "" : "es"}`;
   return (
-    <div className="row-matches">
-      <span className="single-label">Already on Wikidata?</span>
-      <ul className="matches">
-        {m.track.map((t) =>
-          item("Track", t, t.composition ? "Use (with its composition)" : "Use", () =>
-            update((disc) => pickTrack(disc, n, t)),
-          ),
-        )}
-        {m.comp.map((c) =>
-          item("Composition", c, "Use", () => update((disc) => void (disc.comp[n] = c.qid))),
-        )}
-        {m.single.map((sg) =>
-          item("Single", sg, hasSingle ? "Use" : "Add as this track's single", () =>
-            update((disc) => pickSingle(disc, n, sg.qid)),
-          ),
-        )}
-      </ul>
-    </div>
+    <a
+      className="match-flag"
+      href={`#${groupId(review.di, review.n)}`}
+      aria-label={`Track ${review.n}: ${what} to review`}
+      title={`${what}. Review under Possible matches`}
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <path
+          d="M8 1.5 15 14H1z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+        <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="8" cy="11.75" r="0.9" fill="currentColor" />
+      </svg>
+    </a>
   );
 }

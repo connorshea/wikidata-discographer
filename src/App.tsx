@@ -8,6 +8,9 @@ import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
 import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
+import MatchesSection from "./components/MatchesSection.tsx";
+import { useMatches } from "./components/use-matches.ts";
+import { reviewTracks } from "./lib/matches.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
@@ -91,6 +94,10 @@ export default function App() {
   }, [state]);
 
   const albumTracklist = useAlbumTracklist(state);
+  const { matches, status } = useMatches(state, plan);
+  // Candidates dismissed in the Possible matches card, by candidateId.
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  const reviews = reviewTracks(state.discs, plan.parsed, matches, dismissed);
   const props = { state, update, plan };
   return (
     <main>
@@ -124,9 +131,15 @@ export default function App() {
       </div>
       <AlbumSection {...props} albumTracklist={albumTracklist} />
       <SettingsSection {...props} />
-      <DiscsSection {...props} />
+      <DiscsSection {...props} reviews={reviews} />
+      <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
       <PerformersSection {...props} />
-      <RunSection {...props} albumTracklist={albumTracklist} />
+      <RunSection
+        {...props}
+        albumTracklist={albumTracklist}
+        unreviewed={reviews.filter((r) => !r.reviewed).length}
+        matchesPending={status === "pending"}
+      />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton
           className="danger"
