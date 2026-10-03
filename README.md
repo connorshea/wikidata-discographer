@@ -75,8 +75,9 @@ vp test                 # run the tests
    At the end, the created QIDs are written back into the form, so a second
    run reuses them instead of creating duplicates.
 
-Edits carry `maxlag=5` and `assert=user`, and retry on `badtoken`, `maxlag` and
-rate limits. The edit summary ends with an EditGroups link
+Edits carry `assert=user`, and retry on `badtoken` and rate limits. They don't
+send `maxlag`: a run is started by hand, like an edit in the Wikidata UI. The
+edit summary ends with an EditGroups link
 (`[[:toolforge:editgroups/b/CB/<id>|details]]`). Point `WIKIDATA_API_URL` at
 Test Wikidata while developing.
 
