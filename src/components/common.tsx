@@ -52,15 +52,22 @@ export function WikiLink({ base, qid }: { base: string; qid: string }) {
   );
 }
 
-/** Text with each property ID it mentions (P175, say) showing the property's name on hover. */
+/**
+ * Text with each property ID it mentions (P175, say) showing the property's name
+ * on hover. One span, so a flex label lays it out as a single run of text.
+ */
 export function Pids({ children }: { children: string }) {
-  return children.split(/\b(P\d+)\b/).map((part, i) =>
-    i % 2 && PROPERTY_LABELS[part] ? (
-      <abbr key={i} className="pid" title={PROPERTY_LABELS[part]}>
-        {part}
-      </abbr>
-    ) : (
-      part
-    ),
+  return (
+    <span>
+      {children.split(/\b(P\d+)\b/).map((part, i) =>
+        i % 2 && PROPERTY_LABELS[part] ? (
+          <abbr key={i} className="pid" title={PROPERTY_LABELS[part]}>
+            {part}
+          </abbr>
+        ) : (
+          part
+        ),
+      )}
+    </span>
   );
 }
