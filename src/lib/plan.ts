@@ -386,6 +386,14 @@ interface PlanItem {
   single: { date: ParsedDate; qid: string | null } | null;
 }
 
+/** More tracks than this on one disc is likely a paste gone wrong. */
+export const MAX_TRACKS_PER_DISC = 50;
+/** Tracks per run, across all discs; a bigger release goes in several runs. */
+export const MAX_TRACKS = 100;
+/** A backstop on edits per run. At most ~4 per track (composition, track,
+ * single, and linking the single), so MAX_TRACKS keeps runs well under it. */
+export const MAX_OPS = 500;
+
 export function buildPlan(state: State): Plan {
   const S = state.settings;
   const lang = S.lang.trim();
@@ -530,6 +538,19 @@ export function buildPlan(state: State): Plan {
   }
 
   if (!items.length && !readErr) err("Paste at least one track into a disc.");
+  parsed.forEach((rows, di) => {
+    if (rows.length > MAX_TRACKS_PER_DISC)
+      err(
+        `Disc ${di + 1} has ${rows.length} tracks; a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
+          "Split it into more discs, or into separate runs.",
+      );
+  });
+  const trackCount = parsed.reduce((n, rows) => n + rows.length, 0);
+  if (trackCount > MAX_TRACKS)
+    err(
+      `That's ${trackCount} tracks across all discs; a run can have at most ${MAX_TRACKS}. ` +
+        "Split the release into separate runs.",
+    );
   if (albumErr) err("Fix the album details at the top of the page.");
   if (readErr)
     err(
@@ -732,6 +753,13 @@ export function buildPlan(state: State): Plan {
         what: where(it),
         claims: [claim("P1433", single)],
       });
+  }
+
+  if (ops.length > MAX_OPS) {
+    err(
+      `That's ${ops.length} edits; a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
+    );
+    return { parsed, fieldErrs, singleErrs, messages, ops: [], ready: false };
   }
 
   const creates = (prefix: string) =>

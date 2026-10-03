@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
-import { buildPlan, normalizeQid, type Op, parseDisc, splitArtists } from "./plan.ts";
-import { EMPTY, EXAMPLE } from "./state.ts";
+import {
+  buildPlan,
+  MAX_TRACKS,
+  MAX_TRACKS_PER_DISC,
+  normalizeQid,
+  type Op,
+  parseDisc,
+  splitArtists,
+} from "./plan.ts";
+import { EMPTY, emptyDisc, EXAMPLE } from "./state.ts";
 
 const keys = (ops: Op[]) => ops.map((o) => (o.op === "create" ? o.key : `+${o.what}`));
 const find = (ops: Op[], key: string) => ops.find((o) => o.op === "create" && o.key === key);
@@ -93,5 +101,40 @@ describe("buildPlan", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";
     expect(buildPlan(state).ready).toBe(false);
+  });
+
+  describe("size limits", () => {
+    const tracklist = (count: number) =>
+      Array.from(
+        { length: count },
+        (_, i) => `${i + 1}. Song ${i + 1} - Carly Rae Jepsen (3:00)`,
+      ).join("\n");
+    const withDiscs = (...counts: number[]) => {
+      const state = structuredClone(EXAMPLE);
+      state.discs = counts.map((n) => ({ ...emptyDisc(), text: tracklist(n) }));
+      return state;
+    };
+    const errors = (plan: ReturnType<typeof buildPlan>) =>
+      plan.messages.filter((m) => m[0] === "err").map((m) => m[1]);
+
+    it("allows a full disc and blocks one track more", () => {
+      expect(buildPlan(withDiscs(MAX_TRACKS_PER_DISC)).ready).toBe(true);
+      const plan = buildPlan(withDiscs(3, MAX_TRACKS_PER_DISC + 1));
+      expect(plan.ready).toBe(false);
+      expect(errors(plan)).toEqual([
+        `Disc 2 has ${MAX_TRACKS_PER_DISC + 1} tracks; a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
+          "Split it into more discs, or into separate runs.",
+      ]);
+    });
+
+    it("allows a full run and blocks one track more across all discs", () => {
+      expect(buildPlan(withDiscs(MAX_TRACKS_PER_DISC, MAX_TRACKS_PER_DISC)).ready).toBe(true);
+      const plan = buildPlan(withDiscs(MAX_TRACKS_PER_DISC, MAX_TRACKS_PER_DISC, 1));
+      expect(plan.ready).toBe(false);
+      expect(errors(plan)).toEqual([
+        `That's ${MAX_TRACKS + 1} tracks across all discs; a run can have at most ${MAX_TRACKS}. ` +
+          "Split the release into separate runs.",
+      ]);
+    });
   });
 });

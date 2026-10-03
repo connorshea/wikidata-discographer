@@ -66,7 +66,8 @@ vp test                 # run the tests
    errors and the edit preview.
 2. **Create on Wikidata** posts the form state. The server rebuilds the plan
    from it, so it only makes edits it built itself, records a `submissions` row
-   and runs the plan in the background. Each user can have one run at a time.
+   and runs the plan in the background. Each user can have one run at a time,
+   of at most 50 tracks per disc and 100 tracks in all.
 3. Operations run in order, using `wbeditentity`. Items created earlier in the
    run (`album`, `comp:0:3`, `track:0:3`, `single:0:3`) are swapped for their
    new QIDs as the run goes. Adding statements to an existing item skips the
