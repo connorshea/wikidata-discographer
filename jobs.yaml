@@ -17,7 +17,9 @@
 # Tuesdays. The dump is only visible with `mount: all`. One process reads the
 # whole file (no sharding): two CPUs let the gunzip and the line scan run side
 # by side. It holds only one batch of rows at a time, so a small heap is
-# plenty. Retry once so a run killed by a node drain restarts; the import is
+# plenty, but RSS runs ~270-390 MB (inflate buffers and line copies live
+# outside the heap; a multi-MB entity line briefly needs several copies), so
+# 1Gi leaves room. Retry once so a run killed by a node drain restarts; the import is
 # idempotent, and the prune refuses to delete more than 20% of the mirror.
 #
 # Noon, not 06:00: mergers-and-acquisitions imports the same dump on
@@ -29,7 +31,7 @@
   image: tool-wikidata-discographer/tool-wikidata-discographer:latest
   schedule: "0 12 * * 3" # Wednesdays 12:00 UTC
   mount: all
-  mem: 512Mi
+  mem: 1Gi
   cpu: 2
   retry: 1
   timeout: 28800 # 8 h
