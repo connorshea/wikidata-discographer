@@ -12,7 +12,7 @@
 //
 // so reusing a track also reuses the composition it already records, rather
 // than creating a second one and giving the track two P2550s.
-import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, lte, or, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
 import { musicItems, musicLinks } from "../db/schema.ts";
@@ -156,6 +156,9 @@ export function assembleMatches(
 const MAX_ROWS = 100;
 const MAX_PERFORMERS = 200;
 const MAX_CANDIDATES = 2000;
+// Direct candidates kept per title and kind. Capped per title, not overall,
+// so one common title ("Intro", a Bach "Prelude") can't crowd out the rest.
+const PER_TITLE = 10;
 const QID = /^Q\d+$/;
 const P658 = propertyNumber("P658");
 const PART_OF = ["P1433", "P361"].map(propertyNumber);
@@ -275,13 +278,35 @@ export async function findMatches(body: Partial<MatchesRequest>): Promise<Matche
         )
       : undefined,
   );
-  const candidates = await db
-    .select(itemColumns)
+  // Items on the album first, then the oldest (usually the established item).
+  const onAlbum = albumTracks.size
+    ? sql`${musicItems.qid} in (${sql.join(
+        [...albumTracks].map((q) => sql`${qidNumber(q)}`),
+        sql`, `,
+      )})`
+    : sql`false`;
+  const ranked = db
+    .select({
+      ...itemColumns,
+      rank: sql<number>`row_number() over (partition by ${musicItems.labelSearch}, ${musicItems.kind} order by ${onAlbum} desc, ${musicItems.qid})`.as(
+        "title_rank",
+      ),
+    })
     .from(musicItems)
     .where(
       and(inArray(musicItems.labelSearch, keys), inArray(musicItems.kind, MATCH_KINDS), linked),
     )
-    .limit(MAX_CANDIDATES);
+    .as("ranked");
+  const candidates = await db
+    .select({
+      qid: ranked.qid,
+      kind: ranked.kind,
+      label: ranked.label,
+      description: ranked.description,
+      labelSearch: ranked.labelSearch,
+    })
+    .from(ranked)
+    .where(lte(ranked.rank, PER_TITLE));
 
   const items = new Map<string, ItemFacts>();
   await withLinks(candidates, items);
