@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import AuthBar from "./AuthBar.tsx";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY, EXAMPLE } from "./lib/state.ts";
@@ -62,7 +62,15 @@ export default function App() {
         <ConfirmButton
           className="ghost"
           label="Load the example"
-          confirm={!isEmpty(state)}
+          confirm={
+            isEmpty(state)
+              ? null
+              : {
+                  title: "Replace the form with the example?",
+                  body: "This replaces everything you've entered with the example album. It can't be undone.",
+                  action: "Replace",
+                }
+          }
           onConfirm={() => setState(structuredClone(EXAMPLE))}
         />
         <span className="hint">A filled-in album, to see how the form works.</span>
@@ -76,7 +84,15 @@ export default function App() {
         <ConfirmButton
           className="danger"
           label="Clear the form"
-          confirm={!isEmpty(state)}
+          confirm={
+            isEmpty(state)
+              ? null
+              : {
+                  title: "Clear the form?",
+                  body: "This removes the album, settings, tracklists and performers you've entered. It can't be undone.",
+                  action: "Clear the form",
+                }
+          }
           onConfirm={() => setState(structuredClone(EMPTY))}
         />
       </div>
@@ -87,8 +103,8 @@ export default function App() {
   );
 }
 
-/** A button that replaces the form, needing a second click to confirm when
- * that would throw away what's filled in. */
+/** A button that replaces the form, asking first in a modal dialog when that
+ * would throw away what's filled in. */
 function ConfirmButton({
   label,
   className,
@@ -97,26 +113,62 @@ function ConfirmButton({
 }: {
   label: string;
   className: string;
-  confirm: boolean;
+  confirm: { title: string; body: string; action: string } | null;
   onConfirm: () => void;
 }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const bodyId = useId();
+  const close = () => dialog.current?.close();
   return (
-    <button
-      type="button"
-      className={className}
-      onClick={() => {
-        if (confirm && !armed) return setArmed(true);
-        setArmed(false);
-        onConfirm();
-      }}
-    >
-      {armed ? "Click again to confirm" : label}
-    </button>
+    <>
+      <button
+        ref={button}
+        type="button"
+        className={className}
+        onClick={() => {
+          if (!confirm) return onConfirm();
+          dialog.current?.showModal();
+          // Enter on the default focus shouldn't destroy anything.
+          cancel.current?.focus();
+        }}
+      >
+        {label}
+      </button>
+      <dialog
+        ref={dialog}
+        className="confirm"
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
+        onClose={() => button.current?.focus()}
+        // A click on the backdrop lands on the <dialog> itself; its contents are
+        // wrapped in a div that fills it, so clicks inside never do.
+        onClick={(e) => e.target === e.currentTarget && close()}
+      >
+        {confirm && (
+          <div className="confirm-body">
+            <h2 id={titleId}>{confirm.title}</h2>
+            <p id={bodyId}>{confirm.body}</p>
+            <div className="row">
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  close();
+                  onConfirm();
+                }}
+              >
+                {confirm.action}
+              </button>
+              <button ref={cancel} type="button" className="ghost" onClick={close}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </dialog>
+    </>
   );
 }

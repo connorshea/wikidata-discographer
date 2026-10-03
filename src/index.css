@@ -467,3 +467,21 @@ footer {
     padding: 14px;
   }
 }
+dialog.confirm {
+  padding: 0;
+  max-width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+}
+dialog.confirm::backdrop {
+  background: rgb(10 11 25 / 0.5);
+}
+.confirm-body {
+  padding: 20px 22px;
+}
+.confirm-body .row {
+  margin-top: 16px;
+}
