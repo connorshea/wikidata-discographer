@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { opsText, type State } from "../lib/plan.ts";
+import type { State } from "../lib/plan.ts";
 import type {
   EditLogEntry,
   SubmissionInfo,
@@ -10,6 +10,7 @@ import type {
   UnknownRunConflict,
 } from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
+import PlanPreview from "./PlanPreview.tsx";
 import type { SectionProps, Update } from "./types.ts";
 
 const POLL_MS = 2000;
@@ -103,12 +104,7 @@ export default function RunSection({ update, plan, state }: SectionProps) {
           {text}
         </p>
       ))}
-      {plan.ops.length > 0 && (
-        <details>
-          <summary>Preview the {edits} edits</summary>
-          <pre className="out">{opsText(plan.ops)}</pre>
-        </details>
-      )}
+      {plan.ops.length > 0 && <PlanPreview plan={plan} state={state} />}
       <div className="row">
         <button
           type="button"
@@ -257,7 +253,8 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
       <ol className="log">
         {run.edits.map((e, i) => (
           <li key={i} className={e.ok ? undefined : "fail"}>
-            {e.unknown ? "Outcome unknown: created?" : e.op === "create" ? "Created" : "Updated"}{" "}
+            {/* Matches the preview's headings; a statements edit's `what` says what it adds. */}
+            {e.unknown ? "Outcome unknown: created? " : e.op === "create" ? "Created " : ""}
             {e.what}
             {e.qid && (
               <>

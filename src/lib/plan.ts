@@ -249,12 +249,12 @@ export const PARTS = [
 ] as const;
 const KNOWN_PARTS = new Set<string>(PARTS.flatMap(([, o]) => o.map(([q]) => q)));
 
-const SINGLE_CLASS = "Q134556";
-const COMPOSITION_CLASS = "Q105543609";
-const SONG_FORM = "Q7366";
-const TRACK_UNIT = "Q7302866";
-const SECOND_UNIT = "Q11574";
-const EP_CLASS = "Q169930";
+export const SINGLE_CLASS = "Q134556";
+export const COMPOSITION_CLASS = "Q105543609";
+export const SONG_FORM = "Q7366";
+export const TRACK_UNIT = "Q7302866";
+export const SECOND_UNIT = "Q11574";
+export const EP_CLASS = "Q169930";
 
 // ---------------------------------------------------------------------------
 // Small helpers (also used by the form)
@@ -780,6 +780,27 @@ export function buildPlan(state: State): Plan {
 // ---------------------------------------------------------------------------
 // Preview text
 // ---------------------------------------------------------------------------
+
+const KIND_NAMES: Record<string, string> = {
+  album: "album",
+  ep: "EP",
+  single: "single",
+  work: "composition",
+  track: "track",
+};
+
+/**
+ * What an operation does, in a few words: the run log's line for it and the
+ * preview's heading. A create's is what it makes, e.g. `track “Versailles”`.
+ */
+export function describeOp(op: Op): string {
+  if (op.op === "addClaims") {
+    const n = op.claims.length;
+    return `Add ${n} statement${n === 1 ? "" : "s"} to ${op.what}`;
+  }
+  const label = Object.values(op.labels)[0] ?? "";
+  return `${KIND_NAMES[op.kind] ?? "item"} “${label}”`;
+}
 
 function refText(r: ItemRef): string {
   return "id" in r ? r.id : `{${r.ref}}`;
