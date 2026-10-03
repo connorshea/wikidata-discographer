@@ -1,17 +1,15 @@
 // The Wikidata Action API client. Edits are made as the logged-in user through
 // their OAuth grant (never `bot=1`): `editRequest` loads their access token,
-// fetches a CSRF token with `assert=user&assertuser=<name>`, sends `maxlag=5`
-// (a run is a batch of edits, not one interactive click), and retries on
-// `badtoken`, `maxlag` and `ratelimited`. Anything else becomes a
-// `WikidataEditError` carrying Wikidata's own message.
+// fetches a CSRF token with `assert=user&assertuser=<name>`, and retries on
+// `badtoken` and `ratelimited`. Anything else becomes a `WikidataEditError`
+// carrying Wikidata's own message. No `maxlag`: each run is started by hand by
+// the user, like edits made in the Wikidata UI, not by an automated process.
 import { wikidataApiUrl } from "./auth/config.ts";
 import { deleteTokens, getAccessToken, TokenError } from "./auth/tokens.ts";
 import { userAgent } from "./auth/user-agent.ts";
 import type { Claim, Snak, Value } from "../src/lib/plan.ts";
 
 const TIMEOUT_MS = 30_000;
-const MAXLAG = "5";
-const MAX_LAG_RETRIES = 5;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_WAIT_MS = 60_000;
 
@@ -149,22 +147,17 @@ export async function editRequest(
   }
   let csrf = await csrfToken(user, accessToken);
   let tokenRetries = 0;
-  let lagRetries = 0;
   let rateRetries = 0;
   for (;;) {
     const res = await call(
       "POST",
-      { ...params, token: csrf, assert: "user", assertuser: user.username, maxlag: MAXLAG },
+      { ...params, token: csrf, assert: "user", assertuser: user.username },
       accessToken,
     );
     const err = apiError(res);
     if (!err) return res.body;
     if (err.code === "badtoken" && tokenRetries++ < 1) {
       csrf = await csrfToken(user, accessToken);
-      continue;
-    }
-    if (err.code === "maxlag" && lagRetries++ < MAX_LAG_RETRIES) {
-      await sleep(retryAfterMs(res.headers, 5_000));
       continue;
     }
     if (
