@@ -17,6 +17,10 @@ import type { Disc } from "./plan.ts";
  */
 export const NO_ARTIST = "no artist set";
 
+/** Whether a possible duplicate album's reason is a shared identifier, not its title. */
+export const isIdReason = (r: string) =>
+  r !== "same title" && r !== "same performer" && r !== NO_ARTIST;
+
 /** Whether the match is only a same-title item with no artist. */
 const isGuess = (m: Match) =>
   m.reasons.includes(NO_ARTIST) && m.reasons.every((r) => r === "same title" || r === NO_ARTIST);

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { ALBUM_FORMS, ALBUM_TYPES } from "../lib/plan.ts";
+import { ALBUM_FORMS, ALBUM_TYPES, QID, splitArtists } from "../lib/plan.ts";
+import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, QidInput, WikiLink } from "./common.tsx";
@@ -152,7 +153,11 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
   );
 }
 
-/** Albums in the mirror that share an identifier or the title with the one being created. */
+/**
+ * Albums in the mirror that share an identifier or the title with the one being
+ * created. Once the album artists have QIDs, same-title albums by someone else
+ * are left out.
+ */
 function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
@@ -162,6 +167,9 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
       title: A.title,
       kinds: ["album", "ep"],
       ids: Object.fromEntries(ALBUM_ID_FIELDS.map((f) => [f.property, A.ids[f.key]])),
+      performers: splitArtists(A.artists, state.settings.splitArtists)
+        .map((a) => (state.artists[a] ?? "").trim())
+        .filter((q) => QID.test(q)),
     } satisfies DuplicatesRequest),
   );
   // Results are tagged with the request they answer, so stale ones are never shown.
@@ -180,7 +188,7 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
   }, [key, empty]);
   const matches = !empty && result?.key === key ? result.matches : [];
   if (!matches.length) return null;
-  const byId = matches.some((m) => m.reasons.some((r) => r !== "same title"));
+  const byId = matches.some((m) => m.reasons.some(isIdReason));
   return (
     <div>
       <p className={`msg ${byId ? "err" : "warn"}`}>
