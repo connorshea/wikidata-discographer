@@ -314,6 +314,17 @@ export async function runPlan(
         });
         const revid = (body.entity as { lastrevid?: number } | undefined)?.lastrevid ?? null;
         await log({ op: "addClaims", what, qid, revid, ok: true, skipped });
+        // Refresh its mirror row (e.g. a reused track's new P2550) from the
+        // saved entity Wikidata sends back, so matches see it before the next dump.
+        const row = body.entity
+          ? entityToRow({ ...(body.entity as object), id: qid } as Parameters<
+              typeof entityToRow
+            >[0])
+          : null;
+        if (row)
+          await upsertRows([row], { source: "app" }).catch((e: unknown) =>
+            console.error("mirror write failed", e),
+          );
       }
     } catch (err) {
       const code = err instanceof WikidataEditError ? err.code : "internal";

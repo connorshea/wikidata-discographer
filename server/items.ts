@@ -2,13 +2,16 @@
 //
 //   GET  /api/items/search?q=…&kind=artist   label search (exact, then prefix)
 //   POST /api/items/duplicates               possible duplicates of a new album
+//   POST /api/items/matches                  existing items for a tracklist (server/matches.ts)
 //   POST /api/items/:qid                     fetch an item from Wikidata into the mirror
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, toProperty, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { type AuthEnv, requireUser } from "./auth/session.ts";
+import { findMatches } from "./matches.ts";
 import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
 import { getEntities, WikidataEditError } from "./wikidata-client.ts";
 import { ID_PROPERTIES, MUSIC_KINDS, type MusicKind } from "../src/lib/music.ts";
@@ -17,6 +20,8 @@ import type {
   DuplicateMatch,
   DuplicatesRequest,
   DuplicatesResponse,
+  MatchesRequest,
+  MatchesResponse,
   MirrorItem,
   SearchResponse,
 } from "../src/lib/api-types.ts";
@@ -112,6 +117,11 @@ items.post("/duplicates", async (c) => {
     (a, b) => Number(b.reasons[0] !== "same title") - Number(a.reasons[0] !== "same title"),
   );
   return c.json({ matches } satisfies DuplicatesResponse);
+});
+
+items.post("/matches", bodyLimit({ maxSize: 256 << 10 }), async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Partial<MatchesRequest>;
+  return c.json((await findMatches(body)) satisfies MatchesResponse);
 });
 
 items.post("/:qid", requireUser, async (c) => {

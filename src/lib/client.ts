@@ -11,13 +11,14 @@ export class FetchError extends Error {
 
 export async function api<T>(
   path: string,
-  opts: { method?: string; body?: unknown } = {},
+  opts: { method?: string; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const hasBody = opts.body !== undefined;
   const res = await fetch(path, {
     method: opts.method ?? "GET",
     headers: hasBody ? { "Content-Type": "application/json" } : undefined,
     body: hasBody ? JSON.stringify(opts.body) : undefined,
+    signal: opts.signal,
   });
   const text = await res.text();
   if (!res.ok) {

@@ -82,3 +82,39 @@ export interface SubmissionInfo {
 export interface SubmissionListResponse {
   submissions: Omit<SubmissionInfo, "edits" | "total">[];
 }
+
+/** Body of POST /api/items/matches: the tracklist rows to find existing items for. */
+export interface MatchesRequest {
+  /** The existing album being added to, or "" when creating one. */
+  albumQid: string;
+  rows: {
+    /** "disc:track", e.g. "0:3". */
+    key: string;
+    title: string;
+    /** The row's performer QIDs. */
+    performers: string[];
+  }[];
+}
+
+export interface Match extends MirrorItem {
+  /** Why it matched, e.g. "same title", "same performer", "on this album". */
+  reasons: string[];
+}
+
+export interface TrackMatch extends Match {
+  /** The composition it's a recording of (P2550), if the mirror knows one. */
+  composition: string | null;
+  /** Singles it's on (its P1433/P361, or their P658). */
+  singles: string[];
+}
+
+export interface RowMatches {
+  comp: Match[];
+  track: TrackMatch[];
+  single: Match[];
+}
+
+export interface MatchesResponse {
+  /** By request row key; rows with no matches are left out. */
+  rows: Record<string, RowMatches>;
+}

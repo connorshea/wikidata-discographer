@@ -44,7 +44,26 @@ describe("entityToRow", () => {
         { property: "P436", value: "mbid" },
         { property: "P2205", value: "abc" },
       ],
+      links: [],
     });
+  });
+
+  it("keeps item links, without duplicates or deprecated ones", () => {
+    const link = (property: string, id: string, rank: WikibaseStatement["rank"] = "normal") =>
+      ({ ...item(id, rank), mainsnak: { ...item(id).mainsnak, property } }) as WikibaseStatement;
+    const entity = {
+      id: "Q10",
+      claims: {
+        P31: [item("Q55850593")],
+        P175: [link("P175", "Q52583"), link("P175", "Q52583"), link("P175", "Q1", "deprecated")],
+        P2550: [link("P2550", "Q20")],
+        P17: [link("P17", "Q30")],
+      },
+    } as Entity;
+    expect(entityToRow(entity)?.links).toEqual([
+      { property: "P175", target: "Q52583" },
+      { property: "P2550", target: "Q20" },
+    ]);
   });
 
   it("uses only the preferred P31 when there is one", () => {
@@ -76,5 +95,8 @@ describe("labelSearchKey", () => {
     expect(labelSearchKey("ABC")).toBe("abc");
     expect(labelSearchKey("x".repeat(300))).toHaveLength(191);
     expect(labelSearchKey(null)).toBeNull();
+  });
+  it("makes curly quotes straight", () => {
+    expect(labelSearchKey("Don’t Say “Hi”")).toBe(`don't say "hi"`);
   });
 });

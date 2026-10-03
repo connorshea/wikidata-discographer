@@ -20,7 +20,8 @@
 //   4. Parse the kept lines and convert them with the same `entityToRow` the
 //      app uses; an item whose best-rank P31 isn't a music class (and that has
 //      no artist id) is dropped here.
-//   5. Upsert the new and changed rows in batches, with their revids.
+//   5. Upsert the new and changed rows in batches, with their revids, external
+//      ids and links.
 //   6. After a complete pass, delete the mirrored items that weren't seen
 //      (gone from the dump, or no longer music), unless the app wrote them
 //      after the dump was taken. Refuses to delete more than 20% of the mirror
@@ -38,7 +39,7 @@ import type { Readable } from "node:stream";
 import { and, asc, eq, gt, inArray, lt, notExists } from "drizzle-orm";
 import { db, retryOnLockConflict } from "./db.ts";
 import { toQid } from "./ids.ts";
-import { musicExternalIds, musicItems } from "../db/schema.ts";
+import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { entityToRow, MIRROR_VERSION, type MirrorRow, upsertRows } from "./mirror.ts";
 import type { Entity } from "./wikidata-client.ts";
 import { ARTIST_ID_PROPERTIES, CLASS_KINDS } from "../src/lib/music.ts";
@@ -436,6 +437,14 @@ async function prune(index: MirrorIndex, stamp: string, force: boolean): Promise
               notExists(
                 tx.select().from(musicItems).where(eq(musicItems.qid, musicExternalIds.qid)),
               ),
+            ),
+          );
+        await tx
+          .delete(musicLinks)
+          .where(
+            and(
+              inArray(musicLinks.qid, qids),
+              notExists(tx.select().from(musicItems).where(eq(musicItems.qid, musicLinks.qid))),
             ),
           );
         return deleted;
