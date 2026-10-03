@@ -517,6 +517,14 @@ details summary {
   opacity: 0;
   transition: opacity 0.12s;
 }
+.info.end [role="tooltip"] {
+  left: auto;
+  right: 0;
+}
+th .info {
+  vertical-align: middle;
+  margin-left: 4px;
+}
 .info:hover [role="tooltip"],
 .info button:focus + [role="tooltip"] {
   visibility: visible;

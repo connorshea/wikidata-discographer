@@ -21,7 +21,7 @@ import {
   type State,
 } from "../lib/plan.ts";
 import type { Match, MatchesRequest, MatchesResponse, RowMatches } from "../lib/api-types.ts";
-import { Pids, QidInput, WikiLink } from "./common.tsx";
+import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import type { SectionProps } from "./types.ts";
 
@@ -260,7 +260,15 @@ function DiscBlock({
                 <th>Length</th>
                 <th>Existing composition</th>
                 <th>Existing track</th>
-                <th>Single</th>
+                <th>
+                  Single
+                  <InfoTip id={`disc${di}-single`} label="About singles" end>
+                    Tick a track that was also released as a single. The single becomes its own
+                    item, an instance of single (Q134556) with the track’s title and artists, that
+                    lists the track and is taken from the album. Give it a release date, or enter an
+                    existing single’s QID to link that one instead of creating a new one.
+                  </InfoTip>
+                </th>
               </tr>
             </thead>
             <tbody>
