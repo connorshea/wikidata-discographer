@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { Match, RowMatches, TrackMatch } from "./api-types.ts";
-import { fillUnambiguous, openMatches, pickSingle, pickTrack, stillValid } from "./matches.ts";
+import {
+  fillUnambiguous,
+  NO_ARTIST,
+  openMatches,
+  pickSingle,
+  pickTrack,
+  stillValid,
+} from "./matches.ts";
 import { emptyDisc } from "./state.ts";
 
 const match = (qid: string): Match => ({
@@ -85,6 +92,29 @@ describe("fillUnambiguous", () => {
     expect(fillUnambiguous(disc, 0, rows)).toBe(1);
     expect(disc.track).toEqual({ 2: "Q50", 3: "Q13" });
     expect(disc.comp).toEqual({ 1: "Q99", 3: "Q23" });
+  });
+});
+
+describe("fillUnambiguous with guesses", () => {
+  it("doesn't fill a match that is only a same-title item with no artist", () => {
+    const guess = <M extends Match>(m: M): M => ({ ...m, reasons: ["same title", NO_ARTIST] });
+    const disc = emptyDisc();
+    disc.single[1] = { date: "", qid: "" };
+    const rows = {
+      "0:1": rm({
+        track: [guess(track("Q10", null))],
+        comp: [guess(match("Q20"))],
+        single: [guess(match("Q30"))],
+      }),
+      // Linked to a credited track, it's no longer a guess.
+      "0:2": rm({
+        comp: [{ ...match("Q21"), reasons: ["same title", NO_ARTIST, "recorded as Q11"] }],
+      }),
+    };
+    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
+    expect(disc.track).toEqual({});
+    expect(disc.comp).toEqual({ 2: "Q21" });
+    expect(disc.single[1].qid).toBe("");
   });
 });
 

@@ -2,7 +2,9 @@
 //
 // A row's direct matches are items with the same title (`labelSearchKey`)
 // that also share one of the row's performers (as P175, or P86/P676), or that
-// are on the existing album being added to. Titles alone are too common
+// are on the existing album being added to, or that have no performer,
+// composer or lyricist at all (often an item made in a hurry that is this
+// one). Titles alone, on items credited to someone else, are too common
 // ("Intro", "Home") to suggest anything. Each direct match then brings along
 // what the music model links to it:
 //
@@ -12,12 +14,13 @@
 //
 // so reusing a track also reuses the composition it already records, rather
 // than creating a second one and giving the track two P2550s.
-import { and, eq, exists, inArray, lte, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, lte, notExists, or, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
 import { musicItems, musicLinks } from "../db/schema.ts";
 import { labelSearchKey } from "./mirror.ts";
 import type { MusicKind } from "../src/lib/music.ts";
+import { NO_ARTIST } from "../src/lib/matches.ts";
 import type {
   Match,
   MatchesRequest,
@@ -50,6 +53,7 @@ function score(m: Match): number {
   let n = m.reasons.length;
   if (m.reasons.includes("on this album")) n += 4;
   if (m.reasons.includes("same performer")) n += 2;
+  if (m.reasons.includes(NO_ARTIST)) n -= 1;
   return n;
 }
 
@@ -123,6 +127,11 @@ export function assembleMatches(
         it.links.some((l) => CREATOR_PROPERTIES.includes(l.property) && performers.has(l.target))
       )
         reasons.push("same composer or lyricist");
+      else if (
+        reasons.length === 1 &&
+        !it.links.some((l) => CREATOR_PROPERTIES.includes(l.property))
+      )
+        reasons.push(NO_ARTIST);
       if (reasons.length > 1) add(it.qid, reasons);
     }
     // A single's track, when it has the row's title.
@@ -261,7 +270,12 @@ export async function findMatches(body: Partial<MatchesRequest>): Promise<Matche
   }
   if (keys.length === 0 || (performers.length === 0 && albumTracks.size === 0)) return { rows: {} };
 
+  const creditless = db
+    .select({ one: sql`1` })
+    .from(musicLinks)
+    .where(and(eq(musicLinks.qid, musicItems.qid), inArray(musicLinks.property, CREATORS)));
   const linked = or(
+    notExists(creditless),
     albumTracks.size ? inArray(musicItems.qid, [...albumTracks].map(qidNumber)) : undefined,
     performers.length
       ? exists(
@@ -278,7 +292,7 @@ export async function findMatches(body: Partial<MatchesRequest>): Promise<Matche
         )
       : undefined,
   );
-  // Items on the album first, then the oldest (usually the established item).
+  // Items on the album first, then credited ones, then the oldest (usually the established item).
   const onAlbum = albumTracks.size
     ? sql`${musicItems.qid} in (${sql.join(
         [...albumTracks].map((q) => sql`${qidNumber(q)}`),
@@ -288,7 +302,7 @@ export async function findMatches(body: Partial<MatchesRequest>): Promise<Matche
   const ranked = db
     .select({
       ...itemColumns,
-      rank: sql<number>`row_number() over (partition by ${musicItems.labelSearch}, ${musicItems.kind} order by ${onAlbum} desc, ${musicItems.qid})`.as(
+      rank: sql<number>`row_number() over (partition by ${musicItems.labelSearch}, ${musicItems.kind} order by ${onAlbum} desc, ${exists(creditless)} desc, ${musicItems.qid})`.as(
         "title_rank",
       ),
     })
