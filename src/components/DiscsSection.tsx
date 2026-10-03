@@ -21,7 +21,7 @@ import {
   type State,
 } from "../lib/plan.ts";
 import type { Match, MatchesRequest, MatchesResponse, RowMatches } from "../lib/api-types.ts";
-import { QidInput, WikiLink } from "./common.tsx";
+import { Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import type { SectionProps } from "./types.ts";
 
@@ -178,7 +178,7 @@ function DiscBlock({
       </div>
       <div className="grid">
         <label className="f">
-          Part (P518 on the tracklist)
+          <Pids>Part (P518 on the tracklist)</Pids>
           <select
             value={custom ? "other" : d.part}
             onChange={(e) =>

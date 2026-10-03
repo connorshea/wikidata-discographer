@@ -8,7 +8,7 @@ import {
   type Settings,
   TRACK_TYPES,
 } from "../lib/plan.ts";
-import { FieldErr, InfoTip } from "./common.tsx";
+import { FieldErr, InfoTip, Pids } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc" | "singleDesc";
@@ -93,11 +93,13 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
               onChange={(e) => set("lang", e.target.value.toLowerCase().trim())}
             />
           )}
-          <span className="sub">Also used for the P1476 title</span>
+          <span className="sub">
+            <Pids>Also used for the P1476 title</Pids>
+          </span>
           <FieldErr id="lang" msg={errs.lang} />
         </div>
         <label className="f">
-          Publication date (P577)
+          <Pids>Publication date (P577)</Pids>
           <input
             type="text"
             spellCheck={false}
@@ -111,7 +113,9 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
           <FieldErr id="date" msg={errs.date} />
         </label>
         <div className="f">
-          <label htmlFor="p407Sel">Language of work (P407)</label>
+          <label htmlFor="p407Sel">
+            <Pids>Language of work (P407)</Pids>
+          </label>
           <select
             id="p407Sel"
             value={workLang}
@@ -160,8 +164,10 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
         <div className="f">
           Statements{" "}
           <span className="sub">
-            P31 musical work/composition (Q105543609), P7937 song (Q7366), P1476, plus the options
-            below
+            <Pids>
+              P31 musical work/composition (Q105543609), P7937 song (Q7366), P1476, plus the options
+              below
+            </Pids>
           </span>
         </div>
       </div>
@@ -173,7 +179,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
       <div className="grid">
         {template("trackDesc", "Description template", perTrack, yearNote)}
         <label className="f">
-          Instance of (P31)
+          <Pids>Instance of (P31)</Pids>
           <select value={S.trackType} onChange={(e) => set("trackType", e.target.value)}>
             {TRACK_TYPES.map(([q, l]) => (
               <option key={q} value={q}>{`${l} (${q})`}</option>
@@ -187,9 +193,11 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
         Singles
       </h3>
       <p className="hint">
-        Tick "Single" on a track in the disc tables. Each single gets P31 single (Q134556), P1476,
-        P175, its own P577 release date, P407, a P658 tracklist pointing at the track, and P13602
-        single taken from the album.
+        <Pids>
+          Tick "Single" on a track in the disc tables. Each single gets P31 single (Q134556), P1476,
+          P175, its own P577 release date, P407, a P658 tracklist pointing at the track, and P13602
+          single taken from the album.
+        </Pids>
       </p>
       <div className="grid">
         {template(
@@ -204,7 +212,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
         {FLAGS.map(([k, label]) => (
           <label className="c" key={k}>
             <input type="checkbox" checked={S[k]} onChange={(e) => set(k, e.target.checked)} />{" "}
-            {label}
+            <Pids>{label}</Pids>
           </label>
         ))}
       </div>

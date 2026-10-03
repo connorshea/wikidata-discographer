@@ -121,6 +121,11 @@ p.lede {
 .flow a.prop:hover {
   color: var(--accent);
 }
+abbr.pid {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
 .row.example {
   margin: 0 0 24px;
 }

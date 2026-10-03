@@ -3,7 +3,7 @@ import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { normalizeQid, QID, splitArtists } from "../lib/plan.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
-import { QidInput, WikiLink } from "./common.tsx";
+import { Pids, QidInput, WikiLink } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
@@ -21,8 +21,10 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
     <section className="block">
       <h2>Performers</h2>
       <p className="hint">
-        Every artist name found in the tracklists and album artists, mapped to a QID for P175.
-        Matching artists already on Wikidata are suggested.
+        <Pids>
+          Every artist name found in the tracklists and album artists, mapped to a QID for P175.
+          Matching artists already on Wikidata are suggested.
+        </Pids>
       </p>
       <div className="tablewrap">
         <table>
