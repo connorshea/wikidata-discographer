@@ -1,7 +1,6 @@
 // The plan as something a person can check before making the edits: one entry
 // per edit, grouped by what it makes or changes, with labels for the
 // properties and items the app knows and new items called by their titles.
-// opsText (plan.ts) is the raw QuickStatements-like form of the same ops.
 import { ID_PROPERTIES, LINK_PROPERTIES } from "./music.ts";
 import {
   ALBUM_FORMS,

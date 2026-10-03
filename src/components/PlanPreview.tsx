@@ -1,9 +1,8 @@
 // "Preview the N edits": the plan as readable, grouped edits (src/lib/preview.ts),
-// with the raw QuickStatements-like text behind a toggle. Closed sections
-// render nothing, so a box set's hundreds of edits cost nothing until opened.
-import { type ReactNode, useMemo, useState } from "react";
+// all in one scroll box. Nothing is rendered until it's opened.
+import { useMemo, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
-import { opsText, type Plan, type State } from "../lib/plan.ts";
+import type { Plan, State } from "../lib/plan.ts";
 import {
   type PreviewEdit,
   type PreviewProperty,
@@ -11,74 +10,36 @@ import {
   type PreviewValue,
 } from "../lib/preview.ts";
 
-/** Groups start open when the whole plan is this small. */
-const OPEN_UP_TO = 25;
-
-/** A <details> whose contents are only rendered while it's open. */
-function Lazy({
-  summary,
-  className,
-  defaultOpen = false,
-  children,
-}: {
-  summary: ReactNode;
-  className?: string;
-  defaultOpen?: boolean;
-  children: () => ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <details
-      className={className}
-      open={open}
-      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-    >
-      <summary>{summary}</summary>
-      {open && children()}
-    </details>
-  );
-}
-
 export default function PlanPreview({ plan, state }: { plan: Plan; state: State }) {
+  const [open, setOpen] = useState(false);
   const n = plan.ops.length;
   return (
-    <Lazy summary={`Preview the ${n} edit${n === 1 ? "" : "s"}`}>
-      {() => <PreviewBody plan={plan} state={state} />}
-    </Lazy>
+    <details open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary>{`Preview the ${n} edit${n === 1 ? "" : "s"}`}</summary>
+      {open && <PreviewBody plan={plan} state={state} />}
+    </details>
   );
 }
 
 function PreviewBody({ plan, state }: { plan: Plan; state: State }) {
   const groups = useMemo(() => previewPlan(plan, state), [plan, state]);
-  const startOpen = plan.ops.length <= OPEN_UP_TO;
   return (
     <div className="preview">
       {groups.map((g) => (
-        <Lazy
-          key={g.id}
-          className="pv-group"
-          defaultOpen={startOpen}
-          summary={
-            <>
-              {g.title}{" "}
-              <span className="muted">
-                ({g.edits.length} edit{g.edits.length === 1 ? "" : "s"})
-              </span>
-            </>
-          }
-        >
-          {() => (
-            <ul className="pv-edits">
-              {g.edits.map((e) => (
-                <Edit key={e.n} edit={e} />
-              ))}
-            </ul>
-          )}
-        </Lazy>
+        <section key={g.id} className="pv-group">
+          <h4>
+            {g.title}{" "}
+            <span className="muted">
+              ({g.edits.length} edit{g.edits.length === 1 ? "" : "s"})
+            </span>
+          </h4>
+          <ul className="pv-edits">
+            {g.edits.map((e) => (
+              <Edit key={e.n} edit={e} />
+            ))}
+          </ul>
+        </section>
       ))}
-      <Lazy summary="Show as QuickStatements" className="pv-group">
-        {() => <RawText plan={plan} />}
-      </Lazy>
     </div>
   );
 }
@@ -144,33 +105,6 @@ function Val({ v }: { v: PreviewValue }) {
   return (
     <>
       {v.text} <span className="muted pv-id">({link})</span>
-    </>
-  );
-}
-
-function RawText({ plan }: { plan: Plan }) {
-  const text = useMemo(() => opsText(plan.ops), [plan.ops]);
-  const [copied, setCopied] = useState(false);
-  return (
-    <>
-      <div className="row">
-        <button
-          type="button"
-          className="ghost small"
-          onClick={() =>
-            void navigator.clipboard
-              .writeText(text)
-              .then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              })
-              .catch(() => setCopied(false))
-          }
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-      <pre className="out">{text}</pre>
     </>
   );
 }

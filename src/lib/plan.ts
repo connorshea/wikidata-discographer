@@ -778,7 +778,7 @@ export function buildPlan(state: State): Plan {
 }
 
 // ---------------------------------------------------------------------------
-// Preview text
+// Describing operations
 // ---------------------------------------------------------------------------
 
 const KIND_NAMES: Record<string, string> = {
@@ -800,49 +800,4 @@ export function describeOp(op: Op): string {
   }
   const label = Object.values(op.labels)[0] ?? "";
   return `${KIND_NAMES[op.kind] ?? "item"} “${label}”`;
-}
-
-function refText(r: ItemRef): string {
-  return "id" in r ? r.id : `{${r.ref}}`;
-}
-
-function valueText(v: Value): string {
-  switch (v.type) {
-    case "item":
-      return refText(v);
-    case "string":
-      return JSON.stringify(v.value);
-    case "monolingual":
-      return `${v.language}:${JSON.stringify(v.text)}`;
-    case "time":
-      return `${v.time}/${v.precision}`;
-    case "quantity":
-      return `${v.amount}${v.unit ? `U${v.unit.slice(1)}` : ""}`;
-  }
-}
-
-function claimText(c: Claim): string {
-  return [
-    c.property,
-    valueText(c.value),
-    ...(c.qualifiers ?? []).flatMap((q) => [q.property, valueText(q.value)]),
-  ].join("|");
-}
-
-/** The operations as QuickStatements-like lines, for the preview. */
-export function opsText(ops: readonly Op[]): string {
-  const lines: string[] = [];
-  for (const o of ops) {
-    if (o.op === "create") {
-      const k = `{${o.key}}`;
-      lines.push(`CREATE ${k}`);
-      for (const [l, t] of Object.entries(o.labels)) lines.push(`${k}|L${l}|${JSON.stringify(t)}`);
-      for (const [l, t] of Object.entries(o.descriptions))
-        lines.push(`${k}|D${l}|${JSON.stringify(t)}`);
-      for (const c of o.claims) lines.push(`${k}|${claimText(c)}`);
-    } else {
-      for (const c of o.claims) lines.push(`${refText(o.target)}|${claimText(c)}`);
-    }
-  }
-  return lines.join("\n");
 }

@@ -362,10 +362,20 @@ details summary {
   margin-top: 10px;
 }
 .preview {
-  margin-left: 4px;
+  max-height: 520px;
+  overflow: auto;
+  margin-top: 8px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
-.pv-group > summary {
-  font-weight: 600;
+.pv-group h4 {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: 8px 0 4px;
+  background: var(--panel);
+  font-size: 0.9rem;
 }
 .pv-edits,
 .pv-claims,
@@ -376,9 +386,6 @@ details summary {
 }
 .pv-edits {
   font-size: 0.85rem;
-  max-height: 520px;
-  overflow: auto;
-  margin-top: 6px;
 }
 .pv-edits > li {
   padding: 6px 0 8px;
