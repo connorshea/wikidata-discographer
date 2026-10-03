@@ -19,14 +19,37 @@ describe("mightMatch", () => {
       ),
     ).toBe(true);
   });
+  it("keeps a music class in any P31 statement, wherever P31 is", () => {
+    const p31 =
+      '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}}},' +
+      '{"mainsnak":{"datavalue":{"value":{"numeric-id":482994}}}}]';
+    expect(mightMatch(line(`{"claims":{"P17":[{"mainsnak":{}}],${p31}}},`))).toBe(true);
+  });
   it("keeps lines with an artist identifier claim", () => {
-    expect(
-      mightMatch(line('{"claims":{"P31":[{"numeric-id":5}],"P434":[{"mainsnak":{}}]}},')),
-    ).toBe(true);
+    const p31 = '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}}}]';
+    expect(mightMatch(line(`{"claims":{${p31},"P434":[{"mainsnak":{}}]}},`))).toBe(true);
+    expect(mightMatch(line('{"claims":{"P1902":[{"mainsnak":{}}]}},'))).toBe(true);
   });
   it("skips everything else, including class numbers that only share a prefix", () => {
-    expect(mightMatch(line('{"claims":{"P31":[{"numeric-id":4829940}]}},'))).toBe(false);
-    expect(mightMatch(line('{"claims":{"P31":[{"numeric-id":5}]}},'))).toBe(false);
+    const p31 = (id: number) => `"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":${id}}}}}]`;
+    expect(mightMatch(line(`{"claims":{${p31(4829940)}}},`))).toBe(false);
+    expect(mightMatch(line(`{"claims":{${p31(5)}}},`))).toBe(false);
+    // A property number that only ends in an artist one, or is P31's prefix.
+    expect(mightMatch(line('{"claims":{"P1434":[{"mainsnak":{}}],"P3":[{"mainsnak":{}}]}},'))).toBe(
+      false,
+    );
+  });
+  it("ignores music classes and artist ids outside P31 and the claims", () => {
+    // A class as another property's value, and as a qualifier on P31.
+    const claims =
+      '"P361":[{"mainsnak":{"datavalue":{"value":{"numeric-id":482994}}}}],' +
+      '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}}}]';
+    expect(mightMatch(line(`{"claims":{${claims}}},`))).toBe(false);
+    // An artist id property as a qualifier or reference: bare snaks, no mainsnak.
+    const qualified =
+      '"P31":[{"mainsnak":{"datavalue":{"value":{"numeric-id":5}}},' +
+      '"qualifiers":{"P434":[{"snaktype":"value"}]}}]';
+    expect(mightMatch(line(`{"claims":{${qualified}}},`))).toBe(false);
   });
 });
 
@@ -50,14 +73,14 @@ describe("dumpStamp", () => {
 
 describe("progressLine", () => {
   const stats = { bytes: 412e9, lines: 29_500_000, matched: 280_123 };
-  it("shows the share of the file read and the time left at the rate so far", () => {
-    // A quarter of the file in 1 hour leaves 3 hours.
+  it("shows the share of the file read, the time left and the rate so far", () => {
+    // A quarter of the file in 1 hour leaves 3 hours; 412 GB in 3600 s is 114 MB/s.
     expect(progressLine(stats, 25, 100, 3_600_000)).toBe(
-      "import-dump: 25.0%, ETA 3h 00m — 412.0 GB, 29500000 lines, 280123 matched",
+      "import-dump: 25.0%, ETA 3h 00m — 412.0 GB at 114 MB/s, 29500000 lines, 280123 matched",
     );
   });
   it("leaves out the estimate before anything is read", () => {
-    expect(progressLine(stats, 0, 100, 1000)).toBe(
+    expect(progressLine(stats, 0, 100, 0)).toBe(
       "import-dump: 412.0 GB, 29500000 lines, 280123 matched",
     );
   });

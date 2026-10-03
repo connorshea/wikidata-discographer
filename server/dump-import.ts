@@ -6,10 +6,11 @@
 // streamed once:
 //
 //   1. Inflate in ~1 MB chunks; only complete lines are handled.
-//   2. Cheap pre-filter on the raw bytes: keep a line if a `"numeric-id":N`
-//      in it is one of the music classes (src/lib/music.ts CLASS_KINDS), or if
-//      it has a claim for one of the artist identifier properties. Everything
-//      else is never decoded or parsed.
+//   2. Cheap pre-filter on the raw bytes, in one pass over the line's
+//      properties: keep it if it has a claim for one of the artist identifier
+//      properties, or if a `"numeric-id":N` in its P31 claims is one of the
+//      music classes (src/lib/music.ts CLASS_KINDS). Everything else is never
+//      decoded or parsed.
 //   3. Parse the kept lines and convert them with the same `entityToRow` the
 //      app uses; an item whose best-rank P31 isn't a music class (and that has
 //      no artist id) is dropped here.
@@ -36,24 +37,51 @@ export const DEFAULT_DUMP_PATH = "/public/dumps/public/wikidatawiki/entities/lat
 const NL = 0x0a;
 const NUMERIC_ID = Buffer.from('"numeric-id":');
 const CLASS_NUMBERS = new Set(CLASS_KINDS.map(([qid]) => Number(qid.slice(1))));
-// Claims are keyed by property: `"claims":{…,"P434":[{"mainsnak":…`.
-const ARTIST_NEEDLES = ARTIST_ID_PROPERTIES.map((p) => Buffer.from(`"${p}":[`));
+// Claims are keyed by property, and each property's first statement opens its
+// list: `"claims":{"P31":[{"mainsnak":…},{"mainsnak":…}],"P434":[{"mainsnak":…`.
+// Qualifiers and references are lists of bare snaks (`"P580":[{"snaktype"…`),
+// so this marks the claims alone, once per property.
+const CLAIM_LIST = Buffer.from('":[{"mainsnak":');
+const ARTIST_NUMBERS = new Set(ARTIST_ID_PROPERTIES.map((p) => Number(p.slice(1))));
+const P = 0x50;
+const QUOTE = 0x22;
 const BATCH_SIZE = 1000;
 const MAX_PRUNE_SHARE = 0.2;
 // Pruned in chunks so a big prune reports progress and holds no long lock.
 const PRUNE_CHUNK = 5000;
 
-/** Whether a dump line might be a music item (false positives are fine, misses aren't). */
+/**
+ * Whether a dump line might be a music item (false positives are fine, misses
+ * aren't). Hot: runs on every line of the dump, so it visits each claimed
+ * property once and only reads numbers inside the P31 claims.
+ */
 export function mightMatch(line: Buffer): boolean {
-  let i = line.indexOf(NUMERIC_ID);
-  while (i !== -1) {
+  for (let i = line.indexOf(CLAIM_LIST); i !== -1;) {
+    // Read the property number backwards from `"P434` + `":[{"mainsnak":`.
+    let j = i - 1;
+    let prop = 0;
+    for (let place = 1; j >= 0 && line[j] >= 0x30 && line[j] <= 0x39; j--, place *= 10)
+      prop += (line[j] - 0x30) * place;
+    const next = line.indexOf(CLAIM_LIST, i + CLAIM_LIST.length);
+    if (j > 0 && line[j] === P && line[j - 1] === QUOTE) {
+      if (ARTIST_NUMBERS.has(prop)) return true;
+      if (prop === 31 && hasClass(line, i, next === -1 ? line.length : next)) return true;
+    }
+    i = next;
+  }
+  return false;
+}
+
+/** Whether a `"numeric-id":N` in `line[from, to)` is a music class. */
+function hasClass(line: Buffer, from: number, to: number): boolean {
+  for (let i = line.indexOf(NUMERIC_ID, from); i !== -1 && i < to;) {
     let j = i + NUMERIC_ID.length;
     let n = 0;
     while (j < line.length && line[j] >= 0x30 && line[j] <= 0x39) n = n * 10 + (line[j++] - 0x30);
     if (CLASS_NUMBERS.has(n)) return true;
     i = line.indexOf(NUMERIC_ID, j);
   }
-  return ARTIST_NEEDLES.some((needle) => line.includes(needle));
+  return false;
 }
 
 /** Parse one dump line (`{…},` or the `[` / `]` brackets) into an entity, or null. */
@@ -92,7 +120,7 @@ export function memoryNote(mem: NodeJS.MemoryUsage = process.memoryUsage()): str
 /**
  * A progress line for the log. Progress is measured on the compressed file
  * (bytes read of its size); the ETA assumes the rest goes at the average rate
- * so far.
+ * so far. The MB/s is the average rate over the inflated JSON.
  */
 export function progressLine(
   stats: Pick<ImportStats, "bytes" | "lines" | "matched">,
@@ -100,7 +128,8 @@ export function progressLine(
   size: number,
   elapsedMs: number,
 ): string {
-  const counts = `${(stats.bytes / 1e9).toFixed(1)} GB, ${stats.lines} lines, ${stats.matched} matched`;
+  const rate = elapsedMs > 0 ? ` at ${Math.round(stats.bytes / 1e3 / elapsedMs)} MB/s` : "";
+  const counts = `${(stats.bytes / 1e9).toFixed(1)} GB${rate}, ${stats.lines} lines, ${stats.matched} matched`;
   if (!(size > 0 && read > 0)) return `import-dump: ${counts}`;
   const done = Math.min(read / size, 1);
   const eta = (elapsedMs * (1 - done)) / done;
