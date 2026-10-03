@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel a superseded run of the same PR / branch; runs on main all complete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up toolchain
+        uses: ./.github/actions/setup
+
+      - name: Format, lint, and type-check
+        run: pnpm exec vp check
+
+      - name: Run tests
+        run: pnpm exec vp test
+
+      - name: Build
+        run: pnpm exec vp build
+
+  # Apply the checked-in migrations to an empty MariaDB (proving they run from
+  # scratch) and fail if db/schema.ts has drifted from db/migrations.
+  db:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        # Keep the major in step with Toolforge's ToolsDB so CI exercises the
+        # same SQL dialect the deploy will.
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_USER: discographer
+      DB_PASSWORD: discographer
+      DB_NAME: discographer_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up toolchain
+        uses: ./.github/actions/setup
+
+      # The service image can't be given a default collation, so create the
+      # database explicitly with utf8mb4_bin, the same as ToolsDB and local dev.
+      - name: Create the test database
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u root -proot <<'SQL'
+          CREATE DATABASE discographer_test CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+          CREATE USER 'discographer'@'%' IDENTIFIED BY 'discographer';
+          GRANT ALL ON discographer_test.* TO 'discographer'@'%';
+          SQL
+
+      - name: Apply migrations from scratch
+        run: node scripts/migrate.ts
+
+      # `drizzle-kit generate` is offline: it diffs db/schema.ts against the
+      # snapshots in db/migrations/meta and writes a new migration only if they
+      # differ. Any new file here means a schema change was committed without
+      # running `pnpm db:generate`.
+      - name: Check for schema drift
+        run: |
+          pnpm exec drizzle-kit generate --name ci-drift-check
+          if [ -n "$(git status --porcelain db/migrations)" ]; then
+            git status --porcelain db/migrations
+            echo "::error::db/schema.ts has changes not captured in db/migrations. Run 'pnpm db:generate' and commit the result."
+            exit 1
+          fi
