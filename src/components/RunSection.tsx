@@ -13,6 +13,7 @@ import type {
 import { WikiLink } from "./common.tsx";
 import PlanPreview from "./PlanPreview.tsx";
 import type { SectionProps, Update } from "./types.ts";
+import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
 const POLL_MS = 2000;
 
@@ -38,7 +39,12 @@ function applyCreated(edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[], 
   });
 }
 
-export default function RunSection({ update, plan, state }: SectionProps) {
+export default function RunSection({
+  update,
+  plan,
+  state,
+  albumTracklist,
+}: SectionProps & { albumTracklist: AlbumTracklist | null }) {
   const { user } = useAuth();
   const [runId, setRunId] = useState<number | null>(null);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
@@ -116,13 +122,16 @@ export default function RunSection({ update, plan, state }: SectionProps) {
                 ? "Running…"
                 : `Make ${edits} edit${edits === 1 ? "" : "s"}`
           }
-          disabled={!user || user.blocked || !plan.ready || running || starting}
+          disabled={!user || user.blocked || !plan.ready || !!albumTracklist || running || starting}
           plan={plan}
           state={state}
           username={user?.username ?? "you"}
           onConfirm={() => start()}
         />
         {!user && <span className="hint">Log in to edit.</span>}
+        {user && albumTracklist && (
+          <span className="hint">The album already has a tracklist. See the Album section.</span>
+        )}
       </div>
       <p className="hint">
         Edits are made with your account and grouped in EditGroups, so the whole run can be reviewed

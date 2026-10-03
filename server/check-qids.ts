@@ -8,10 +8,11 @@
 // one typo doesn't fetch the rest again.
 //
 // The existing album must also be an album or EP: an instance of one of the
-// album or EP classes the app knows.
+// album or EP classes the app knows. And it mustn't have a tracklist yet
+// (besides tracks the form reuses), or the run would add a second one beside it.
 import { checkItems, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
 import { CLASS_KINDS } from "../src/lib/music.ts";
-import { ALBUM_FORMS, type Op, type State, type Value } from "../src/lib/plan.ts";
+import { ALBUM_FORMS, foreignTracks, type Op, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -118,7 +119,7 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
   }
   const album = state.album.mode === "existing" ? state.album.qid.trim() : null;
   if (album && results.get(album)?.status === "ok") {
-    const problem = await checkAlbumKind(album);
+    const problem = (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album, state));
     if (problem) problems.unshift(problem);
   }
   if (problems.length > MAX_PROBLEMS)
@@ -145,4 +146,11 @@ async function checkAlbumKind(qid: string): Promise<string | null> {
   if (classes.length === 0)
     return `The existing album: ${qid} has no “instance of” statement, so it can't be checked to be an album or EP.`;
   return `The existing album: ${qid} is an instance of ${classes.join(", ")}, not an album or EP. Check the QID.`;
+}
+
+/** Why the existing album can't take this tracklist, or null if it has none of its own. */
+async function checkAlbumTracklist(qid: string, state: State): Promise<string | null> {
+  const n = foreignTracks(state, await getStatementItems(qid, "P658", { retries: 1 })).length;
+  if (n === 0) return null;
+  return `The existing album: ${qid} already has a tracklist (P658) with ${n} track${n === 1 ? "" : "s"} not in this form. The app only adds tracklists to albums without one.`;
 }

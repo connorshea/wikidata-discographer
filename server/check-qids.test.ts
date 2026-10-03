@@ -41,21 +41,26 @@ function stubWiki({
   redirects = {},
   tooBig = [],
   instanceOf = ["Q482994"],
+  tracklist = [],
 }: {
   missing?: string[];
   redirects?: Record<string, string>;
   tooBig?: string[];
   /** The album's P31 values. */
   instanceOf?: string[];
+  /** The album's P658 values. */
+  tracklist?: string[];
 }) {
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
     if (q.get("action") === "wbgetclaims") {
-      expect(q.get("property")).toBe("P31");
+      const property = q.get("property")!;
+      const values = { P31: instanceOf, P658: tracklist }[property];
+      expect(values).toBeDefined();
       return Response.json({
         claims: {
-          P31: instanceOf.map((id) => ({
-            mainsnak: { snaktype: "value", property: "P31", datavalue: { value: { id } } },
+          [property]: values!.map((id) => ({
+            mainsnak: { snaktype: "value", property, datavalue: { value: { id } } },
             rank: "normal",
           })),
         },
@@ -108,15 +113,30 @@ describe("checkPlanQids", () => {
     );
   });
 
-  it("fetches only the existing album's “instance of” statements", async () => {
+  it("fetches only the existing album's “instance of” and tracklist statements", async () => {
     const fetch = stubWiki({ instanceOf: ["Q208569"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([]);
-    const claims = fetch.mock.calls.filter(
-      ([url]) => new URL(url).searchParams.get("action") === "wbgetclaims",
-    );
-    expect(claims.map(([url]) => new URL(url).searchParams.get("entity"))).toEqual([
-      EXAMPLE.album.qid,
+    const claims = fetch.mock.calls
+      .map(([url]) => new URL(url).searchParams)
+      .filter((q) => q.get("action") === "wbgetclaims");
+    expect(claims.map((q) => [q.get("entity"), q.get("property")])).toEqual([
+      [EXAMPLE.album.qid, "P31"],
+      [EXAMPLE.album.qid, "P658"],
     ]);
+  });
+
+  it("refuses an existing album that already has a tracklist", async () => {
+    stubWiki({ tracklist: ["Q1", "Q2"] });
+    expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
+      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 2 tracks not in this form. The app only adds tracklists to albums without one.`,
+    ]);
+  });
+
+  it("allows a tracklist made only of tracks the form reuses, as a rerun has", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].track[1] = "Q1";
+    stubWiki({ tracklist: ["Q1"] });
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([]);
   });
 
   it("refuses an existing album that isn't an album or EP", async () => {
