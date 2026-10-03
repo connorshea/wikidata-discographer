@@ -32,8 +32,9 @@ describe("entityToRow", () => {
         P436: [ext("mbid")],
       },
     } as Entity;
-    expect(entityToRow(entity)).toEqual({
+    expect(entityToRow({ ...entity, lastrevid: 2548173641 })).toEqual({
       qid: "Q140316456",
+      revid: 2548173641,
       kind: "album",
       label: "Day and Night",
       description: "2026 album",

@@ -5,19 +5,29 @@
 // (one entity per line), visible to a job with `mount: all`. The file is
 // streamed once:
 //
+//   0. Load every mirrored QID with the revision it was built from into
+//      memory (`MirrorIndex`, ~13 bytes per item).
 //   1. Inflate in ~1 MB chunks; only complete lines are handled.
-//   2. Cheap pre-filter on the raw bytes, in one pass over the line's
+//   2. Read the line's id and `lastrevid`, which sit at its start and end. An
+//      item the mirror already has at that revision (or newer) is marked seen
+//      and skipped: no filter, no parse, no write. Most weeks that's almost
+//      every music item.
+//   3. Cheap pre-filter on the raw bytes, in one pass over the line's
 //      properties: keep it if it has a claim for one of the artist identifier
 //      properties, or if a `"numeric-id":N` in its P31 claims is one of the
 //      music classes (src/lib/music.ts CLASS_KINDS). Everything else is never
 //      decoded or parsed.
-//   3. Parse the kept lines and convert them with the same `entityToRow` the
+//   4. Parse the kept lines and convert them with the same `entityToRow` the
 //      app uses; an item whose best-rank P31 isn't a music class (and that has
 //      no artist id) is dropped here.
-//   4. Upsert in batches, stamping each row with the dump's date.
-//   5. After a complete pass, delete rows the dump no longer has: dump rows
-//      stamped with an older dump, and app-added rows from before the dump
-//      was taken. Refuses to delete more than 20% of the mirror unless forced.
+//   5. Upsert the new and changed rows in batches, with their revids.
+//   6. After a complete pass, delete the mirrored items that weren't seen
+//      (gone from the dump, or no longer music), unless the app wrote them
+//      after the dump was taken. Refuses to delete more than 20% of the mirror
+//      unless forced.
+//
+// Rows written by an older MIRROR_VERSION (server/mirror.ts) are never
+// skipped, so a change to what's extracted reaches every item on the next run.
 //
 // Everything is an idempotent upsert, so a job that dies is simply re-run.
 import { createReadStream } from "node:fs";
@@ -25,10 +35,10 @@ import { realpath, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { createGunzip } from "node:zlib";
 import type { Readable } from "node:stream";
-import { and, count, eq, inArray, isNotNull, isNull, lt, ne, notExists, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, notExists } from "drizzle-orm";
 import { db } from "./db.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
-import { entityToRow, type MirrorRow, upsertRows } from "./mirror.ts";
+import { entityToRow, MIRROR_VERSION, type MirrorRow, upsertRows } from "./mirror.ts";
 import type { Entity } from "./wikidata-client.ts";
 import { ARTIST_ID_PROPERTIES, CLASS_KINDS } from "../src/lib/music.ts";
 
@@ -49,6 +59,128 @@ const BATCH_SIZE = 1000;
 const MAX_PRUNE_SHARE = 0.2;
 // Pruned in chunks so a big prune reports progress and holds no long lock.
 const PRUNE_CHUNK = 5000;
+const LOAD_PAGE = 50_000;
+const ID_KEY = Buffer.from('"id":"Q');
+const LASTREVID_KEY = Buffer.from('"lastrevid":');
+// `{"type":"item","id":"Q…` — the id is the second key.
+const HEADER_BYTES = 64;
+// `…,"lastrevid":2548173641,"modified":"2026-09-21T16:13:48Z"},`
+const TRAILER_BYTES = 256;
+
+/**
+ * An item line's QID number and `lastrevid`, read from where the dump puts
+ * them (its start and end) without parsing; null for anything else. Nested
+ * values hold `"id":"Q…"` too, hence only the first bytes are searched.
+ */
+export function readHeader(line: Buffer): { qid: number; revid: number } | null {
+  const at = line.subarray(0, HEADER_BYTES).indexOf(ID_KEY);
+  if (at === -1) return null;
+  let qid = 0;
+  let i = at + ID_KEY.length;
+  for (; i < line.length && line[i] >= 0x30 && line[i] <= 0x39; i++)
+    qid = qid * 10 + (line[i] - 0x30);
+  if (i === at + ID_KEY.length || line[i] !== QUOTE) return null;
+  const tail = Math.max(0, line.length - TRAILER_BYTES);
+  const r = line.subarray(tail).lastIndexOf(LASTREVID_KEY);
+  if (r === -1) return null;
+  let revid = 0;
+  let j = tail + r + LASTREVID_KEY.length;
+  const digits = j;
+  for (; j < line.length && line[j] >= 0x30 && line[j] <= 0x39; j++)
+    revid = revid * 10 + (line[j] - 0x30);
+  return j === digits ? null : { qid, revid };
+}
+
+/**
+ * The mirror's QIDs and the revision each row was built from, as sorted typed
+ * arrays (a JS Map of millions of entries would cost several times as much),
+ * plus which ones this pass has seen.
+ */
+export class MirrorIndex {
+  readonly qids: Uint32Array;
+  /** -1 for a row that must be re-read (unknown revid, or an older MIRROR_VERSION). */
+  readonly revids: Float64Array;
+  readonly seen: Uint8Array;
+
+  constructor(rows: Iterable<{ qid: string; revid: number | null; rowVersion: number }>) {
+    let qids = new Uint32Array(1024);
+    let revids = new Float64Array(1024);
+    let n = 0;
+    for (const r of rows) {
+      if (!/^Q\d+$/.test(r.qid)) continue;
+      if (n === qids.length) {
+        const grown = new Uint32Array(n * 2);
+        grown.set(qids);
+        qids = grown;
+        const grownRevids = new Float64Array(n * 2);
+        grownRevids.set(revids);
+        revids = grownRevids;
+      }
+      qids[n] = Number(r.qid.slice(1));
+      revids[n] = r.revid != null && r.rowVersion >= MIRROR_VERSION ? r.revid : -1;
+      n++;
+    }
+    // Sort by QID number; rows were read in string order (Q10 < Q9).
+    const order = new Uint32Array(n);
+    for (let i = 0; i < n; i++) order[i] = i;
+    order.sort((a, b) => qids[a] - qids[b]);
+    this.qids = new Uint32Array(n);
+    this.revids = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      this.qids[i] = qids[order[i]];
+      this.revids[i] = revids[order[i]];
+    }
+    this.seen = new Uint8Array(n);
+  }
+
+  get size(): number {
+    return this.qids.length;
+  }
+
+  /** The position of QID number `qid`, or -1. */
+  find(qid: number): number {
+    let lo = 0;
+    let hi = this.qids.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const v = this.qids[mid];
+      if (v === qid) return mid;
+      if (v < qid) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    return -1;
+  }
+
+  /** Whether the row at `i` is already built from revision `revid` or a later one. */
+  isCurrent(i: number, revid: number): boolean {
+    return this.revids[i] >= revid;
+  }
+
+  /** The QIDs this pass hasn't seen. */
+  unseen(): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < this.seen.length; i++) if (!this.seen[i]) out.push(`Q${this.qids[i]}`);
+    return out;
+  }
+
+  /** Read the whole mirror, a page at a time. */
+  static async load(): Promise<MirrorIndex> {
+    const rows: { qid: string; revid: number | null; rowVersion: number }[][] = [];
+    let after = "";
+    for (;;) {
+      const page = await db
+        .select({ qid: musicItems.qid, revid: musicItems.revid, rowVersion: musicItems.rowVersion })
+        .from(musicItems)
+        .where(gt(musicItems.qid, after))
+        .orderBy(asc(musicItems.qid))
+        .limit(LOAD_PAGE);
+      if (page.length === 0) break;
+      rows.push(page);
+      after = page[page.length - 1].qid;
+    }
+    return new MirrorIndex(rows.flat());
+  }
+}
 
 /**
  * Whether a dump line might be a music item (false positives are fine, misses
@@ -123,13 +255,15 @@ export function memoryNote(mem: NodeJS.MemoryUsage = process.memoryUsage()): str
  * so far. The MB/s is the average rate over the inflated JSON.
  */
 export function progressLine(
-  stats: Pick<ImportStats, "bytes" | "lines" | "matched">,
+  stats: Pick<ImportStats, "bytes" | "lines" | "unchanged" | "matched">,
   read: number,
   size: number,
   elapsedMs: number,
 ): string {
   const rate = elapsedMs > 0 ? ` at ${Math.round(stats.bytes / 1e3 / elapsedMs)} MB/s` : "";
-  const counts = `${(stats.bytes / 1e9).toFixed(1)} GB${rate}, ${stats.lines} lines, ${stats.matched} matched`;
+  const counts =
+    `${(stats.bytes / 1e9).toFixed(1)} GB${rate}, ${stats.lines} lines, ` +
+    `${stats.unchanged} unchanged, ${stats.matched} new or changed`;
   if (!(size > 0 && read > 0)) return `import-dump: ${counts}`;
   const done = Math.min(read / size, 1);
   const eta = (elapsedMs * (1 - done)) / done;
@@ -148,7 +282,10 @@ export interface ImportStats {
   stamp: string;
   bytes: number;
   lines: number;
+  /** Mirrored items the dump has at the same revision, skipped unparsed. */
+  unchanged: number;
   parsed: number;
+  /** New and changed music items written. */
   matched: number;
   skipped: number;
   pruned: number;
@@ -163,6 +300,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
     stamp: dumpStamp(await realpath(opts.path)),
     bytes: 0,
     lines: 0,
+    unchanged: 0,
     parsed: 0,
     matched: 0,
     skipped: 0,
@@ -175,8 +313,17 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
     if (batch.length === 0) return;
     const rows = batch;
     batch = [];
-    await upsertRows(rows, { lastDump: stats.stamp, source: "dump" });
+    await upsertRows(rows, { source: "dump" });
   };
+
+  const loadStarted = Date.now();
+  const index = await MirrorIndex.load();
+  const current = index.revids.reduce((n, r) => n + (r >= 0 ? 1 : 0), 0);
+  console.log(
+    `import-dump: loaded ${index.size} mirrored items (${current} skippable at their revision) ` +
+      `in ${formatDuration(Date.now() - loadStarted)}` +
+      memoryNote(),
+  );
 
   const size = (await stat(opts.path)).size;
   const file = createReadStream(opts.path, { highWaterMark: 1 << 20 });
@@ -194,6 +341,13 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
       const line = buf.subarray(start, nl);
       start = nl + 1;
       stats.lines++;
+      const header = readHeader(line);
+      const at = header ? index.find(header.qid) : -1;
+      if (at !== -1 && index.isCurrent(at, header!.revid)) {
+        index.seen[at] = 1;
+        stats.unchanged++;
+        continue;
+      }
       if (!mightMatch(line)) continue;
       stats.parsed++;
       let row: MirrorRow | null;
@@ -207,6 +361,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
         continue;
       }
       if (!row) continue;
+      if (at !== -1) index.seen[at] = 1;
       stats.matched++;
       batch.push(row);
       if (batch.length >= BATCH_SIZE) await flush();
@@ -226,22 +381,20 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
   await flush();
 
   if (!stats.stopped && opts.prune !== false)
-    stats.pruned = await prune(stats.stamp, !!opts.forcePrune);
+    stats.pruned = await prune(index, stats.stamp, !!opts.forcePrune);
   stats.seconds = (Date.now() - started) / 1000;
   return stats;
 }
 
-/** Delete the rows a complete pass of dump `stamp` didn't see. */
-async function prune(stamp: string, force: boolean): Promise<number> {
+/**
+ * Delete the mirrored items a complete pass of dump `stamp` didn't see, except
+ * those the app wrote after the dump was taken (created or edited since).
+ */
+async function prune(index: MirrorIndex, stamp: string, force: boolean): Promise<number> {
   const dumpTaken = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)} 00:00:00`;
-  const stale = or(
-    and(isNotNull(musicItems.lastDump), ne(musicItems.lastDump, stamp)),
-    // Added by the app before the dump was taken, yet not in it: deleted,
-    // merged or retyped since.
-    and(isNull(musicItems.lastDump), lt(musicItems.updatedAt, dumpTaken)),
-  );
-  const [{ total }] = await db.select({ total: count() }).from(musicItems);
-  const [{ n }] = await db.select({ n: count() }).from(musicItems).where(stale);
+  const unseen = index.unseen();
+  const n = unseen.length;
+  const total = index.size;
   if (n === 0) {
     console.log("import-dump: nothing to prune");
     return 0;
@@ -253,18 +406,16 @@ async function prune(stamp: string, force: boolean): Promise<number> {
     );
     return 0;
   }
-  console.log(`import-dump: pruning ${n} of ${total} items not in dump ${stamp}`);
+  console.log(`import-dump: pruning up to ${n} of ${total} items not in dump ${stamp}`);
   const started = Date.now();
   let lastLog = started;
   let pruned = 0;
-  for (;;) {
-    const qids = (
-      await db.select({ qid: musicItems.qid }).from(musicItems).where(stale).limit(PRUNE_CHUNK)
-    ).map((r) => r.qid);
-    if (qids.length === 0) break;
+  for (let i = 0; i < n; i += PRUNE_CHUNK) {
+    const qids = unseen.slice(i, i + PRUNE_CHUNK);
     await db.transaction(async (tx) => {
-      // Recheck `stale`: the app may have refreshed an item since the select.
-      const [res] = await tx.delete(musicItems).where(and(inArray(musicItems.qid, qids), stale));
+      const [res] = await tx
+        .delete(musicItems)
+        .where(and(inArray(musicItems.qid, qids), lt(musicItems.updatedAt, dumpTaken)));
       pruned += res.affectedRows;
       await tx
         .delete(musicExternalIds)
@@ -277,7 +428,7 @@ async function prune(stamp: string, force: boolean): Promise<number> {
     });
     if (Date.now() - lastLog > 60_000) {
       lastLog = Date.now();
-      console.log(pruneProgressLine(pruned, n, lastLog - started) + memoryNote());
+      console.log(pruneProgressLine(i + qids.length, n, lastLog - started) + memoryNote());
     }
   }
   console.log(`import-dump: pruned ${pruned} items in ${formatDuration(Date.now() - started)}`);

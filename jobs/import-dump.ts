@@ -37,7 +37,8 @@ runDumpImport({
   .then(async (s) => {
     console.log(
       `import-dump: dump ${s.stamp} done in ${(s.seconds / 60).toFixed(1)} min — ` +
-        `${(s.bytes / 1e9).toFixed(1)} GB, ${s.lines} lines, ${s.parsed} parsed, ${s.matched} items, ` +
+        `${(s.bytes / 1e9).toFixed(1)} GB, ${s.lines} lines, ${s.unchanged} unchanged, ` +
+        `${s.parsed} parsed, ${s.matched} new or changed, ` +
         `${s.skipped} bad lines, ${s.pruned} pruned${s.stopped ? " (stopped at limit)" : ""}`,
     );
     await pool.end();

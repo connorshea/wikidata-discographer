@@ -3,11 +3,14 @@ import {
   dumpStamp,
   formatDuration,
   memoryNote,
+  MirrorIndex,
   mightMatch,
   parseLine,
   progressLine,
   pruneProgressLine,
+  readHeader,
 } from "./dump-import.ts";
+import { MIRROR_VERSION } from "./mirror.ts";
 
 const line = (s: string) => Buffer.from(s);
 
@@ -53,6 +56,57 @@ describe("mightMatch", () => {
   });
 });
 
+describe("readHeader", () => {
+  it("reads the id and lastrevid from the line's ends", () => {
+    const claims = '"claims":{"P31":[{"mainsnak":{"datavalue":{"value":{"id":"Q5"}}}}]}';
+    expect(
+      readHeader(
+        line(
+          `{"type":"item","id":"Q31","labels":{},${claims},"title":"Q31",` +
+            '"lastrevid":2548173641,"modified":"2026-09-21T16:13:48Z"},',
+        ),
+      ),
+    ).toEqual({ qid: 31, revid: 2548173641 });
+  });
+  it("gives up on properties, brackets and lines without a revid", () => {
+    // A nested item id further in mustn't be taken for the line's own.
+    const nested = '"claims":{"P31":[{"mainsnak":{"datavalue":{"value":{"id":"Q5"}}}}]}';
+    expect(readHeader(line(`{"type":"property","id":"P31",${nested},"lastrevid":7},`))).toBeNull();
+    expect(readHeader(line("["))).toBeNull();
+    expect(readHeader(line('{"type":"item","id":"Q1","labels":{}},'))).toBeNull();
+  });
+});
+
+describe("MirrorIndex", () => {
+  const index = new MirrorIndex([
+    { qid: "Q10", revid: 500, rowVersion: MIRROR_VERSION },
+    { qid: "Q9", revid: 400, rowVersion: MIRROR_VERSION },
+    { qid: "Q200", revid: null, rowVersion: MIRROR_VERSION },
+    { qid: "Q3", revid: 300, rowVersion: MIRROR_VERSION - 1 },
+  ]);
+  it("finds QIDs by number, though they were read in string order", () => {
+    expect([...index.qids]).toEqual([3, 9, 10, 200]);
+    expect(index.find(10)).toBe(2);
+    expect(index.find(11)).toBe(-1);
+  });
+  it("skips only rows built from that revision or a later one, at this version", () => {
+    expect(index.isCurrent(index.find(10), 500)).toBe(true);
+    expect(index.isCurrent(index.find(10), 499)).toBe(true);
+    expect(index.isCurrent(index.find(10), 501)).toBe(false);
+    // Unknown revid, or written by an older MIRROR_VERSION: always re-read.
+    expect(index.isCurrent(index.find(200), 1)).toBe(false);
+    expect(index.isCurrent(index.find(3), 300)).toBe(false);
+  });
+  it("lists the QIDs not seen", () => {
+    const fresh = new MirrorIndex([
+      { qid: "Q1", revid: 1, rowVersion: MIRROR_VERSION },
+      { qid: "Q2", revid: 1, rowVersion: MIRROR_VERSION },
+    ]);
+    fresh.seen[fresh.find(2)] = 1;
+    expect(fresh.unseen()).toEqual(["Q1"]);
+  });
+});
+
 describe("parseLine", () => {
   it("parses an entity line and ignores the brackets", () => {
     expect(parseLine(line('{"id":"Q1","type":"item"},\r'))).toEqual({ id: "Q1", type: "item" });
@@ -72,16 +126,17 @@ describe("dumpStamp", () => {
 });
 
 describe("progressLine", () => {
-  const stats = { bytes: 412e9, lines: 29_500_000, matched: 280_123 };
+  const stats = { bytes: 412e9, lines: 29_500_000, unchanged: 270_000, matched: 10_123 };
   it("shows the share of the file read, the time left and the rate so far", () => {
     // A quarter of the file in 1 hour leaves 3 hours; 412 GB in 3600 s is 114 MB/s.
     expect(progressLine(stats, 25, 100, 3_600_000)).toBe(
-      "import-dump: 25.0%, ETA 3h 00m — 412.0 GB at 114 MB/s, 29500000 lines, 280123 matched",
+      "import-dump: 25.0%, ETA 3h 00m — 412.0 GB at 114 MB/s, 29500000 lines, " +
+        "270000 unchanged, 10123 new or changed",
     );
   });
   it("leaves out the estimate before anything is read", () => {
     expect(progressLine(stats, 0, 100, 0)).toBe(
-      "import-dump: 412.0 GB, 29500000 lines, 280123 matched",
+      "import-dump: 412.0 GB, 29500000 lines, 270000 unchanged, 10123 new or changed",
     );
   });
 });

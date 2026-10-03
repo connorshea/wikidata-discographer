@@ -46,19 +46,19 @@ export const musicItems = mysqlTable(
     labelSearch: varchar("label_search", { length: 191 }),
     description: varchar("description", { length: 400 }),
     instanceOf: json<string[]>("instance_of").notNull(),
-    // The dump this row was last seen in (e.g. "20260930"); null for rows the
-    // app added that no dump has contained yet.
-    lastDump: varchar("last_dump", { length: 32 }),
+    // The revision the row was built from: the dump import skips an item whose
+    // dump revision is no newer. Null if unknown (always re-read).
+    revid: bigint("revid", { mode: "number" }),
+    // MIRROR_VERSION (server/mirror.ts) when the row was written; rows from an
+    // older version are re-read from the next dump.
+    rowVersion: int("row_version").notNull().default(0),
     // "dump", or "app" for items created or added through the app.
     source: varchar("source", { length: 8 }).notNull().default("dump"),
     updatedAt: datetime("updated_at", { mode: "string" })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
   },
-  (t) => [
-    index("idx_music_items_label_search").on(t.labelSearch, t.kind),
-    index("idx_music_items_last_dump").on(t.lastDump),
-  ],
+  (t) => [index("idx_music_items_label_search").on(t.labelSearch, t.kind)],
 );
 
 export const musicExternalIds = mysqlTable(

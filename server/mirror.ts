@@ -8,8 +8,18 @@ import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { ID_PROPERTIES, kindOf, type MusicKind } from "../src/lib/music.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
+/**
+ * The version of what `entityToRow` extracts. The dump import skips items
+ * whose revision it has already mirrored, so bump this whenever the row's
+ * contents change (a new column, a class added or removed): rows from an
+ * older version are then re-read from the next dump.
+ */
+export const MIRROR_VERSION = 1;
+
 export interface MirrorRow {
   qid: string;
+  /** The revision the row was built from, if known. */
+  revid: number | null;
   kind: MusicKind;
   label: string | null;
   description: string | null;
@@ -54,6 +64,7 @@ export function entityToRow(entity: Entity): MirrorRow | null {
   const label = pickText(entity.labels);
   return {
     qid: entity.id,
+    revid: typeof entity.lastrevid === "number" ? entity.lastrevid : null,
     kind,
     label: clip(label, 400),
     description: clip(pickText(entity.descriptions), 400),
@@ -66,15 +77,40 @@ export const labelSearchKey = (label: string | null | undefined) =>
   label ? Array.from(label.toLowerCase()).slice(0, 191).join("") : null;
 
 /**
- * Insert or update rows and make their external ids match. `lastDump` stamps
- * them as seen in that dump; the app's own writes pass null and keep whatever
- * stamp the row had.
+ * Insert or update rows and make their external ids match. A row older than
+ * the one stored (a lower revid) is left out, so a dump read while the app
+ * wrote a newer revision can't undo it.
  */
 export async function upsertRows(
-  rows: readonly MirrorRow[],
-  opts: { lastDump: string | null; source: "dump" | "app" },
+  input: readonly MirrorRow[],
+  opts: { source: "dump" | "app" },
 ): Promise<void> {
-  if (rows.length === 0) return;
+  if (input.length === 0) return;
+  await db.transaction(async (tx) => {
+    // Locked, so an app write can't land between this check and the write.
+    const have = await tx
+      .select({ qid: musicItems.qid, revid: musicItems.revid })
+      .from(musicItems)
+      .where(
+        inArray(
+          musicItems.qid,
+          input.map((r) => r.qid),
+        ),
+      )
+      .for("update");
+    const stored = new Map(have.map((r) => [r.qid, r.revid]));
+    const rows = input.filter((r) => {
+      const revid = stored.get(r.qid);
+      return revid == null || r.revid == null || r.revid >= revid;
+    });
+    if (rows.length === 0) return;
+    await writeRows(tx, rows, opts.source);
+  });
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "app") {
   const values = rows.map((r) => ({
     qid: r.qid,
     kind: r.kind,
@@ -82,28 +118,28 @@ export async function upsertRows(
     labelSearch: labelSearchKey(r.label),
     description: r.description,
     instanceOf: r.instanceOf,
-    lastDump: opts.lastDump,
-    source: opts.source,
+    revid: r.revid,
+    rowVersion: MIRROR_VERSION,
+    source,
     updatedAt: sql`CURRENT_TIMESTAMP`,
   }));
   const qids = rows.map((r) => r.qid);
   const ids = rows.flatMap((r) => r.ids.map((id) => ({ qid: r.qid, ...id })));
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(musicItems)
-      .values(values)
-      .onDuplicateKeyUpdate({
-        set: {
-          kind: sql`values(kind)`,
-          label: sql`values(label)`,
-          labelSearch: sql`values(label_search)`,
-          description: sql`values(description)`,
-          instanceOf: sql`values(instance_of)`,
-          lastDump: opts.lastDump === null ? sql`last_dump` : sql`values(last_dump)`,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
-        },
-      });
-    await tx.delete(musicExternalIds).where(inArray(musicExternalIds.qid, qids));
-    if (ids.length) await tx.insert(musicExternalIds).values(ids);
-  });
+  await tx
+    .insert(musicItems)
+    .values(values)
+    .onDuplicateKeyUpdate({
+      set: {
+        kind: sql`values(kind)`,
+        label: sql`values(label)`,
+        labelSearch: sql`values(label_search)`,
+        description: sql`values(description)`,
+        instanceOf: sql`values(instance_of)`,
+        revid: sql`values(revid)`,
+        rowVersion: sql`values(row_version)`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      },
+    });
+  await tx.delete(musicExternalIds).where(inArray(musicExternalIds.qid, qids));
+  if (ids.length) await tx.insert(musicExternalIds).values(ids);
 }
