@@ -3,7 +3,7 @@
 // by the weekly dump import, by runs (each created item is added straight
 // away), and by "add an item" for things created since the last dump.
 import { inArray, sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, retryOnLockConflict } from "./db.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { ID_PROPERTIES, kindOf, type MusicKind } from "../src/lib/music.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
@@ -79,33 +79,35 @@ export const labelSearchKey = (label: string | null | undefined) =>
 /**
  * Insert or update rows and make their external ids match. A row older than
  * the one stored (a lower revid) is left out, so a dump read while the app
- * wrote a newer revision can't undo it.
+ * wrote a newer revision can't undo it. Retried on a deadlock or lock timeout.
  */
 export async function upsertRows(
   input: readonly MirrorRow[],
   opts: { source: "dump" | "app" },
 ): Promise<void> {
   if (input.length === 0) return;
-  await db.transaction(async (tx) => {
-    // Locked, so an app write can't land between this check and the write.
-    const have = await tx
-      .select({ qid: musicItems.qid, revid: musicItems.revid })
-      .from(musicItems)
-      .where(
-        inArray(
-          musicItems.qid,
-          input.map((r) => r.qid),
-        ),
-      )
-      .for("update");
-    const stored = new Map(have.map((r) => [r.qid, r.revid]));
-    const rows = input.filter((r) => {
-      const revid = stored.get(r.qid);
-      return revid == null || r.revid == null || r.revid >= revid;
-    });
-    if (rows.length === 0) return;
-    await writeRows(tx, rows, opts.source);
-  });
+  await retryOnLockConflict(`mirror write (${input.length} rows)`, () =>
+    db.transaction(async (tx) => {
+      // Locked, so an app write can't land between this check and the write.
+      const have = await tx
+        .select({ qid: musicItems.qid, revid: musicItems.revid })
+        .from(musicItems)
+        .where(
+          inArray(
+            musicItems.qid,
+            input.map((r) => r.qid),
+          ),
+        )
+        .for("update");
+      const stored = new Map(have.map((r) => [r.qid, r.revid]));
+      const rows = input.filter((r) => {
+        const revid = stored.get(r.qid);
+        return revid == null || r.revid == null || r.revid >= revid;
+      });
+      if (rows.length === 0) return;
+      await writeRows(tx, rows, opts.source);
+    }),
+  );
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];

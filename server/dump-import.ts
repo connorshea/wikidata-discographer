@@ -36,7 +36,7 @@ import { basename } from "node:path";
 import { createGunzip } from "node:zlib";
 import type { Readable } from "node:stream";
 import { and, asc, eq, gt, inArray, lt, notExists } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, retryOnLockConflict } from "./db.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { entityToRow, MIRROR_VERSION, type MirrorRow, upsertRows } from "./mirror.ts";
 import type { Entity } from "./wikidata-client.ts";
@@ -412,20 +412,25 @@ async function prune(index: MirrorIndex, stamp: string, force: boolean): Promise
   let pruned = 0;
   for (let i = 0; i < n; i += PRUNE_CHUNK) {
     const qids = unseen.slice(i, i + PRUNE_CHUNK);
-    await db.transaction(async (tx) => {
-      const [res] = await tx
-        .delete(musicItems)
-        .where(and(inArray(musicItems.qid, qids), lt(musicItems.updatedAt, dumpTaken)));
-      pruned += res.affectedRows;
-      await tx
-        .delete(musicExternalIds)
-        .where(
-          and(
-            inArray(musicExternalIds.qid, qids),
-            notExists(tx.select().from(musicItems).where(eq(musicItems.qid, musicExternalIds.qid))),
-          ),
-        );
-    });
+    pruned += await retryOnLockConflict("import-dump: prune", () =>
+      db.transaction(async (tx) => {
+        const [res] = await tx
+          .delete(musicItems)
+          .where(and(inArray(musicItems.qid, qids), lt(musicItems.updatedAt, dumpTaken)));
+        const deleted = res.affectedRows;
+        await tx
+          .delete(musicExternalIds)
+          .where(
+            and(
+              inArray(musicExternalIds.qid, qids),
+              notExists(
+                tx.select().from(musicItems).where(eq(musicItems.qid, musicExternalIds.qid)),
+              ),
+            ),
+          );
+        return deleted;
+      }),
+    );
     if (Date.now() - lastLog > 60_000) {
       lastLog = Date.now();
       console.log(pruneProgressLine(i + qids.length, n, lastLog - started) + memoryNote());
