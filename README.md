@@ -98,9 +98,17 @@ Items a run creates are added to the mirror straight away. Anything else
 created since the last dump can be added by QID under the Performers section.
 
 `jobs/import-dump.ts` refreshes the mirror weekly by streaming
-`latest-all.json.gz`. A cheap text check skips most lines before parsing.
-After a complete pass, it deletes items the dump no longer has, but never more
-than 20% of the mirror unless `DUMP_PRUNE_FORCE=1`. Locally, point
+`latest-all.json.gz`. Each row stores the revision it was built from (`revid`),
+and every dump line starts with its id and ends with its `lastrevid`, so an
+item the mirror already has at that revision is skipped without being parsed
+or written. Most weeks only the music items edited since the last dump are
+written. Of the rest, a cheap text check skips most lines before parsing.
+After a complete pass, it deletes mirrored items it didn't see, but never more
+than 20% of the mirror unless `DUMP_PRUNE_FORCE=1`.
+
+When what the mirror extracts changes (a new column, a class added or removed
+in `src/lib/music.ts`), bump `MIRROR_VERSION` in `server/mirror.ts`. Rows
+from an older version aren't skipped, so the next import rewrites them all. Locally, point
 `WIKIDATA_JSON_DUMP` at any dump-format `.json.gz`, and use `DUMP_LIMIT=2000`
 for a quick test.
 

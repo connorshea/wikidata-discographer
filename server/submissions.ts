@@ -267,7 +267,7 @@ export async function runPlan(
           typeof entityToRow
         >[0]);
         if (row)
-          await upsertRows([row], { lastDump: null, source: "app" }).catch((e: unknown) =>
+          await upsertRows([row], { source: "app" }).catch((e: unknown) =>
             console.error("mirror write failed", e),
           );
       } else {

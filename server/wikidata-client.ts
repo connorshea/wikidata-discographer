@@ -246,7 +246,8 @@ export interface Entity {
 }
 
 /**
- * Fetch up to 50 entities' labels, descriptions and claims. Missing ones are
+ * Fetch up to 50 entities' labels, descriptions, claims and `lastrevid` (from
+ * `info`; edits pass it as `baserevid`). Missing ones are
  * left out. `retries` caps the retries on transient failures; a request a
  * user is waiting on should pass a small one.
  */
@@ -257,7 +258,7 @@ export async function getEntities(
   const out = new Map<string, Entity>();
   if (qids.length === 0) return out;
   const res = await read(
-    { action: "wbgetentities", ids: qids.join("|"), props: "labels|descriptions|claims" },
+    { action: "wbgetentities", ids: qids.join("|"), props: "info|labels|descriptions|claims" },
     { retries },
   );
   const err = apiError(res);

@@ -128,7 +128,7 @@ items.post("/:qid", requireUser, async (c) => {
       },
       422,
     );
-  await upsertRows([row], { lastDump: null, source: "app" });
+  await upsertRows([row], { source: "app" });
   return c.json({
     item: { qid: row.qid, kind: row.kind, label: row.label, description: row.description },
   } satisfies AddItemResponse);
