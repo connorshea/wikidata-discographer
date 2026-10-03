@@ -91,6 +91,16 @@ describe("MirrorIndex", () => {
     const big = new MirrorIndex([{ qid: 2 ** 40, revid: 1, rowVersion: MIRROR_VERSION }]);
     expect(big.find(2 ** 40)).toBe(0);
   });
+  it("grows past its first allocation, and counts the skippable rows", () => {
+    const big = new MirrorIndex();
+    for (let q = 1; q <= 5000; q++)
+      big.add({ qid: q, revid: q % 2 ? q : null, rowVersion: MIRROR_VERSION });
+    expect(big.size).toBe(5000);
+    expect(big.skippable).toBe(2500);
+    expect(big.find(4999)).toBe(4998);
+    expect(big.find(5001)).toBe(-1);
+    expect(big.unseen()).toHaveLength(5000);
+  });
   it("needs rows in QID order", () => {
     expect(
       () =>
@@ -113,7 +123,7 @@ describe("MirrorIndex", () => {
       { qid: 1, revid: 1, rowVersion: MIRROR_VERSION },
       { qid: 2, revid: 1, rowVersion: MIRROR_VERSION },
     ]);
-    fresh.seen[fresh.find(2)] = 1;
+    fresh.markSeen(fresh.find(2));
     expect(fresh.unseen()).toEqual([1]);
   });
 });
