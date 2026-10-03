@@ -6,6 +6,7 @@ import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
 import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
+import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 
 const STORAGE_KEY = "discographer:state";
@@ -58,6 +59,7 @@ export default function App() {
       <SettingsSection {...props} />
       <DiscsSection {...props} />
       <PerformersSection {...props} />
+      <RunSection {...props} />
       <ResetButtons onSet={(s) => setState(structuredClone(s))} />
       <footer>
         <a href="https://github.com/connorshea/wikidata-discographer">Source</a> · MIT License
