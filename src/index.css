@@ -484,4 +484,5 @@ dialog.confirm::backdrop {
 }
 .confirm-body .row {
   margin-top: 16px;
+  justify-content: flex-end;
 }

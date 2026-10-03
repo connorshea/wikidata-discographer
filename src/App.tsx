@@ -152,6 +152,9 @@ function ConfirmButton({
             <h2 id={titleId}>{confirm.title}</h2>
             <p id={bodyId}>{confirm.body}</p>
             <div className="row">
+              <button ref={cancel} type="button" className="ghost" onClick={close}>
+                Cancel
+              </button>
               <button
                 type="button"
                 className="danger"
@@ -161,9 +164,6 @@ function ConfirmButton({
                 }}
               >
                 {confirm.action}
-              </button>
-              <button ref={cancel} type="button" className="ghost" onClick={close}>
-                Cancel
               </button>
             </div>
           </div>
