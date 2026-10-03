@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { emptyDisc } from "../lib/state.ts";
 import { isCustomPart, normalizeQid, PARTS, QID, type Row } from "../lib/plan.ts";
 import { QidInput } from "./common.tsx";
@@ -112,34 +113,54 @@ function DiscBlock({ di, rows, state, update, plan }: SectionProps & { di: numbe
                     </td>
                   </tr>
                 ) : (
-                  <tr key={i}>
-                    <td className="num">{r.n}</td>
-                    <td>{r.title}</td>
-                    <td>{r.artists.join(", ")}</td>
-                    <td className="num">{fmt(r.seconds)}</td>
-                    {(["comp", "track"] as const).map((k) => {
-                      const v = (d[k][r.n] ?? "").trim();
-                      return (
-                        <td key={k}>
-                          <QidInput
-                            placeholder="Q…"
-                            aria-label={`Track ${r.n} existing ${k === "comp" ? "composition" : "track"}`}
-                            aria-invalid={v !== "" && !QID.test(v)}
-                            value={d[k][r.n] ?? ""}
-                            onChange={(q) =>
-                              setDisc((disc) => {
-                                if (q.trim()) disc[k][r.n] = q.trim();
-                                else delete disc[k][r.n];
-                              })
+                  <Fragment key={i}>
+                    <tr className={d.single[r.n] ? "has-single" : undefined}>
+                      <td className="num">{r.n}</td>
+                      <td>{r.title}</td>
+                      <td>{r.artists.join(", ")}</td>
+                      <td className="num">{fmt(r.seconds)}</td>
+                      {(["comp", "track"] as const).map((k) => {
+                        const v = (d[k][r.n] ?? "").trim();
+                        return (
+                          <td key={k}>
+                            <QidInput
+                              placeholder="Q…"
+                              aria-label={`Track ${r.n} existing ${k === "comp" ? "composition" : "track"}`}
+                              aria-invalid={v !== "" && !QID.test(v)}
+                              value={d[k][r.n] ?? ""}
+                              onChange={(q) =>
+                                setDisc((disc) => {
+                                  if (q.trim()) disc[k][r.n] = q.trim();
+                                  else delete disc[k][r.n];
+                                })
+                              }
+                            />
+                          </td>
+                        );
+                      })}
+                      <td>
+                        {!d.single[r.n] && (
+                          <button
+                            type="button"
+                            className="ghost small"
+                            onClick={() =>
+                              update((s) => void (s.discs[di].single[r.n] = { date: "", qid: "" }))
                             }
-                          />
+                          >
+                            Add single
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {d.single[r.n] && (
+                      <tr className="single-row">
+                        <td />
+                        <td colSpan={6}>
+                          <SingleFields di={di} n={r.n} {...{ state, update, plan }} />
                         </td>
-                      );
-                    })}
-                    <td>
-                      <SingleCell di={di} n={r.n} {...{ state, update, plan }} />
-                    </td>
-                  </tr>
+                      </tr>
+                    )}
+                  </Fragment>
                 ),
               )}
             </tbody>
@@ -150,21 +171,13 @@ function DiscBlock({ di, rows, state, update, plan }: SectionProps & { di: numbe
   );
 }
 
-function SingleCell({ di, n, state, update, plan }: SectionProps & { di: number; n: number }) {
+/** The single's fields, on their own row under the track. */
+function SingleFields({ di, n, state, update, plan }: SectionProps & { di: number; n: number }) {
   const sg = state.discs[di].single[n];
   const err = plan.singleErrs[`${di}:${n}`];
-  if (!sg)
-    return (
-      <button
-        type="button"
-        className="ghost small"
-        onClick={() => update((s) => void (s.discs[di].single[n] = { date: "", qid: "" }))}
-      >
-        Add single
-      </button>
-    );
   return (
     <div className="single">
+      <span className="single-label">Single</span>
       <input
         type="text"
         spellCheck={false}
