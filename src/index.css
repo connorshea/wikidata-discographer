@@ -54,7 +54,7 @@ a {
   color: var(--accent);
 }
 main {
-  max-width: 1060px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 28px 18px 64px;
 }
