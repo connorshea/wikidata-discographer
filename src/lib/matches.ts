@@ -1,8 +1,25 @@
 // Filling a disc's "existing" fields from the mirror's matches
 // (POST /api/items/matches). A track brings its composition and single along,
 // so a reused track keeps the composition it already records.
-import type { MatchesRequest, MatchesResponse, RowMatches, TrackMatch } from "./api-types.ts";
+import type {
+  Match,
+  MatchesRequest,
+  MatchesResponse,
+  RowMatches,
+  TrackMatch,
+} from "./api-types.ts";
 import type { Disc } from "./plan.ts";
+
+/**
+ * The reason given for a same-title item with no performer, composer or
+ * lyricist. Such a match is only a guess, so it's suggested but never filled
+ * in by `fillUnambiguous`.
+ */
+export const NO_ARTIST = "no artist set";
+
+/** Whether the match is only a same-title item with no artist. */
+const isGuess = (m: Match) =>
+  m.reasons.includes(NO_ARTIST) && m.reasons.every((r) => r === "same title" || r === NO_ARTIST);
 
 /** A matches response, with the request it answers. */
 export interface Answered {
@@ -82,7 +99,7 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     const [d, num] = key.split(":");
     if (Number(d) !== di) continue;
     const n = Number(num);
-    if (!disc.track[n] && m.track.length === 1) {
+    if (!disc.track[n] && m.track.length === 1 && !isGuess(m.track[0])) {
       const t = m.track[0];
       if (!t.composition || !disc.comp[n] || disc.comp[n] === t.composition) {
         set(disc.track, n, t.qid);
@@ -91,11 +108,14 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     }
     const track = disc.track[n] ? m.track.find((t) => t.qid === disc.track[n]) : undefined;
     const compFree = !disc.track[n] || (track !== undefined && !track.composition);
-    if (compFree && m.comp.length === 1) set(disc.comp, n, m.comp[0].qid);
+    if (compFree && m.comp.length === 1 && !isGuess(m.comp[0])) set(disc.comp, n, m.comp[0].qid);
     const sg = disc.single[n];
     if (sg && !sg.qid) {
       const qid = track?.singles.length === 1 ? track.singles[0] : m.single[0]?.qid;
-      if (qid && (track?.singles.length === 1 || m.single.length === 1)) {
+      if (
+        qid &&
+        (track?.singles.length === 1 || (m.single.length === 1 && !isGuess(m.single[0])))
+      ) {
         sg.qid = qid;
         filled++;
       }
