@@ -6,8 +6,12 @@
 // 50 per request, one request at a time (server/wikidata-client.ts), and QIDs
 // found to exist are remembered for a while, so starting again after fixing
 // one typo doesn't fetch the rest again.
-import { checkItems, type ItemCheck } from "./wikidata-client.ts";
-import type { Op, State, Value } from "../src/lib/plan.ts";
+//
+// The existing album must also be an album or EP: an instance of one of the
+// album or EP classes the app knows.
+import { checkItems, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
+import { CLASS_KINDS } from "../src/lib/music.ts";
+import { ALBUM_FORMS, type Op, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -112,10 +116,33 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
         : `${where}: ${qid} redirects to ${r.to}; use ${r.to} instead.`,
     );
   }
+  const album = state.album.mode === "existing" ? state.album.qid.trim() : null;
+  if (album && results.get(album)?.status === "ok") {
+    const problem = await checkAlbumKind(album);
+    if (problem) problems.unshift(problem);
+  }
   if (problems.length > MAX_PROBLEMS)
     return [
       ...problems.slice(0, MAX_PROBLEMS),
       `…and ${problems.length - MAX_PROBLEMS} more QIDs that don't exist or redirect.`,
     ];
   return problems;
+}
+
+/** The album and EP classes the app knows. Exact QIDs, no subclasses. */
+const ALBUM_CLASSES: ReadonlySet<string> = new Set([
+  ...CLASS_KINDS.filter(([, kind]) => kind === "album" || kind === "ep").map(([q]) => q),
+  ...ALBUM_FORMS.map(([q]) => q),
+]);
+
+/**
+ * Why the existing album isn't an album or EP, or null if it is. Only that
+ * item's “instance of” statements are fetched.
+ */
+async function checkAlbumKind(qid: string): Promise<string | null> {
+  const classes = await getStatementItems(qid, "P31", { retries: 1 });
+  if (classes.some((c) => ALBUM_CLASSES.has(c))) return null;
+  if (classes.length === 0)
+    return `The existing album: ${qid} has no “instance of” statement, so it can't be checked to be an album or EP.`;
+  return `The existing album: ${qid} is an instance of ${classes.join(", ")}, not an album or EP. Check the QID.`;
 }

@@ -352,6 +352,25 @@ export async function checkItems(
   return out;
 }
 
+/**
+ * The item values of one item's statements for one property (`wbgetclaims`),
+ * deprecated ones left out. Nothing else about the item is fetched.
+ */
+export async function getStatementItems(
+  qid: string,
+  property: string,
+  { retries }: { retries?: number } = {},
+): Promise<string[]> {
+  const res = await read({ action: "wbgetclaims", entity: qid, property }, { retries });
+  const err = apiError(res);
+  if (err) throw new WikidataEditError(err.code, err.text);
+  const claims = (res.body.claims as Record<string, WikibaseStatement[]> | undefined) ?? {};
+  return (claims[property] ?? [])
+    .filter((s) => s.rank !== "deprecated")
+    .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
+    .filter((id): id is string => id !== undefined);
+}
+
 export interface Contribution {
   /** The item's id, e.g. "Q123". */
   title: string;

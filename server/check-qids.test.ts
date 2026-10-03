@@ -40,13 +40,27 @@ function stubWiki({
   missing = [],
   redirects = {},
   tooBig = [],
+  instanceOf = ["Q482994"],
 }: {
   missing?: string[];
   redirects?: Record<string, string>;
   tooBig?: string[];
+  /** The album's P31 values. */
+  instanceOf?: string[];
 }) {
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
+    if (q.get("action") === "wbgetclaims") {
+      expect(q.get("property")).toBe("P31");
+      return Response.json({
+        claims: {
+          P31: instanceOf.map((id) => ({
+            mainsnak: { snaktype: "value", property: "P31", datavalue: { value: { id } } },
+            rank: "normal",
+          })),
+        },
+      });
+    }
     expect(q.get("action")).toBe("wbgetentities");
     expect(q.get("props")).toBe("info");
     const ids = q.get("ids")!.split("|");
@@ -92,6 +106,26 @@ describe("checkPlanQids", () => {
     expect(problems).toContain(
       `Performer “${performer}”: ${qid} redirects to Q99; use Q99 instead.`,
     );
+  });
+
+  it("fetches only the existing album's “instance of” statements", async () => {
+    const fetch = stubWiki({ instanceOf: ["Q208569"] });
+    expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([]);
+    const claims = fetch.mock.calls.filter(
+      ([url]) => new URL(url).searchParams.get("action") === "wbgetclaims",
+    );
+    expect(claims.map(([url]) => new URL(url).searchParams.get("entity"))).toEqual([
+      EXAMPLE.album.qid,
+    ]);
+  });
+
+  it("refuses an existing album that isn't an album or EP", async () => {
+    stubWiki({ instanceOf: ["Q5"] });
+    expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
+      `The existing album: ${EXAMPLE.album.qid} is an instance of Q5, not an album or EP. Check the QID.`,
+    ]);
+    stubWiki({ instanceOf: [] });
+    expect((await checkPlanQids(plan.ops, EXAMPLE))[0]).toMatch(/has no “instance of” statement/);
   });
 
   it("treats an id past the newest item as missing and checks the rest", async () => {
