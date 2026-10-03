@@ -39,7 +39,8 @@ runDumpImport({
       `import-dump: dump ${s.stamp} done in ${(s.seconds / 60).toFixed(1)} min — ` +
         `${(s.bytes / 1e9).toFixed(1)} GB, ${s.lines} lines, ${s.unchanged} unchanged, ` +
         `${s.parsed} parsed, ${s.matched} new or changed, ` +
-        `${s.skipped} bad lines, ${s.pruned} pruned${s.stopped ? " (stopped at limit)" : ""}`,
+        `${s.skipped} bad lines, ${s.pruned} pruned${s.stopped ? " (stopped at limit)" : ""}; ` +
+        `${(s.writeWaitSeconds / 60).toFixed(1)} min waiting on writes`,
     );
     await pool.end();
     process.exit(0);
