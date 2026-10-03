@@ -92,7 +92,7 @@ export function memoryNote(mem: NodeJS.MemoryUsage = process.memoryUsage()): str
 /**
  * A progress line for the log. Progress is measured on the compressed file
  * (bytes read of its size); the ETA assumes the rest goes at the average rate
- * so far.
+ * so far. The MB/s is the average rate over the inflated JSON.
  */
 export function progressLine(
   stats: Pick<ImportStats, "bytes" | "lines" | "matched">,
@@ -100,7 +100,8 @@ export function progressLine(
   size: number,
   elapsedMs: number,
 ): string {
-  const counts = `${(stats.bytes / 1e9).toFixed(1)} GB, ${stats.lines} lines, ${stats.matched} matched`;
+  const rate = elapsedMs > 0 ? ` at ${Math.round(stats.bytes / 1e3 / elapsedMs)} MB/s` : "";
+  const counts = `${(stats.bytes / 1e9).toFixed(1)} GB${rate}, ${stats.lines} lines, ${stats.matched} matched`;
   if (!(size > 0 && read > 0)) return `import-dump: ${counts}`;
   const done = Math.min(read / size, 1);
   const eta = (elapsedMs * (1 - done)) / done;

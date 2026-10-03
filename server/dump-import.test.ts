@@ -50,14 +50,14 @@ describe("dumpStamp", () => {
 
 describe("progressLine", () => {
   const stats = { bytes: 412e9, lines: 29_500_000, matched: 280_123 };
-  it("shows the share of the file read and the time left at the rate so far", () => {
-    // A quarter of the file in 1 hour leaves 3 hours.
+  it("shows the share of the file read, the time left and the rate so far", () => {
+    // A quarter of the file in 1 hour leaves 3 hours; 412 GB in 3600 s is 114 MB/s.
     expect(progressLine(stats, 25, 100, 3_600_000)).toBe(
-      "import-dump: 25.0%, ETA 3h 00m — 412.0 GB, 29500000 lines, 280123 matched",
+      "import-dump: 25.0%, ETA 3h 00m — 412.0 GB at 114 MB/s, 29500000 lines, 280123 matched",
     );
   });
   it("leaves out the estimate before anything is read", () => {
-    expect(progressLine(stats, 0, 100, 1000)).toBe(
+    expect(progressLine(stats, 0, 100, 0)).toBe(
       "import-dump: 412.0 GB, 29500000 lines, 280123 matched",
     );
   });
