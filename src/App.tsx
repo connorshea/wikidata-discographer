@@ -8,6 +8,7 @@ import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
 import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
+import { useMatches } from "./components/use-matches.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
@@ -91,6 +92,7 @@ export default function App() {
   }, [state]);
 
   const albumTracklist = useAlbumTracklist(state);
+  const { matches, status } = useMatches(state, plan);
   const props = { state, update, plan };
   return (
     <main>
@@ -124,7 +126,7 @@ export default function App() {
       </div>
       <AlbumSection {...props} albumTracklist={albumTracklist} />
       <SettingsSection {...props} />
-      <DiscsSection {...props} />
+      <DiscsSection {...props} matches={matches} status={status} />
       <PerformersSection {...props} />
       <RunSection {...props} albumTracklist={albumTracklist} />
       <div className="row" style={{ marginBottom: 24 }}>
