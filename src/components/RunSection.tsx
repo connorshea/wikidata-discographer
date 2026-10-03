@@ -46,7 +46,14 @@ export default function RunSection({
   state,
   albumTracklist,
   unreviewed,
-}: SectionProps & { albumTracklist: AlbumTracklist | null; unreviewed: number }) {
+  matchesPending,
+}: SectionProps & {
+  albumTracklist: AlbumTracklist | null;
+  /** Tracks with possible matches not yet used or dismissed. They block the run. */
+  unreviewed: number;
+  /** The lookup for possible matches is in flight, so there may be more to review. */
+  matchesPending: boolean;
+}) {
   const { user } = useAuth();
   const [runId, setRunId] = useState<number | null>(null);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
@@ -125,7 +132,16 @@ export default function RunSection({
                 ? "Running…"
                 : `Make ${edits} edit${edits === 1 ? "" : "s"}`
           }
-          disabled={!user || user.blocked || !plan.ready || !!albumTracklist || running || starting}
+          disabled={
+            !user ||
+            user.blocked ||
+            !plan.ready ||
+            !!albumTracklist ||
+            unreviewed > 0 ||
+            matchesPending ||
+            running ||
+            starting
+          }
           plan={plan}
           state={state}
           username={user?.username ?? "you"}
@@ -134,6 +150,12 @@ export default function RunSection({
         {!user && <span className="hint">Log in to edit.</span>}
         {user && albumTracklist && (
           <span className="hint">The album already has a tracklist. See the Album section.</span>
+        )}
+        {user && !albumTracklist && unreviewed > 0 && (
+          <span className="hint">Use or dismiss each possible match first.</span>
+        )}
+        {user && !albumTracklist && !unreviewed && matchesPending && (
+          <span className="hint">Looking for possible matches…</span>
         )}
       </div>
       <p className="hint">

@@ -138,6 +138,7 @@ export default function App() {
         {...props}
         albumTracklist={albumTracklist}
         unreviewed={reviews.filter((r) => !r.reviewed).length}
+        matchesPending={status === "pending"}
       />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton
