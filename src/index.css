@@ -9,10 +9,7 @@
   --err: #b3261e;
   --warn: #8a5a00;
   --ok: #1f6b3a;
-  --day: #fff3cc;
-  --day-edge: #e8c55a;
-  --night: #e3e5f7;
-  --night-edge: #5560b8;
+  --disc-edge: #9da2b6;
   --trk-edge: #4553c4;
   --cmp-edge: #2e8150;
   --rg-edge: #c99a1c;
@@ -35,10 +32,7 @@
     --err: #ff8a80;
     --warn: #f2c66b;
     --ok: #7fd39b;
-    --day: #2e2812;
-    --day-edge: #c9a43a;
-    --night: #1c2042;
-    --night-edge: #7c87e8;
+    --disc-edge: #5c6182;
     --trk-edge: #8c98f2;
     --cmp-edge: #6cc48f;
     --rg-edge: #d9b23e;
@@ -143,6 +137,7 @@ div.f {
 .f span.sub {
   font-weight: 400;
   color: var(--muted);
+  font-size: 0.8rem;
 }
 label.c {
   display: flex;
@@ -158,11 +153,24 @@ select,
 textarea {
   font: inherit;
   color: var(--ink);
-  background: var(--bg);
+  background-color: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px 9px;
   width: 100%;
+}
+/* Our own caret, so it can sit in from the edge: the native one hugs it. */
+select {
+  appearance: none;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    right 17px center,
+    right 12px center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
 }
 textarea {
   font-family: var(--mono);
@@ -223,20 +231,14 @@ button:disabled {
   align-items: center;
   margin-top: 8px;
 }
+/* Discs are neutral: the item colours (composition, track, single) mean nothing else. */
 .disc {
   border-radius: 10px;
   padding: 16px;
   margin-bottom: 14px;
+  background: var(--bg);
   border: 1px solid var(--line);
-  border-left-width: 6px;
-}
-.disc.day {
-  background: var(--day);
-  border-left-color: var(--day-edge);
-}
-.disc.night {
-  background: var(--night);
-  border-left-color: var(--night-edge);
+  border-left: 6px solid var(--disc-edge);
 }
 .disc .head {
   display: flex;
@@ -252,7 +254,7 @@ button:disabled {
 .disc input[type="text"],
 .disc textarea,
 .disc select {
-  background: var(--panel);
+  background-color: var(--panel);
 }
 .tablewrap {
   overflow-x: auto;
@@ -287,6 +289,28 @@ td input[type="text"] {
   font-size: 0.8rem;
   min-width: 11ch;
 }
+/* Empty QID cells stay faint until hovered or focused. */
+td input.quiet:placeholder-shown:not(:hover, :focus) {
+  border-color: transparent;
+  background: transparent;
+}
+td input.quiet::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+td.single-toggle {
+  text-align: center;
+}
+td.single-toggle input {
+  accent-color: var(--rg-edge);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+/* A single's rows carry the singles colour down their left edge. */
+tr.is-single td:first-child {
+  box-shadow: inset 4px 0 0 var(--rg-edge);
+}
 /* A track's single sits on its own row under the track. */
 tr.has-sub td {
   border-bottom: none;
@@ -304,6 +328,7 @@ tr.sub-row td {
 .match-summary {
   align-items: center;
   gap: 10px;
+  margin-top: 10px;
 }
 .single {
   display: flex;
@@ -336,6 +361,9 @@ tr.sub-row td {
 }
 .msg.ok {
   color: var(--ok);
+}
+.msg.summary {
+  color: var(--ink);
 }
 .field-err {
   font-size: 0.82rem;

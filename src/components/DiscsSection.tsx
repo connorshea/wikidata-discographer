@@ -17,6 +17,7 @@ import {
   QID,
   type Plan,
   type Row,
+  splitArtists,
   type State,
 } from "../lib/plan.ts";
 import type { Match, MatchesRequest, MatchesResponse, RowMatches } from "../lib/api-types.ts";
@@ -24,15 +25,21 @@ import { QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import type { SectionProps } from "./types.ts";
 
+const cls = (...names: (string | false | null | undefined)[]) =>
+  names.filter(Boolean).join(" ") || undefined;
+
 const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
 type Matches = MatchesResponse["rows"];
+
+/** Where the lookup for existing items stands, for the line above each table. */
+type MatchStatus = "off" | "pending" | "done" | "failed";
 
 /**
  * Existing compositions, tracks and singles in the mirror for the parsed
  * rows: same title and a shared performer, or on the existing album.
  */
-function useMatches(state: State, plan: Plan): Matches {
+function useMatches(state: State, plan: Plan): { matches: Matches; status: MatchStatus } {
   const albumQid = state.album.qid.trim();
   const request: MatchesRequest = {
     albumQid: state.album.mode === "existing" && QID.test(albumQid) ? albumQid : "",
@@ -53,25 +60,54 @@ function useMatches(state: State, plan: Plan): Matches {
     ),
   };
   // Debounce the serialized request: a fresh object every render would never settle.
-  const key = useDebounced(JSON.stringify(request), 600);
+  const current = JSON.stringify(request);
+  const key = useDebounced(current, 600);
   const [answered, setAnswered] = useState<Answered | null>(null);
+  // The request last answered (or failed), to tell when one is in flight.
+  const [settled, setSettled] = useState<{ key: string; failed: boolean } | null>(null);
   useEffect(() => {
     const body = JSON.parse(key) as MatchesRequest;
     // The server only matches by a performer or the album; without either, don't ask.
     if (!body.albumQid && !body.rows.some((r) => r.performers.length)) return;
     const abort = new AbortController();
     api<MatchesResponse>("/api/items/matches", { method: "POST", body, signal: abort.signal })
-      .then((r) => setAnswered({ request: body, rows: r.rows }))
-      .catch(() => {});
+      .then((r) => {
+        setAnswered({ request: body, rows: r.rows });
+        setSettled({ key, failed: false });
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setSettled({ key, failed: true });
+      });
     return () => abort.abort();
   }, [key]);
   // Rows edited since the last answer drop their matches at once; the rest
   // keep them while the next request is in flight.
-  return stillValid(answered, request);
+  const canAsk = !!request.albumQid || request.rows.some((r) => r.performers.length);
+  const status: MatchStatus = !canAsk
+    ? "off"
+    : key !== current || settled?.key !== key
+      ? "pending"
+      : settled.failed
+        ? "failed"
+        : "done";
+  return { matches: stillValid(answered, request), status };
+}
+
+/**
+ * The album's artists, to dim on each row so features stand out: as entered
+ * for a new album, or else those on every track.
+ */
+function albumArtists(state: State, plan: Plan): Set<string> {
+  if (state.album.mode === "create")
+    return new Set(splitArtists(state.album.artists, state.settings.splitArtists).filter(Boolean));
+  const rows = plan.parsed.flat().filter((r) => r.error === undefined);
+  if (rows.length < 2) return new Set();
+  return new Set(rows[0].artists.filter((a) => rows.every((r) => r.artists.includes(a))));
 }
 
 export default function DiscsSection({ state, update, plan }: SectionProps) {
-  const matches = useMatches(state, plan);
+  const { matches, status } = useMatches(state, plan);
+  const mainArtists = albumArtists(state, plan);
   return (
     <section className="block">
       <h2>Discs</h2>
@@ -86,6 +122,8 @@ export default function DiscsSection({ state, update, plan }: SectionProps) {
           di={di}
           rows={plan.parsed[di] ?? []}
           matches={matches}
+          status={status}
+          mainArtists={mainArtists}
           {...{ state, update, plan }}
         />
       ))}
@@ -104,10 +142,18 @@ function DiscBlock({
   di,
   rows,
   matches,
+  status,
+  mainArtists,
   state,
   update,
   plan,
-}: SectionProps & { di: number; rows: Row[]; matches: Matches }) {
+}: SectionProps & {
+  di: number;
+  rows: Row[];
+  matches: Matches;
+  status: MatchStatus;
+  mainArtists: Set<string>;
+}) {
   const d = state.discs[di];
   const fillable = fillUnambiguous(structuredClone(d), di, matches);
   const suggested = rows.filter(
@@ -117,7 +163,7 @@ function DiscBlock({
   const setDisc = (fn: (disc: (typeof state.discs)[number]) => void) =>
     update((s) => fn(s.discs[di]));
   return (
-    <div className={`disc ${di % 2 ? "night" : "day"}`}>
+    <div className="disc">
       <div className="head">
         <h3>Disc {di + 1}</h3>
         {state.discs.length > 1 && (
@@ -132,7 +178,7 @@ function DiscBlock({
       </div>
       <div className="grid">
         <label className="f">
-          Part (P518 on the tracklist) <span className="sub">Blank for a single-disc album</span>
+          Part (P518 on the tracklist)
           <select
             value={custom ? "other" : d.part}
             onChange={(e) =>
@@ -162,6 +208,7 @@ function DiscBlock({
               onChange={(e) => setDisc((disc) => void (disc.part = normalizeQid(e.target.value)))}
             />
           )}
+          <span className="sub">Blank for a single-disc album</span>
         </label>
       </div>
       <label className="f" style={{ marginTop: 12 }}>
@@ -173,6 +220,17 @@ function DiscBlock({
           onChange={(e) => setDisc((disc) => void (disc.text = e.target.value))}
         />
       </label>
+      {rows.length > 0 && suggested === 0 && (
+        <p className="msg muted match-summary">
+          {status === "off"
+            ? "Give the performers QIDs to see items already on Wikidata, suggested under each track."
+            : status === "pending"
+              ? "Looking for items already on Wikidata…"
+              : status === "failed"
+                ? "Couldn't look for items already on Wikidata."
+                : "No items already on Wikidata match these tracks."}
+        </p>
+      )}
       {suggested > 0 && (
         <div className="row match-summary">
           <p className="msg warn">
@@ -216,21 +274,29 @@ function DiscBlock({
                 ) : (
                   <Fragment key={i}>
                     <tr
-                      className={
-                        d.single[r.n] || openMatches(d, r.n, matches[`${di}:${r.n}`])
-                          ? "has-sub"
-                          : undefined
-                      }
+                      className={cls(
+                        (d.single[r.n] || openMatches(d, r.n, matches[`${di}:${r.n}`])) &&
+                          "has-sub",
+                        d.single[r.n] && "is-single",
+                      )}
                     >
                       <td className="num">{r.n}</td>
                       <td>{r.title}</td>
-                      <td>{r.artists.join(", ")}</td>
+                      <td>
+                        {r.artists.map((a, j) => (
+                          <Fragment key={j}>
+                            {j > 0 && ", "}
+                            <span className={mainArtists.has(a) ? "muted" : undefined}>{a}</span>
+                          </Fragment>
+                        ))}
+                      </td>
                       <td className="num">{fmt(r.seconds)}</td>
                       {(["comp", "track"] as const).map((k) => {
                         const v = (d[k][r.n] ?? "").trim();
                         return (
                           <td key={k}>
                             <QidInput
+                              className="quiet"
                               placeholder="Q…"
                               aria-label={`Track ${r.n} existing ${k === "comp" ? "composition" : "track"}`}
                               aria-invalid={v !== "" && !QID.test(v)}
@@ -245,22 +311,29 @@ function DiscBlock({
                           </td>
                         );
                       })}
-                      <td>
-                        {!d.single[r.n] && (
-                          <button
-                            type="button"
-                            className="ghost small"
-                            onClick={() =>
-                              update((s) => void (s.discs[di].single[r.n] = { date: "", qid: "" }))
-                            }
-                          >
-                            Add single
-                          </button>
-                        )}
+                      <td className="single-toggle">
+                        <input
+                          type="checkbox"
+                          aria-label={`Track ${r.n} is a single`}
+                          checked={!!d.single[r.n]}
+                          onChange={(e) =>
+                            update((s) => {
+                              const disc = s.discs[di];
+                              if (e.target.checked) disc.single[r.n] = { date: "", qid: "" };
+                              else delete disc.single[r.n];
+                            })
+                          }
+                        />
                       </td>
                     </tr>
                     {openMatches(d, r.n, matches[`${di}:${r.n}`]) && (
-                      <tr className={`sub-row${d.single[r.n] ? " has-sub" : ""}`}>
+                      <tr
+                        className={cls(
+                          "sub-row",
+                          d.single[r.n] && "has-sub",
+                          d.single[r.n] && "is-single",
+                        )}
+                      >
                         <td />
                         <td colSpan={6}>
                           <RowMatchList
@@ -273,7 +346,7 @@ function DiscBlock({
                       </tr>
                     )}
                     {d.single[r.n] && (
-                      <tr className="sub-row">
+                      <tr className="sub-row is-single">
                         <td />
                         <td colSpan={6}>
                           <SingleFields di={di} n={r.n} {...{ state, update, plan }} />
