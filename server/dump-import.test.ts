@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { dumpStamp, formatDuration, mightMatch, parseLine, progressLine } from "./dump-import.ts";
+import {
+  dumpStamp,
+  formatDuration,
+  mightMatch,
+  parseLine,
+  progressLine,
+  pruneProgressLine,
+} from "./dump-import.ts";
 
 const line = (s: string) => Buffer.from(s);
 
@@ -60,5 +67,14 @@ describe("formatDuration", () => {
     expect(formatDuration(30_000)).toBe("<1m");
     expect(formatDuration(14 * 60_000)).toBe("14m");
     expect(formatDuration(125 * 60_000)).toBe("2h 05m");
+  });
+});
+
+describe("pruneProgressLine", () => {
+  it("shows how many are pruned and the time left", () => {
+    expect(pruneProgressLine(15_000, 60_000, 120_000)).toBe(
+      "import-dump: pruned 15000 of 60000 (25.0%, ETA 6m)",
+    );
+    expect(pruneProgressLine(0, 60_000, 1000)).toBe("import-dump: pruned 0 of 60000 (0.0%)");
   });
 });
