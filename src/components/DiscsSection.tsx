@@ -214,7 +214,7 @@ function DiscBlock({
       <label className="f" style={{ marginTop: 12 }}>
         Tracklist
         <textarea
-          rows={8}
+          rows={14}
           spellCheck={false}
           value={d.text}
           onChange={(e) => setDisc((disc) => void (disc.text = e.target.value))}
