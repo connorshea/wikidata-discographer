@@ -153,11 +153,24 @@ select,
 textarea {
   font: inherit;
   color: var(--ink);
-  background: var(--bg);
+  background-color: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px 9px;
   width: 100%;
+}
+/* Our own caret, so it can sit in from the edge: the native one hugs it. */
+select {
+  appearance: none;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    right 17px center,
+    right 12px center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
 }
 textarea {
   font-family: var(--mono);
@@ -241,7 +254,7 @@ button:disabled {
 .disc input[type="text"],
 .disc textarea,
 .disc select {
-  background: var(--panel);
+  background-color: var(--panel);
 }
 .tablewrap {
   overflow-x: auto;
