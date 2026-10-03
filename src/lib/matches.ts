@@ -70,17 +70,6 @@ export function pickSingle(disc: Disc, n: number, qid: string): void {
   disc.single[n] = { date: disc.single[n]?.date ?? "", qid };
 }
 
-/** The matches still worth showing for track `n`: those for fields left empty. */
-export function openMatches(disc: Disc, n: number, m: RowMatches | undefined): RowMatches | null {
-  if (!m) return null;
-  const open: RowMatches = {
-    comp: disc.comp[n] ? [] : m.comp,
-    track: disc.track[n] ? [] : m.track,
-    single: disc.single[n]?.qid ? [] : m.single,
-  };
-  return open.comp.length || open.track.length || open.single.length ? open : null;
-}
-
 /**
  * Fill every empty field of disc `di` that has exactly one match, and return
  * how many were filled. A single is only filled in for a track already marked

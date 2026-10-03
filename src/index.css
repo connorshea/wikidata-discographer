@@ -342,17 +342,126 @@ tr.has-sub td {
 tr.sub-row td {
   padding-top: 0;
 }
-.row-matches .matches {
-  margin: 2px 0 0;
+/* A track with possible matches to review: a warning icon by its title. */
+.title-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+a.match-flag {
+  display: inline-flex;
+  color: var(--warn);
+  border-radius: 4px;
+}
+a.match-flag:hover {
+  color: var(--ink);
+}
+.chip {
+  display: inline-block;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+.chip.warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+.chip.ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  font-weight: 600;
+}
+.match-counts .chip {
+  font-size: 0.82rem;
+  padding: 2px 10px;
+  color: var(--ink);
+}
+.match-groups {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.match-group {
+  padding: 12px 14px;
+  scroll-margin-top: 16px;
+}
+.match-group + .match-group {
+  border-top: 1px solid var(--line);
+}
+.match-group:target {
+  outline: 2px solid var(--warn);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.match-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.match-head .muted {
+  font-size: 0.82rem;
+}
+button.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.82rem;
+  text-decoration: underline;
+}
+.candidates {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.candidates li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+}
+.candidates li.used {
+  background: color-mix(in srgb, var(--ok) 10%, var(--bg));
 }
 .match-kind {
-  font-weight: 600;
-  min-width: 11ch;
-}
-.match-summary {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 6px;
+  font-weight: 600;
+  min-width: 12ch;
+}
+.match-kind i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.match-text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.match-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.match-actions.done {
+  color: var(--ok);
+  font-weight: 600;
+}
+button.ghost.quiet {
+  color: var(--muted);
+  border-color: var(--line);
 }
 .single {
   display: flex;

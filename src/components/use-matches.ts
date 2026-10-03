@@ -7,7 +7,7 @@ import { useDebounced } from "./use-debounced.ts";
 
 export type Matches = MatchesResponse["rows"];
 
-/** Where the lookup for existing items stands, for the line above each table. */
+/** Where the lookup for existing items stands, for the Possible matches card. */
 export type MatchStatus = "off" | "pending" | "done" | "failed";
 
 /**

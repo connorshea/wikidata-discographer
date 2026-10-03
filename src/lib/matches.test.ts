@@ -5,7 +5,6 @@ import {
   fillUnambiguous,
   isStrong,
   NO_ARTIST,
-  openMatches,
   otherArtists,
   pickSingle,
   pickTrack,
@@ -51,17 +50,6 @@ describe("pickTrack and pickSingle", () => {
     expect(disc.comp[4]).toBe("Q98");
     pickSingle(disc, 3, "Q31");
     expect(disc.single[3]).toEqual({ date: "", qid: "Q31" });
-  });
-});
-
-describe("openMatches", () => {
-  it("drops matches for fields already filled", () => {
-    const disc = emptyDisc();
-    disc.track[1] = "Q10";
-    const m = rm({ track: [track("Q10", null)], comp: [match("Q20")] });
-    expect(openMatches(disc, 1, m)).toEqual(rm({ comp: [match("Q20")] }));
-    disc.comp[1] = "Q20";
-    expect(openMatches(disc, 1, m)).toBeNull();
   });
 });
 
