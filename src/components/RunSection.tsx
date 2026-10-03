@@ -2,14 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { opsText, type State } from "../lib/plan.ts";
-import type { EditLogEntry, SubmissionInfo, SubmissionListResponse } from "../lib/api-types.ts";
+import type {
+  EditLogEntry,
+  SubmissionInfo,
+  SubmissionListResponse,
+  SubmissionRequest,
+  UnknownRunConflict,
+} from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
 import type { SectionProps, Update } from "./types.ts";
 
 const POLL_MS = 2000;
 
+type UnknownRun = UnknownRunConflict["unknownRun"];
+
 /** Write the QIDs a run created back into the form, so a rerun reuses them instead of duplicating. */
-function applyCreated(edits: EditLogEntry[], update: Update) {
+function applyCreated(edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[], update: Update) {
   const created = edits.filter((e) => e.op === "create" && e.ok && e.key && e.qid);
   if (!created.length) return;
   update((s: State) => {
@@ -34,6 +42,8 @@ export default function RunSection({ update, plan, state }: SectionProps) {
   const [run, setRun] = useState<SubmissionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  // The last run ended "unknown": what the server wants done before another.
+  const [unknownRun, setUnknownRun] = useState<UnknownRun | null>(null);
   // Only a run started from this form writes its QIDs back into it.
   const ownRun = useRef<number | null>(null);
 
@@ -65,18 +75,22 @@ export default function RunSection({ update, plan, state }: SectionProps) {
   }, [runId, update]);
 
   const running = run?.status === "running";
-  const start = () => {
+  const start = (confirmUnknown?: number) => {
     setStarting(true);
     setError(null);
-    api<{ id: number }>("/api/submissions", { method: "POST", body: { state } })
+    setUnknownRun(null);
+    const body: SubmissionRequest = { state, confirmUnknown };
+    api<{ id: number }>("/api/submissions", { method: "POST", body })
       .then(({ id }) => {
         ownRun.current = id;
         setRun(null);
         setRunId(id);
       })
-      .catch((e: unknown) =>
-        setError(e instanceof FetchError ? e.message : "Couldn't start the run."),
-      )
+      .catch((e: unknown) => {
+        const conflict = e instanceof FetchError ? (e.body as Partial<UnknownRunConflict>) : null;
+        if (conflict?.unknownRun) setUnknownRun(conflict.unknownRun);
+        else setError(e instanceof FetchError ? e.message : "Couldn't start the run.");
+      })
       .finally(() => setStarting(false));
   };
 
@@ -99,7 +113,7 @@ export default function RunSection({ update, plan, state }: SectionProps) {
         <button
           type="button"
           disabled={!user || user.blocked || !plan.ready || running || starting}
-          onClick={start}
+          onClick={() => start()}
         >
           {starting
             ? "Starting…"
@@ -115,9 +129,93 @@ export default function RunSection({ update, plan, state }: SectionProps) {
         started again.
       </p>
       {error && <p className="msg err">{error}</p>}
+      {unknownRun && (
+        <UnknownRunGuard
+          run={unknownRun}
+          disabled={starting}
+          onUse={() => {
+            applyCreated(
+              [{ op: "create", ok: true, key: unknownRun.key, qid: unknownRun.qid }],
+              update,
+            );
+            setUnknownRun(null);
+          }}
+          onConfirm={() => start(unknownRun.id)}
+        />
+      )}
       {run && <RunProgress run={run} />}
       {user && <RecentRuns current={runId} onOpen={setRunId} refresh={run?.status} />}
     </section>
+  );
+}
+
+/** The user's new items on the wiki, newest first. */
+function contributionsUrl(base: string, username: string): string {
+  return `${base}/wiki/Special:Contributions/${encodeURIComponent(username.replaceAll(" ", "_"))}?namespace=0&newOnly=1`;
+}
+
+function CheckLinks({ editGroupUrl }: { editGroupUrl: string }) {
+  const { wikiBaseUrl, user } = useAuth();
+  return (
+    <>
+      {user && (
+        <>
+          <a href={contributionsUrl(wikiBaseUrl, user.username)} target="_blank" rel="noreferrer">
+            your contributions
+          </a>
+          {" · "}
+        </>
+      )}
+      <a href={editGroupUrl} target="_blank" rel="noreferrer">
+        the EditGroup
+      </a>
+    </>
+  );
+}
+
+/** Shown when starting a run is held up by the last run's unconfirmed create. */
+function UnknownRunGuard({
+  run,
+  disabled,
+  onUse,
+  onConfirm,
+}: {
+  run: UnknownRun;
+  disabled: boolean;
+  onUse: () => void;
+  onConfirm: () => void;
+}) {
+  const { wikiBaseUrl } = useAuth();
+  if (run.qid)
+    return (
+      <div className="msg warn">
+        <p>
+          Your last run created {run.what} after all, as{" "}
+          <WikiLink base={wikiBaseUrl} qid={run.qid} />. Use it in the form so it isn't created
+          twice, then start the run again.
+        </p>
+        <div className="row">
+          {run.key && (
+            <button type="button" onClick={onUse}>
+              Use {run.qid} in the form
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  return (
+    <div className="msg warn">
+      <p>
+        Wikidata didn't answer when your last run created {run.what}, and it still can't be found,
+        but it may have been created anyway. Check <CheckLinks editGroupUrl={run.editGroupUrl} />{" "}
+        before running again. If it was created, put its QID in the form.
+      </p>
+      <div className="row">
+        <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
+          I checked; it wasn't created. Run anyway
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -134,10 +232,14 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
             ? "done"
             : run.status === "failed"
               ? "stopped on an error"
-              : "interrupted"}
+              : run.status === "unknown"
+                ? "stopped, outcome unknown"
+                : "interrupted"}
       </h3>
       {run.status === "running" && <progress max={run.total} value={done} />}
-      {run.error && <p className="msg err">{run.error}</p>}
+      {run.error && (
+        <p className={`msg ${run.status === "unknown" ? "warn" : "err"}`}>{run.error}</p>
+      )}
       {run.status === "interrupted" && (
         <p className="msg warn">The server restarted during this run. Start it again to finish.</p>
       )}
@@ -155,10 +257,12 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
       <ol className="log">
         {run.edits.map((e, i) => (
           <li key={i} className={e.ok ? undefined : "fail"}>
-            {e.op === "create" ? "Created" : "Updated"} {e.what}
+            {e.unknown ? "Outcome unknown: created?" : e.op === "create" ? "Created" : "Updated"}{" "}
+            {e.what}
             {e.qid && (
               <>
                 {" "}
+                {e.unknown && "found later as "}
                 <WikiLink base={wikiBaseUrl} qid={e.qid} />
               </>
             )}
@@ -167,6 +271,12 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
               <span className="muted"> (nothing to add)</span>
             )}
             {e.error && <>: {e.error}</>}
+            {e.unknown && !e.qid && (
+              <>
+                {" "}
+                Check <CheckLinks editGroupUrl={run.editGroupUrl} />.
+              </>
+            )}
           </li>
         ))}
       </ol>

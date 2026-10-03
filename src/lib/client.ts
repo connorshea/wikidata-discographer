@@ -1,11 +1,13 @@
 // A small JSON fetch wrapper for the same-origin API. Throws `FetchError`
-// (carrying the server's `{ error }` message) on a non-2xx response.
+// (carrying the server's `{ error }` message and the parsed body) on a non-2xx response.
 export class FetchError extends Error {
   status: number;
-  constructor(status: number, message?: string) {
+  body: unknown;
+  constructor(status: number, message?: string, body?: unknown) {
     super(message ?? `Request failed (${status})`);
     this.name = "FetchError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -23,13 +25,15 @@ export async function api<T>(
   const text = await res.text();
   if (!res.ok) {
     let message: string | undefined;
+    let body: unknown;
     try {
-      const body = JSON.parse(text) as { error?: unknown };
-      if (typeof body.error === "string") message = body.error;
+      body = JSON.parse(text);
+      const error = (body as { error?: unknown } | null)?.error;
+      if (typeof error === "string") message = error;
     } catch {
       // not JSON
     }
-    throw new FetchError(res.status, message);
+    throw new FetchError(res.status, message, body);
   }
   return (text ? JSON.parse(text) : undefined) as T;
 }

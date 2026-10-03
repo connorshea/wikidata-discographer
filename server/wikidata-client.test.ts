@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { getEntities, WikidataEditError } from "./wikidata-client.ts";
+import { editRequest, getEntities, WikidataEditError } from "./wikidata-client.ts";
+
+vi.mock("./auth/tokens.ts", () => ({
+  getAccessToken: async () => "access",
+  deleteTokens: async () => {},
+  TokenError: class extends Error {},
+}));
 
 const entity = { id: "Q1", claims: {} };
 const ok = () => Response.json({ entities: { Q1: entity } });
@@ -56,5 +62,51 @@ describe("getEntities retries", () => {
     );
     await expect(getEntities(["Q1"])).rejects.toMatchObject({ code: "no-such-entity" });
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("editRequest", () => {
+  const user = { id: 1, username: "Example" };
+  const csrf = () => Response.json({ query: { tokens: { csrftoken: "tok+\\" } } });
+  let fetch: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("marks a 5xx after sending as ambiguous, and doesn't send it again", async () => {
+    fetch.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(new Response("", { status: 504 }));
+    const err = await editRequest(user, { action: "wbeditentity", new: "item" }).catch((e) => e);
+    expect(err).toMatchObject({ code: "http-504", ambiguous: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks a timeout or dropped connection as ambiguous", async () => {
+    fetch
+      .mockResolvedValueOnce(csrf())
+      .mockRejectedValueOnce(new DOMException("The operation timed out.", "TimeoutError"));
+    const err = await editRequest(user, { action: "wbeditentity", new: "item" }).catch((e) => e);
+    expect(err).toMatchObject({ code: "network", ambiguous: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't mark a refusal or a failure before sending as ambiguous", async () => {
+    fetch
+      .mockResolvedValueOnce(csrf())
+      .mockResolvedValueOnce(
+        Response.json({ errors: [{ code: "modification-failed", text: "Label taken" }] }),
+      );
+    await expect(editRequest(user, { action: "wbeditentity" })).rejects.toMatchObject({
+      code: "modification-failed",
+      ambiguous: false,
+    });
+    // The CSRF token read retries, then fails before anything is sent.
+    vi.useFakeTimers();
+    fetch.mockImplementation(async () => new Response("", { status: 503 }));
+    const err = editRequest(user, { action: "wbeditentity" }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(5_000 + 15_000 + 45_000);
+    expect(await err).toMatchObject({ ambiguous: false });
+    vi.useRealTimers();
   });
 });

@@ -159,7 +159,9 @@ export const submissions = mysqlTable(
       .notNull()
       .references(() => users.id),
     editGroup: varchar("edit_group", { length: 32 }).notNull(),
-    status: varchar("status", { length: 16 }).notNull(), // running | done | failed | interrupted
+    // running | done | failed | interrupted | unknown (a create got no answer and
+    // may have been saved; see server/recover.ts)
+    status: varchar("status", { length: 16 }).notNull(),
     title: varchar("title", { length: 400 }).notNull(), // the album's title or QID, for listings
     albumQid: itemId("album_qid"),
     input: json<unknown>("input").notNull(), // the submitted form state
@@ -191,6 +193,11 @@ export const wikidataEdits = mysqlTable(
     qid: itemId("qid"),
     revid: bigint("revid", { mode: "number" }),
     ok: boolean("ok").notNull(),
+    // A create that got no answer (timeout, 5xx) and wasn't found afterwards:
+    // it may have been saved. `qid` is filled in if it turns up later.
+    unknown: boolean("unknown").notNull().default(false),
+    // When a create was sent, to look for it in the user's contributions.
+    startedAt: datetime("started_at", { mode: "string" }),
     // Statements that were already on the item and so not added again.
     skipped: int("skipped").notNull().default(0),
     errorCode: varchar("error_code", { length: 64 }),
