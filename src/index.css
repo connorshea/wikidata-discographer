@@ -281,16 +281,29 @@ td input[type="text"] {
   font-size: 0.8rem;
   min-width: 11ch;
 }
+/* A track's single sits on its own row under the track. */
+tr.has-single td {
+  border-bottom: none;
+}
+tr.single-row td {
+  padding-top: 0;
+}
 .single {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 6px;
   align-items: center;
-  min-width: 250px;
+}
+.single-label {
+  font-weight: 600;
+  color: var(--muted);
 }
 .single input[type="text"] {
-  width: 12ch;
+  width: 16ch;
   min-width: 0;
+}
+.single .field-err {
+  flex-basis: 100%;
 }
 .msg {
   font-size: 0.88rem;
