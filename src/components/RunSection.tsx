@@ -114,7 +114,7 @@ export default function RunSection({ update, plan, state }: SectionProps) {
               ? "Checking the QIDs…"
               : running
                 ? "Running…"
-                : `Make ${edits} edit${edits === 1 ? "" : "s"} as ${user?.username ?? "you"}`
+                : `Make ${edits} edit${edits === 1 ? "" : "s"}`
           }
           disabled={!user || user.blocked || !plan.ready || running || starting}
           plan={plan}

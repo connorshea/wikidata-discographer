@@ -31,10 +31,21 @@ export function QidInput({
   );
 }
 
-export function InfoTip({ id, children }: { id: string; children: ReactNode }) {
+export function InfoTip({
+  id,
+  label = "Template variables",
+  end = false,
+  children,
+}: {
+  id: string;
+  label?: string;
+  /** Open the tooltip leftward, for an icon near the right edge. */
+  end?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <span className="info">
-      <button type="button" aria-label="Template variables" aria-describedby={`${id}-tip`}>
+    <span className={end ? "info end" : "info"}>
+      <button type="button" aria-label={label} aria-describedby={`${id}-tip`}>
         i
       </button>
       <span role="tooltip" id={`${id}-tip`}>
