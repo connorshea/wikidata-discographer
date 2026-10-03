@@ -1,4 +1,26 @@
 {
-  "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+  // One config for the React SPA (src), the Node server (server), the batch
+  // jobs (jobs), the schema (db), and scripts. Vite builds the client; node runs
+  // the server and jobs via native TS type-stripping. Type-checking only.
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    // Node's type-stripping only erases types, so reject what it can't run.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src", "server", "jobs", "db", "scripts", "vite.config.ts", "drizzle.config.ts"]
 }
