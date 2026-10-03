@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import type { State } from "../lib/plan.ts";
+import type { Plan, State } from "../lib/plan.ts";
+import { previewPlan } from "../lib/preview.ts";
 import type {
   EditLogEntry,
   SubmissionInfo,
@@ -106,17 +107,20 @@ export default function RunSection({ update, plan, state }: SectionProps) {
       ))}
       {plan.ops.length > 0 && <PlanPreview plan={plan} state={state} />}
       <div className="row">
-        <button
-          type="button"
+        <ConfirmRun
+          label={
+            starting
+              ? "Starting…"
+              : running
+                ? "Running…"
+                : `Make ${edits} edit${edits === 1 ? "" : "s"} as ${user?.username ?? "you"}`
+          }
           disabled={!user || user.blocked || !plan.ready || running || starting}
-          onClick={() => start()}
-        >
-          {starting
-            ? "Starting…"
-            : running
-              ? "Running…"
-              : `Make ${edits} edit${edits === 1 ? "" : "s"} as ${user?.username ?? "you"}`}
-        </button>
+          plan={plan}
+          state={state}
+          username={user?.username ?? "you"}
+          onConfirm={() => start()}
+        />
         {!user && <span className="hint">Log in to edit.</span>}
       </div>
       <p className="hint">
@@ -142,6 +146,100 @@ export default function RunSection({ update, plan, state }: SectionProps) {
       {run && <RunProgress run={run} />}
       {user && <RecentRuns current={runId} onOpen={setRunId} refresh={run?.status} />}
     </section>
+  );
+}
+
+/** The run button. Edits go live on Wikidata, so it asks first in a modal dialog. */
+function ConfirmRun({
+  label,
+  disabled,
+  plan,
+  state,
+  username,
+  onConfirm,
+}: {
+  label: string;
+  disabled: boolean;
+  plan: Plan;
+  state: State;
+  username: string;
+  onConfirm: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const bodyId = useId();
+  const [open, setOpen] = useState(false);
+  const close = () => dialog.current?.close();
+  const n = plan.ops.length;
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setOpen(true);
+          dialog.current?.showModal();
+          // Enter on the default focus shouldn't start the run.
+          cancel.current?.focus();
+        }}
+      >
+        {label}
+      </button>
+      <dialog
+        ref={dialog}
+        className="confirm"
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
+        onClose={() => {
+          setOpen(false);
+          button.current?.focus();
+        }}
+        // A click on the backdrop lands on the <dialog> itself; its contents are
+        // wrapped in a div that fills it, so clicks inside never do.
+        onClick={(e) => e.target === e.currentTarget && close()}
+      >
+        <div className="confirm-body">
+          <h2 id={titleId}>{`Make ${n} edit${n === 1 ? "" : "s"} on Wikidata?`}</h2>
+          <p id={bodyId}>
+            The edits are made right away with your account, {username}. They can be undone together
+            from EditGroups afterwards.
+          </p>
+          {open && <EditCounts plan={plan} state={state} />}
+          <div className="row">
+            <button ref={cancel} type="button" className="ghost" onClick={close}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                close();
+                onConfirm();
+              }}
+            >
+              {`Make ${n} edit${n === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        </div>
+      </dialog>
+    </>
+  );
+}
+
+/** How many edits each part of the plan takes, e.g. "Tracks: 12 edits". */
+function EditCounts({ plan, state }: { plan: Plan; state: State }) {
+  const groups = useMemo(() => previewPlan(plan, state), [plan, state]);
+  return (
+    <ul className="confirm-counts">
+      {groups.map((g) => (
+        <li key={g.id}>
+          {g.title}: {g.edits.length} edit{g.edits.length === 1 ? "" : "s"}
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -556,6 +556,10 @@ dialog.confirm::backdrop {
 .confirm-body {
   padding: 20px 22px;
 }
+.confirm-counts {
+  margin: 0;
+  padding-left: 20px;
+}
 .confirm-body .row {
   margin-top: 16px;
   justify-content: flex-end;
