@@ -1,11 +1,11 @@
-// The local mirror of Wikidata music items (`music_items` +
-// `music_external_ids`): converting an entity to a row, and writing rows. Used
+// The local mirror of Wikidata music items (`music_items`,
+// `music_external_ids` and `music_links`): converting an entity to a row, and writing rows. Used
 // by the weekly dump import, by runs (each created item is added straight
 // away), and by "add an item" for things created since the last dump.
 import { inArray, sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { musicExternalIds, musicItems } from "../db/schema.ts";
-import { ID_PROPERTIES, kindOf, type MusicKind } from "../src/lib/music.ts";
+import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
+import { ID_PROPERTIES, kindOf, LINK_PROPERTIES, type MusicKind } from "../src/lib/music.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
 export interface MirrorRow {
@@ -15,7 +15,11 @@ export interface MirrorRow {
   description: string | null;
   instanceOf: string[];
   ids: { property: string; value: string }[];
+  links: { property: string; target: string }[];
 }
+
+/** Most links kept per property, so one huge tracklist can't bloat the table. */
+const MAX_LINKS_PER_PROPERTY = 200;
 
 const clip = (s: string | undefined, n: number) => (s ? Array.from(s).slice(0, n).join("") : null);
 
@@ -51,6 +55,18 @@ export function entityToRow(entity: Entity): MirrorRow | null {
       ids.push({ property, value });
     }
   }
+  const links: MirrorRow["links"] = [];
+  // Artists are only ever link targets; their own item links aren't needed.
+  if (kind !== "artist")
+    for (const property of Object.keys(LINK_PROPERTIES)) {
+      const targets = new Set<string>();
+      for (const s of claims[property] ?? []) {
+        const id = (s.mainsnak.datavalue?.value as { id?: unknown } | undefined)?.id;
+        if (s.rank !== "deprecated" && typeof id === "string" && /^Q\d+$/.test(id)) targets.add(id);
+      }
+      for (const target of [...targets].slice(0, MAX_LINKS_PER_PROPERTY))
+        links.push({ property, target });
+    }
   const label = pickText(entity.labels);
   return {
     qid: entity.id,
@@ -59,14 +75,30 @@ export function entityToRow(entity: Entity): MirrorRow | null {
     description: clip(pickText(entity.descriptions), 400),
     instanceOf,
     ids,
+    links,
   };
 }
 
+/**
+ * The key a label is searched and matched by: lowercased, with curly quotes
+ * made straight (tracklists and Wikidata labels use either), clipped to the
+ * index length.
+ */
 export const labelSearchKey = (label: string | null | undefined) =>
-  label ? Array.from(label.toLowerCase()).slice(0, 191).join("") : null;
+  label
+    ? Array.from(
+        label
+          .normalize("NFC")
+          .toLowerCase()
+          .replace(/[’‘]/g, "'")
+          .replace(/[“”]/g, '"'),
+      )
+        .slice(0, 191)
+        .join("")
+    : null;
 
 /**
- * Insert or update rows and make their external ids match. `lastDump` stamps
+ * Insert or update rows and make their external ids and links match. `lastDump` stamps
  * them as seen in that dump; the app's own writes pass null and keep whatever
  * stamp the row had.
  */
@@ -88,6 +120,7 @@ export async function upsertRows(
   }));
   const qids = rows.map((r) => r.qid);
   const ids = rows.flatMap((r) => r.ids.map((id) => ({ qid: r.qid, ...id })));
+  const links = rows.flatMap((r) => r.links.map((l) => ({ qid: r.qid, ...l })));
   await db.transaction(async (tx) => {
     await tx
       .insert(musicItems)
@@ -105,5 +138,7 @@ export async function upsertRows(
       });
     await tx.delete(musicExternalIds).where(inArray(musicExternalIds.qid, qids));
     if (ids.length) await tx.insert(musicExternalIds).values(ids);
+    await tx.delete(musicLinks).where(inArray(musicLinks.qid, qids));
+    if (links.length) await tx.insert(musicLinks).values(links);
   });
 }

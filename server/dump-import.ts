@@ -27,7 +27,7 @@ import { createGunzip } from "node:zlib";
 import type { Readable } from "node:stream";
 import { and, count, eq, inArray, isNotNull, isNull, lt, ne, notExists, or } from "drizzle-orm";
 import { db } from "./db.ts";
-import { musicExternalIds, musicItems } from "../db/schema.ts";
+import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { entityToRow, type MirrorRow, upsertRows } from "./mirror.ts";
 import type { Entity } from "./wikidata-client.ts";
 import { ARTIST_ID_PROPERTIES, CLASS_KINDS } from "../src/lib/music.ts";
@@ -272,6 +272,14 @@ async function prune(stamp: string, force: boolean): Promise<number> {
           and(
             inArray(musicExternalIds.qid, qids),
             notExists(tx.select().from(musicItems).where(eq(musicItems.qid, musicExternalIds.qid))),
+          ),
+        );
+      await tx
+        .delete(musicLinks)
+        .where(
+          and(
+            inArray(musicLinks.qid, qids),
+            notExists(tx.select().from(musicItems).where(eq(musicItems.qid, musicLinks.qid))),
           ),
         );
     });

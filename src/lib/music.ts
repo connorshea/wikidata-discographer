@@ -64,6 +64,21 @@ export const ID_PROPERTIES: Readonly<Record<string, string>> = {
   P2724: "Deezer track ID",
 };
 
+/**
+ * Item-valued properties stored in the mirror (`music_links`), so the app can
+ * find existing items for a tracklist: who made them, and how compositions,
+ * tracks, singles and albums point at each other.
+ */
+export const LINK_PROPERTIES: Readonly<Record<string, string>> = {
+  P175: "performer",
+  P86: "composer",
+  P676: "lyricist",
+  P2550: "recording or performance of",
+  P1433: "published in",
+  P361: "part of",
+  P658: "tracklist",
+};
+
 /** Pick the kind for an item from its P31 values and the properties it has. */
 export function kindOf(
   instanceOf: readonly string[],

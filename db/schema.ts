@@ -75,6 +75,23 @@ export const musicExternalIds = mysqlTable(
   ],
 );
 
+// Item-valued statements of mirrored items (LINK_PROPERTIES in
+// src/lib/music.ts), e.g. a track's performer (P175) and composition (P2550).
+// Artists have none; their rows only point *to* them.
+export const musicLinks = mysqlTable(
+  "music_links",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    qid: varchar("qid", { length: 32 }).notNull(),
+    property: varchar("property", { length: 16 }).notNull(),
+    target: varchar("target", { length: 32 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("idx_music_links_unique").on(t.qid, t.property, t.target),
+    index("idx_music_links_target").on(t.target, t.property),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Users and sessions — Wikimedia OAuth 2.0 (server/auth/).
 // ---------------------------------------------------------------------------

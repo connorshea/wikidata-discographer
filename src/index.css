@@ -288,11 +288,22 @@ td input[type="text"] {
   min-width: 11ch;
 }
 /* A track's single sits on its own row under the track. */
-tr.has-single td {
+tr.has-sub td {
   border-bottom: none;
 }
-tr.single-row td {
+tr.sub-row td {
   padding-top: 0;
+}
+.row-matches .matches {
+  margin: 2px 0 0;
+}
+.match-kind {
+  font-weight: 600;
+  min-width: 11ch;
+}
+.match-summary {
+  align-items: center;
+  gap: 10px;
 }
 .single {
   display: flex;
