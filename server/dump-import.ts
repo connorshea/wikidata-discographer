@@ -78,6 +78,13 @@ export function formatDuration(ms: number): string {
   return h ? `${h}h ${String(min % 60).padStart(2, "0")}m` : `${min}m`;
 }
 
+/** The process's memory use, for the progress lines: RSS (what the job's
+ * memory limit counts) and the V8 heap (capped by --max-old-space-size). */
+export function memoryNote(mem: NodeJS.MemoryUsage = process.memoryUsage()): string {
+  const mb = (n: number) => Math.round(n / 1e6);
+  return ` [rss ${mb(mem.rss)} MB, heap ${mb(mem.heapUsed)}/${mb(mem.heapTotal)} MB]`;
+}
+
 /**
  * A progress line for the log. Progress is measured on the compressed file
  * (bytes read of its size); the ETA assumes the rest goes at the average rate
@@ -179,7 +186,7 @@ export async function runDumpImport(opts: ImportOptions): Promise<ImportStats> {
     carry = start < buf.length ? Buffer.from(buf.subarray(start)) : null;
     if (Date.now() - lastLog > 60_000) {
       lastLog = Date.now();
-      console.log(progressLine(stats, file.bytesRead, size, lastLog - started));
+      console.log(progressLine(stats, file.bytesRead, size, lastLog - started) + memoryNote());
     }
   }
   if (stats.stopped) file.destroy();
@@ -237,7 +244,7 @@ async function prune(stamp: string, force: boolean): Promise<number> {
     });
     if (Date.now() - lastLog > 60_000) {
       lastLog = Date.now();
-      console.log(pruneProgressLine(pruned, n, lastLog - started));
+      console.log(pruneProgressLine(pruned, n, lastLog - started) + memoryNote());
     }
   }
   console.log(`import-dump: pruned ${pruned} items in ${formatDuration(Date.now() - started)}`);

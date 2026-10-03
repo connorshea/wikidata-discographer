@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   dumpStamp,
   formatDuration,
+  memoryNote,
   mightMatch,
   parseLine,
   progressLine,
@@ -76,5 +77,12 @@ describe("pruneProgressLine", () => {
       "import-dump: pruned 15000 of 60000 (25.0%, ETA 6m)",
     );
     expect(pruneProgressLine(0, 60_000, 1000)).toBe("import-dump: pruned 0 of 60000 (0.0%)");
+  });
+});
+
+describe("memoryNote", () => {
+  it("shows RSS and heap use in MB", () => {
+    const mem = { rss: 312e6, heapUsed: 120.4e6, heapTotal: 160e6, external: 0, arrayBuffers: 0 };
+    expect(memoryNote(mem)).toBe(" [rss 312 MB, heap 120/160 MB]");
   });
 });
