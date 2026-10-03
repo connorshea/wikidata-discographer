@@ -12,6 +12,7 @@
 // already been told which items were created, so it can reuse them on a retry.
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db.ts";
 import { musicExternalIds, submissions, wikidataEdits } from "../db/schema.ts";
@@ -38,8 +39,6 @@ import type {
 
 /** Appended to every edit summary so the edits are traceable to this tool. */
 const TOOL_CREDIT = "Wikidata Discographer";
-/** Refuse plans bigger than this: a box set is ~200 operations. */
-const MAX_OPS = 500;
 
 export function editGroupUrl(editGroup: string): string {
   return `https://editgroups.toolforge.org/b/CB/${editGroup}/`;
@@ -66,57 +65,66 @@ const running = new Set<number>();
 
 export const submissionRoutes = new Hono<AuthEnv>();
 
-submissionRoutes.post("/", requireUser, async (c) => {
-  const user = c.get("user")!;
-  if (user.blocked) return c.json({ error: "Your account is blocked on Wikidata." }, 403);
-  if (running.has(user.id)) return c.json({ error: "You already have a run in progress." }, 409);
+// A box set's form state is tens of KB; anything near this isn't a real album.
+const MAX_BODY_BYTES = 1 << 20;
 
-  const body = (await c.req.json().catch(() => null)) as { state?: unknown } | null;
-  const state = coerceState(body?.state);
-  const plan = buildPlan(state);
-  if (!plan.ready) {
-    const first = plan.messages.find((m) => m[0] === "err");
-    return c.json({ error: first?.[1] ?? "Nothing to do." }, 422);
-  }
-  if (plan.ops.length > MAX_OPS)
-    return c.json({ error: `That's ${plan.ops.length} edits; split it into smaller runs.` }, 422);
+submissionRoutes.post(
+  "/",
+  requireUser,
+  bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json({ error: "That form is too big to submit." }, 413),
+  }),
+  async (c) => {
+    const user = c.get("user")!;
+    if (user.blocked) return c.json({ error: "Your account is blocked on Wikidata." }, 403);
+    if (running.has(user.id)) return c.json({ error: "You already have a run in progress." }, 409);
 
-  // An identifier given for a new album that the mirror already has is a
-  // duplicate for sure; title matches are only warned about in the form.
-  if (state.album.mode === "create") {
-    const given = ALBUM_ID_FIELDS.map(
-      (f) => [f.property, state.album.ids[f.key].trim()] as const,
-    ).filter(([, v]) => v);
-    for (const [property, value] of given) {
-      const [hit] = await db
-        .select({ qid: musicExternalIds.qid })
-        .from(musicExternalIds)
-        .where(and(eq(musicExternalIds.property, property), eq(musicExternalIds.value, value)))
-        .limit(1);
-      if (hit)
-        return c.json(
-          {
-            error: `${hit.qid} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
-          },
-          409,
-        );
+    const body = (await c.req.json().catch(() => null)) as { state?: unknown } | null;
+    const state = coerceState(body?.state);
+    const plan = buildPlan(state);
+    if (!plan.ready) {
+      const first = plan.messages.find((m) => m[0] === "err");
+      return c.json({ error: first?.[1] ?? "Nothing to do." }, 422);
     }
-  }
 
-  const editGroup = randomBytes(8).toString("hex");
-  const [res] = await db.insert(submissions).values({
-    userId: user.id,
-    editGroup,
-    status: "running",
-    title: state.album.mode === "create" ? state.album.title.trim() : state.album.qid.trim(),
-    albumQid: state.album.mode === "create" ? null : state.album.qid.trim(),
-    input: state,
-  });
-  const id = res.insertId;
-  running.add(user.id);
-  void runPlan(id, user, plan.ops, editGroup).finally(() => running.delete(user.id));
-  return c.json({ id }, 202);
-});
+    // An identifier given for a new album that the mirror already has is a
+    // duplicate for sure; title matches are only warned about in the form.
+    if (state.album.mode === "create") {
+      const given = ALBUM_ID_FIELDS.map(
+        (f) => [f.property, state.album.ids[f.key].trim()] as const,
+      ).filter(([, v]) => v);
+      for (const [property, value] of given) {
+        const [hit] = await db
+          .select({ qid: musicExternalIds.qid })
+          .from(musicExternalIds)
+          .where(and(eq(musicExternalIds.property, property), eq(musicExternalIds.value, value)))
+          .limit(1);
+        if (hit)
+          return c.json(
+            {
+              error: `${hit.qid} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
+            },
+            409,
+          );
+      }
+    }
+
+    const editGroup = randomBytes(8).toString("hex");
+    const [res] = await db.insert(submissions).values({
+      userId: user.id,
+      editGroup,
+      status: "running",
+      title: state.album.mode === "create" ? state.album.title.trim() : state.album.qid.trim(),
+      albumQid: state.album.mode === "create" ? null : state.album.qid.trim(),
+      input: state,
+    });
+    const id = res.insertId;
+    running.add(user.id);
+    void runPlan(id, user, plan.ops, editGroup).finally(() => running.delete(user.id));
+    return c.json({ id }, 202);
+  },
+);
 
 submissionRoutes.get("/", requireUser, async (c) => {
   const rows = await db
