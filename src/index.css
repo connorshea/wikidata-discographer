@@ -106,7 +106,13 @@ p.lede {
   font-family: var(--mono);
   font-size: 0.82rem;
   color: var(--muted);
+  margin: 0 0 12px;
+}
+.row.example {
   margin: 0 0 24px;
+}
+.row.example .hint {
+  margin: 0;
 }
 section.block {
   background: var(--panel);
