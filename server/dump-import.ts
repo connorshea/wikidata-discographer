@@ -79,10 +79,14 @@ export function formatDuration(ms: number): string {
 }
 
 /** The process's memory use, for the progress lines: RSS (what the job's
- * memory limit counts) and the V8 heap (capped by --max-old-space-size). */
+ * memory limit counts), the V8 heap (capped by --max-old-space-size), and
+ * external memory, which includes the Buffers holding the inflated dump. */
 export function memoryNote(mem: NodeJS.MemoryUsage = process.memoryUsage()): string {
   const mb = (n: number) => Math.round(n / 1e6);
-  return ` [rss ${mb(mem.rss)} MB, heap ${mb(mem.heapUsed)}/${mb(mem.heapTotal)} MB]`;
+  return (
+    ` [rss ${mb(mem.rss)} MB, heap ${mb(mem.heapUsed)}/${mb(mem.heapTotal)} MB, ` +
+    `external ${mb(mem.external)} MB (buffers ${mb(mem.arrayBuffers)} MB)]`
+  );
 }
 
 /**

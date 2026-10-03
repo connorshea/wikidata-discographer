@@ -151,7 +151,7 @@ Load the mirror once by hand. The dump is visible only with `--mount all`:
 ```sh
 toolforge jobs run import-dump --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
   --command "node --max-old-space-size=384 jobs/import-dump.ts" \
-  --mount all --mem 512Mi --cpu 2 --emails onfailure
+  --mount all --mem 1Gi --cpu 2 --emails onfailure
 ```
 
 Then load the weekly schedule. Rerun this whenever `jobs.yaml` changes, but not
