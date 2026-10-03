@@ -4,6 +4,10 @@
 // `badtoken` and `ratelimited`. Anything else becomes a `WikidataEditError`
 // carrying Wikidata's own message. No `maxlag`: each run is started by hand by
 // the user, like edits made in the Wikidata UI, not by an automated process.
+//
+// An edit is only retried when Wikidata refused it before saving (a bad token
+// or a rate limit). A timeout or 5xx may have saved, so those fail instead.
+// Reads (`read`) also retry timeouts and 5xx: repeating one changes nothing.
 import { wikidataApiUrl } from "./auth/config.ts";
 import { deleteTokens, getAccessToken, TokenError } from "./auth/tokens.ts";
 import { userAgent } from "./auth/user-agent.ts";
@@ -12,6 +16,7 @@ import type { Claim, Snak, Value } from "../src/lib/plan.ts";
 const TIMEOUT_MS = 30_000;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_WAIT_MS = 60_000;
+const MAX_READ_RETRIES = 3;
 
 export interface EditUser {
   id: number;
@@ -109,11 +114,54 @@ async function fail(user: EditUser, err: { code: string; text: string }): Promis
   throw new WikidataEditError(err.code, err.text || err.code);
 }
 
+/**
+ * Failures worth repeating a read for. A read changes nothing, so unlike an
+ * edit it can be repeated after a timeout or a 5xx without any risk.
+ */
+function transient(code: string): boolean {
+  return (
+    code === "ratelimited" ||
+    code === "maxlag" ||
+    code === "network" ||
+    /^http-(429|5\d\d)$/.test(code)
+  );
+}
+
+/**
+ * A GET that waits and tries again (up to `retries` more times) on a
+ * transient failure, honouring Retry-After. The caller handles any other
+ * error, or the last transient one, from the response.
+ */
+async function read(
+  params: Record<string, string>,
+  { accessToken, retries = MAX_READ_RETRIES }: { accessToken?: string; retries?: number } = {},
+): Promise<ApiResponse> {
+  for (let attempt = 0; ; attempt++) {
+    // 5 s, 15 s, 45 s.
+    const backoff = 5_000 * 3 ** attempt;
+    let res: ApiResponse;
+    try {
+      res = await call("GET", params, accessToken);
+    } catch (err) {
+      if (err instanceof WikidataEditError && transient(err.code) && attempt < retries) {
+        await sleep(backoff);
+        continue;
+      }
+      throw err;
+    }
+    const err = apiError(res);
+    if (err && transient(err.code) && attempt < retries) {
+      await sleep(retryAfterMs(res.headers, backoff));
+      continue;
+    }
+    return res;
+  }
+}
+
 async function csrfToken(user: EditUser, accessToken: string): Promise<string> {
-  const res = await call(
-    "GET",
+  const res = await read(
     { action: "query", meta: "tokens", type: "csrf", assert: "user", assertuser: user.username },
-    accessToken,
+    { accessToken },
   );
   const err = apiError(res);
   if (err) await fail(user, err);
@@ -197,15 +245,21 @@ export interface Entity {
   claims?: Record<string, WikibaseStatement[]>;
 }
 
-/** Fetch up to 50 entities' labels, descriptions and claims. Missing ones are left out. */
-export async function getEntities(qids: readonly string[]): Promise<Map<string, Entity>> {
+/**
+ * Fetch up to 50 entities' labels, descriptions and claims. Missing ones are
+ * left out. `retries` caps the retries on transient failures; a request a
+ * user is waiting on should pass a small one.
+ */
+export async function getEntities(
+  qids: readonly string[],
+  { retries }: { retries?: number } = {},
+): Promise<Map<string, Entity>> {
   const out = new Map<string, Entity>();
   if (qids.length === 0) return out;
-  const res = await call("GET", {
-    action: "wbgetentities",
-    ids: qids.join("|"),
-    props: "labels|descriptions|claims",
-  });
+  const res = await read(
+    { action: "wbgetentities", ids: qids.join("|"), props: "labels|descriptions|claims" },
+    { retries },
+  );
   const err = apiError(res);
   if (err) throw new WikidataEditError(err.code, err.text);
   const entities = (res.body.entities as Record<string, Entity> | undefined) ?? {};
