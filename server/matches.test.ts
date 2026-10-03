@@ -40,15 +40,17 @@ describe("assembleMatches", () => {
       },
     ]);
     expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([["Q20", ["recorded as Q10"]]]);
-    // The single has the title but no performer; it's suggested through the track.
-    expect(rows["0:1"].single.map((m) => [m.qid, m.reasons])).toEqual([["Q30", ["has Q10 on it"]]]);
+    // The single has the title but no artist, and is also on the track.
+    expect(rows["0:1"].single.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q30", ["same title", "no artist set", "has Q10 on it"]],
+    ]);
   });
 
   it("ignores same-title items by someone else, unless they're on the album", () => {
     const items = mapOf(
       facts("Q10", "track", "Soft", { P175: ["Q999"] }),
       facts("Q11", "work", "Soft", { P86: ["Q52583"] }),
-      facts("Q12", "track", "Soft"),
+      facts("Q12", "track", "Soft", { P175: ["Q999"] }),
     );
     const { rows } = assembleMatches([row("Soft")], { items, albumTracks: new Set(["Q12"]) });
     expect(rows["0:1"].track.map((m) => [m.qid, m.reasons])).toEqual([
@@ -58,6 +60,24 @@ describe("assembleMatches", () => {
       ["Q11", ["same title", "same composer or lyricist"]],
     ]);
     expect(assembleMatches([row("Soft", [])], { items, albumTracks: new Set() }).rows).toEqual({});
+  });
+
+  it("suggests same-title items with no artist, after credited ones", () => {
+    const items = mapOf(
+      facts("Q10", "track", "On Wires"),
+      facts("Q11", "track", "On Wires", { P175: ["Q52583"] }),
+      facts("Q12", "work", "On Wires", { P2550: ["Q99"] }),
+      facts("Q13", "single", "On Wires", { P175: ["Q999"] }),
+    );
+    const { rows } = assembleMatches([row("On Wires")], { items, albumTracks: new Set() });
+    expect(rows["0:1"].track.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q11", ["same title", "same performer"]],
+      ["Q10", ["same title", "no artist set"]],
+    ]);
+    expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q12", ["same title", "no artist set"]],
+    ]);
+    expect(rows["0:1"].single).toEqual([]);
   });
 
   it("treats curly and straight apostrophes alike", () => {
