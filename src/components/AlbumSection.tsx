@@ -34,7 +34,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
       {A.mode === "existing" ? (
         <div className="grid" style={{ marginTop: 12 }}>
           <label className="f">
-            Album QID <span className="sub">Q-number or Wikidata URL</span>
+            Album QID
             <QidInput
               id="albumQid"
               placeholder="Q…"
@@ -42,6 +42,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
               aria-invalid={!!errs.albumQid}
               onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
             />
+            <span className="sub">Q-number or Wikidata URL</span>
             <FieldErr id="albumQid" msg={errs.albumQid} />
           </label>
         </div>
@@ -49,26 +50,27 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
         <div style={{ marginTop: 12 }}>
           <div className="grid">
             <label className="f">
-              Title <span className="sub">Label and P1476</span>
+              Title
               <input
                 type="text"
                 value={A.title}
                 aria-invalid={!!errs.albumTitle}
                 onChange={(e) => update((s) => void (s.album.title = e.target.value))}
               />
+              <span className="sub">Label and P1476</span>
               <FieldErr id="albumTitle" msg={errs.albumTitle} />
             </label>
             <label className="f">
-              Album artists (P175){" "}
-              <span className="sub">
-                Names as you'd write them in the tracklist, mapped in Performers
-              </span>
+              Album artists (P175)
               <input
                 type="text"
                 value={A.artists}
                 aria-invalid={!!errs.albumArtists}
                 onChange={(e) => update((s) => void (s.album.artists = e.target.value))}
               />
+              <span className="sub">
+                Names as you'd write them in the tracklist, mapped in Performers
+              </span>
               <FieldErr id="albumArtists" msg={errs.albumArtists} />
             </label>
             <label className="f">
@@ -121,8 +123,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
             </div>
             {ALBUM_ID_FIELDS.map((f) => (
               <label className="f" key={f.key}>
-                {f.label} ({f.property}){" "}
-                <span className="sub">Optional. ID or URL, checked for duplicates.</span>
+                {f.label} ({f.property})
                 <input
                   type="text"
                   spellCheck={false}
@@ -134,6 +135,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
                     )
                   }
                 />
+                <span className="sub">Optional. ID or URL, checked for duplicates</span>
                 <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
               </label>
             ))}
