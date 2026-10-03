@@ -124,6 +124,9 @@ export type Slot = keyof RowMatches;
 export const candidateId = (di: number, n: number, slot: Slot, qid: string) =>
   `${di}:${n}:${slot}:${qid}`;
 
+/** The id of a track's group in the Possible matches card, to link to it. */
+export const groupId = (di: number, n: number) => `match-${di}-${n}`;
+
 /** What's in a row's field for `slot`, or "" when it's empty. */
 export function slotValue(disc: Disc, n: number, slot: Slot): string {
   return (slot === "single" ? disc.single[n]?.qid : disc[slot][n])?.trim() ?? "";

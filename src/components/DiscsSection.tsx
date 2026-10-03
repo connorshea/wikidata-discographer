@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { emptyDisc } from "../lib/state.ts";
-import type { TrackReview } from "../lib/matches.ts";
+import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
   isCustomPart,
   normalizeQid,
@@ -12,7 +12,7 @@ import {
   type State,
 } from "../lib/plan.ts";
 import { InfoTip, Pids, QidInput } from "./common.tsx";
-import { groupId, UnreviewedNotice } from "./MatchesSection.tsx";
+import { UnreviewedNotice } from "./MatchesSection.tsx";
 import type { SectionProps } from "./types.ts";
 
 const cls = (...names: (string | false | null | undefined)[]) =>

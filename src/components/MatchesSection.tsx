@@ -3,6 +3,7 @@ import { useAuth } from "../lib/auth-context.ts";
 import {
   type Candidate,
   fillUnambiguous,
+  groupId,
   pickSingle,
   pickTrack,
   type Slot,
@@ -29,9 +30,6 @@ interface Before {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** The id of a track's group in the card, for links from the Discs section. */
-export const groupId = (di: number, n: number) => `match-${di}-${n}`;
 
 /**
  * Items already on Wikidata with a track's title, grouped by disc and track,
