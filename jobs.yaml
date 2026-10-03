@@ -19,10 +19,15 @@
 # by side. It holds only one batch of rows at a time, so a small heap is
 # plenty. Retry once so a run killed by a node drain restarts; the import is
 # idempotent, and the prune refuses to delete more than 20% of the mirror.
+#
+# Noon, not 06:00: mergers-and-acquisitions imports the same dump on
+# Wednesdays at 06:00 (six shards, ~40 min, 3 h timeout) and labels the new
+# QIDs at 10:00, both against the same NFS mount and ToolsDB server. Even at
+# the 8 h timeout this run ends before its nightly jobs start at 02:30.
 - name: import-dump
   command: node --max-old-space-size=384 jobs/import-dump.ts
   image: tool-wikidata-discographer/tool-wikidata-discographer:latest
-  schedule: "0 6 * * 3" # Wednesdays 06:00 UTC
+  schedule: "0 12 * * 3" # Wednesdays 12:00 UTC
   mount: all
   mem: 512Mi
   cpu: 2
