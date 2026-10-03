@@ -81,8 +81,14 @@ describe("pruneProgressLine", () => {
 });
 
 describe("memoryNote", () => {
-  it("shows RSS and heap use in MB", () => {
-    const mem = { rss: 312e6, heapUsed: 120.4e6, heapTotal: 160e6, external: 0, arrayBuffers: 0 };
-    expect(memoryNote(mem)).toBe(" [rss 312 MB, heap 120/160 MB]");
+  it("shows RSS, heap and external use in MB", () => {
+    const mem = {
+      rss: 312e6,
+      heapUsed: 120.4e6,
+      heapTotal: 160e6,
+      external: 45.6e6,
+      arrayBuffers: 40e6,
+    };
+    expect(memoryNote(mem)).toBe(" [rss 312 MB, heap 120/160 MB, external 46 MB (buffers 40 MB)]");
   });
 });
