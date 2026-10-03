@@ -111,7 +111,9 @@ items.post("/:qid", requireUser, async (c) => {
   if (!/^Q\d+$/.test(qid)) return c.json({ error: "Not a QID" }, 400);
   let entity;
   try {
-    entity = (await getEntities([qid])).get(qid);
+    // The user is waiting on this: no retries (a 429 may ask for a minute's
+    // wait); they can click again.
+    entity = (await getEntities([qid], { retries: 0 })).get(qid);
   } catch (err) {
     if (err instanceof WikidataEditError) return c.json({ error: err.message }, 502);
     throw err;
