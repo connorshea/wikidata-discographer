@@ -189,10 +189,6 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
       <ul className="matches">
         {matches.map((m) => (
           <li key={m.qid}>
-            <WikiLink base={wikiBaseUrl} qid={m.qid} />
-            <span>{m.label ?? "(no label)"}</span>
-            <span className="muted">{m.description}</span>
-            <span className="muted">({m.reasons.join(", ")})</span>
             <button
               type="button"
               className="ghost small"
@@ -205,6 +201,10 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
             >
               Use this album
             </button>
+            <WikiLink base={wikiBaseUrl} qid={m.qid} />
+            <span>{m.label ?? "(no label)"}</span>
+            <span className="muted">{m.description}</span>
+            <span className="muted">({m.reasons.join(", ")})</span>
           </li>
         ))}
       </ul>
