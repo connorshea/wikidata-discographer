@@ -36,10 +36,12 @@ export interface DuplicatesRequest {
   kinds: MusicKind[];
   /** property → value, e.g. { P2205: "4aawyAB9vmqN3uQ7FjRGTy" } */
   ids: Record<string, string>;
+  /** The album artists' QIDs. Same-title albums by someone else are left out once there are any. */
+  performers: string[];
 }
 
 export interface DuplicateMatch extends MirrorItem {
-  /** Why it matched: the shared identifiers, or "same title". */
+  /** Why it matched: the shared identifiers, or "same title" and how its performer compares. */
   reasons: string[];
 }
 

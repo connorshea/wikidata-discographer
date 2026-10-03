@@ -1,6 +1,7 @@
 // Small form pieces shared by the sections.
 import type { ReactNode } from "react";
 import { normalizeQid } from "../lib/plan.ts";
+import { PROPERTY_LABELS } from "../lib/preview.ts";
 
 export function FieldErr({ id, msg }: { id: string; msg?: string }) {
   return (
@@ -48,5 +49,18 @@ export function WikiLink({ base, qid }: { base: string; qid: string }) {
     <a href={`${base}/wiki/${qid}`} target="_blank" rel="noreferrer">
       {qid}
     </a>
+  );
+}
+
+/** Text with each property ID it mentions (P175, say) showing the property's name on hover. */
+export function Pids({ children }: { children: string }) {
+  return children.split(/\b(P\d+)\b/).map((part, i) =>
+    i % 2 && PROPERTY_LABELS[part] ? (
+      <abbr key={i} className="pid" title={PROPERTY_LABELS[part]}>
+        {part}
+      </abbr>
+    ) : (
+      part
+    ),
   );
 }

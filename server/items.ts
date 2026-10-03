@@ -9,8 +9,9 @@ import { bodyLimit } from "hono/body-limit";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, toProperty, toQid } from "./ids.ts";
-import { musicExternalIds, musicItems } from "../db/schema.ts";
+import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { type AuthEnv, requireUser } from "./auth/session.ts";
+import { rankDuplicates, titleReasons } from "./duplicates.ts";
 import { findMatches } from "./matches.ts";
 import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
 import { getEntities, WikidataEditError } from "./wikidata-client.ts";
@@ -40,6 +41,8 @@ const toItem = (r: Selected): MirrorItem => ({
   qid: toQid(r.qid),
   kind: r.kind as MusicKind,
 });
+
+const P175 = propertyNumber("P175");
 
 const isKind = (k: unknown): k is MusicKind => MUSIC_KINDS.includes(k as MusicKind);
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -73,6 +76,9 @@ items.post("/duplicates", async (c) => {
   const ids = Object.entries(body.ids ?? {}).filter(
     ([p, v]) => p in ID_PROPERTIES && typeof v === "string" && v.trim() !== "",
   );
+  const artists = (Array.isArray(body.performers) ? body.performers : [])
+    .filter((p): p is string => typeof p === "string" && /^Q\d+$/.test(p))
+    .slice(0, 20);
   const reasons = new Map<number, string[]>();
   const add = (qid: number, reason: string) =>
     reasons.set(qid, [...(reasons.get(qid) ?? []), reason]);
@@ -101,7 +107,24 @@ items.post("/duplicates", async (c) => {
       .from(musicItems)
       .where(and(eq(musicItems.labelSearch, key), inArray(musicItems.kind, kinds)))
       .limit(30);
-    for (const h of hits) add(h.qid, "same title");
+    const credited = new Map<number, string[]>();
+    if (artists.length && hits.length) {
+      const links = await db
+        .select({ qid: musicLinks.qid, target: musicLinks.target })
+        .from(musicLinks)
+        .where(
+          and(
+            inArray(
+              musicLinks.qid,
+              hits.map((h) => h.qid),
+            ),
+            eq(musicLinks.property, P175),
+          ),
+        );
+      for (const l of links) credited.set(l.qid, [...(credited.get(l.qid) ?? []), toQid(l.target)]);
+    }
+    for (const h of hits)
+      for (const r of titleReasons(credited.get(h.qid) ?? [], artists) ?? []) add(h.qid, r);
   }
   if (reasons.size === 0) return c.json({ matches: [] } satisfies DuplicatesResponse);
   const rows = await db
@@ -112,11 +135,7 @@ items.post("/duplicates", async (c) => {
     ...toItem(r),
     reasons: reasons.get(r.qid)!,
   }));
-  // Identifier matches first: those are near-certain duplicates.
-  matches.sort(
-    (a, b) => Number(b.reasons[0] !== "same title") - Number(a.reasons[0] !== "same title"),
-  );
-  return c.json({ matches } satisfies DuplicatesResponse);
+  return c.json({ matches: rankDuplicates(matches) } satisfies DuplicatesResponse);
 });
 
 items.post("/matches", bodyLimit({ maxSize: 256 << 10 }), async (c) => {

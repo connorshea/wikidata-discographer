@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { ALBUM_FORMS, ALBUM_TYPES } from "../lib/plan.ts";
+import { ALBUM_FORMS, ALBUM_TYPES, QID, splitArtists } from "../lib/plan.ts";
+import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
-import { FieldErr, InfoTip, QidInput, WikiLink } from "./common.tsx";
+import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import type { SectionProps } from "./types.ts";
 
@@ -15,8 +16,10 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
     <section className="block">
       <h2>Album</h2>
       <p className="hint">
-        All discs belong to this one album. Its tracklist (P658) is added after the tracks are
-        created, and singles point to it with P13602.
+        <Pids>
+          All discs belong to this one album. Its tracklist (P658) is added after the tracks are
+          created, and singles point to it with P13602.
+        </Pids>
       </p>
       <div className="row" role="radiogroup" aria-label="Album">
         {(["existing", "create"] as const).map((mode) => (
@@ -57,11 +60,13 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
                 aria-invalid={!!errs.albumTitle}
                 onChange={(e) => update((s) => void (s.album.title = e.target.value))}
               />
-              <span className="sub">Label and P1476</span>
+              <span className="sub">
+                <Pids>Label and P1476</Pids>
+              </span>
               <FieldErr id="albumTitle" msg={errs.albumTitle} />
             </label>
             <label className="f">
-              Album artists (P175)
+              <Pids>Album artists (P175)</Pids>
               <input
                 type="text"
                 value={A.artists}
@@ -74,7 +79,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
               <FieldErr id="albumArtists" msg={errs.albumArtists} />
             </label>
             <label className="f">
-              Instance of (P31)
+              <Pids>Instance of (P31)</Pids>
               <select
                 value={A.type}
                 onChange={(e) => update((s) => void (s.album.type = e.target.value))}
@@ -85,7 +90,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
               </select>
             </label>
             <label className="f">
-              Form of creative work (P7937)
+              <Pids>Form of creative work (P7937)</Pids>
               <select
                 value={A.form}
                 onChange={(e) => update((s) => void (s.album.form = e.target.value))}
@@ -123,7 +128,7 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
             </div>
             {ALBUM_ID_FIELDS.map((f) => (
               <label className="f" key={f.key}>
-                {f.label} ({f.property})
+                <Pids>{`${f.label} (${f.property})`}</Pids>
                 <input
                   type="text"
                   spellCheck={false}
@@ -141,9 +146,11 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
             ))}
           </div>
           <p className="hint" style={{ marginTop: 10 }}>
-            The album is created first with P31, P7937, P1476, P175, P577 (publication date), P407,
-            the identifiers above, and P2635 number of tracks: one statement per disc qualified with
-            its part when every disc has a part, otherwise one total.
+            <Pids>
+              The album is created first with P31, P7937, P1476, P175, P577 (publication date),
+              P407, the identifiers above, and P2635 number of tracks: one statement per disc
+              qualified with its part when every disc has a part, otherwise one total.
+            </Pids>
           </p>
           <Duplicates state={state} update={update} />
         </div>
@@ -152,7 +159,11 @@ export default function AlbumSection({ state, update, plan }: SectionProps) {
   );
 }
 
-/** Albums in the mirror that share an identifier or the title with the one being created. */
+/**
+ * Albums in the mirror that share an identifier or the title with the one being
+ * created. Once the album artists have QIDs, same-title albums by someone else
+ * are left out.
+ */
 function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
@@ -162,6 +173,9 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
       title: A.title,
       kinds: ["album", "ep"],
       ids: Object.fromEntries(ALBUM_ID_FIELDS.map((f) => [f.property, A.ids[f.key]])),
+      performers: splitArtists(A.artists, state.settings.splitArtists)
+        .map((a) => (state.artists[a] ?? "").trim())
+        .filter((q) => QID.test(q)),
     } satisfies DuplicatesRequest),
   );
   // Results are tagged with the request they answer, so stale ones are never shown.
@@ -180,7 +194,7 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
   }, [key, empty]);
   const matches = !empty && result?.key === key ? result.matches : [];
   if (!matches.length) return null;
-  const byId = matches.some((m) => m.reasons.some((r) => r !== "same title"));
+  const byId = matches.some((m) => m.reasons.some(isIdReason));
   return (
     <div>
       <p className={`msg ${byId ? "err" : "warn"}`}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
+import { PROPERTY_LABELS } from "./lib/preview.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY, EXAMPLE } from "./lib/state.ts";
 import AlbumSection from "./components/AlbumSection.tsx";
@@ -21,7 +22,7 @@ function Kind({ edge, children }: { edge: string; children: string }) {
 }
 
 /** A property's plain name, linked to its page, with its ID on hover. */
-function Prop({ id, name, children }: { id: string; name: string; children: string }) {
+function Prop({ id, children }: { id: string; children: string }) {
   const { wikiBaseUrl } = useAuth();
   return (
     <a
@@ -29,7 +30,7 @@ function Prop({ id, name, children }: { id: string; name: string; children: stri
       href={`${wikiBaseUrl}/wiki/Property:${id}`}
       target="_blank"
       rel="noreferrer"
-      title={`${name} (${id})`}
+      title={`${PROPERTY_LABELS[id]} (${id})`}
     >
       {children}
     </a>
@@ -41,26 +42,13 @@ function ItemModel() {
   return (
     <ul className="flow" aria-label="How the items are linked">
       <li>
-        <Kind edge="disc-edge">Album</Kind>{" "}
-        <Prop id="P658" name="tracklist">
-          lists
-        </Prop>{" "}
-        <Kind edge="trk-edge">tracks</Kind>, each a{" "}
-        <Prop id="P2550" name="recording or performance of">
-          recording of
-        </Prop>{" "}
-        a <Kind edge="cmp-edge">composition</Kind>
+        <Kind edge="disc-edge">Album</Kind> <Prop id="P658">lists</Prop>{" "}
+        <Kind edge="trk-edge">tracks</Kind>, each a <Prop id="P2550">recording of</Prop> a{" "}
+        <Kind edge="cmp-edge">composition</Kind>
       </li>
       <li>
-        <Kind edge="rg-edge">Singles</Kind>{" "}
-        <Prop id="P658" name="tracklist">
-          list
-        </Prop>{" "}
-        a track and are{" "}
-        <Prop id="P13602" name="single taken from">
-          taken from
-        </Prop>{" "}
-        the album
+        <Kind edge="rg-edge">Singles</Kind> <Prop id="P658">list</Prop> a track and are{" "}
+        <Prop id="P13602">taken from</Prop> the album
       </li>
     </ul>
   );
