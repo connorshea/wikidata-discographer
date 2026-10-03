@@ -2,7 +2,14 @@ import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { emptyDisc } from "../lib/state.ts";
-import { fillUnambiguous, openMatches, pickSingle, pickTrack } from "../lib/matches.ts";
+import {
+  type Answered,
+  fillUnambiguous,
+  openMatches,
+  pickSingle,
+  pickTrack,
+  stillValid,
+} from "../lib/matches.ts";
 import {
   isCustomPart,
   normalizeQid,
@@ -27,42 +34,40 @@ type Matches = MatchesResponse["rows"];
  */
 function useMatches(state: State, plan: Plan): Matches {
   const albumQid = state.album.qid.trim();
-  // Debounce the serialized request: a fresh object every render would never settle.
-  const key = useDebounced(
-    JSON.stringify({
-      albumQid: state.album.mode === "existing" && QID.test(albumQid) ? albumQid : "",
-      rows: plan.parsed.flatMap((rows, di) =>
-        rows.flatMap((r) =>
-          r.error !== undefined
-            ? []
-            : [
-                {
-                  key: `${di}:${r.n}`,
-                  title: r.title,
-                  performers: r.artists
-                    .map((a) => (state.artists[a] ?? "").trim())
-                    .filter((q) => QID.test(q)),
-                },
-              ],
-        ),
+  const request: MatchesRequest = {
+    albumQid: state.album.mode === "existing" && QID.test(albumQid) ? albumQid : "",
+    rows: plan.parsed.flatMap((rows, di) =>
+      rows.flatMap((r) =>
+        r.error !== undefined
+          ? []
+          : [
+              {
+                key: `${di}:${r.n}`,
+                title: r.title,
+                performers: r.artists
+                  .map((a) => (state.artists[a] ?? "").trim())
+                  .filter((q) => QID.test(q)),
+              },
+            ],
       ),
-    } satisfies MatchesRequest),
-    600,
-  );
-  // Results are tagged with the request they answer, so stale ones are never shown.
-  const [result, setResult] = useState<{ key: string; rows: Matches } | null>(null);
-  const empty = (JSON.parse(key) as MatchesRequest).rows.length === 0;
+    ),
+  };
+  // Debounce the serialized request: a fresh object every render would never settle.
+  const key = useDebounced(JSON.stringify(request), 600);
+  const [answered, setAnswered] = useState<Answered | null>(null);
   useEffect(() => {
-    if (empty) return;
-    let cancelled = false;
-    api<MatchesResponse>("/api/items/matches", { method: "POST", body: JSON.parse(key) })
-      .then((r) => !cancelled && setResult({ key, rows: r.rows }))
-      .catch(() => !cancelled && setResult(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [key, empty]);
-  return !empty && result?.key === key ? result.rows : {};
+    const body = JSON.parse(key) as MatchesRequest;
+    // The server only matches by a performer or the album; without either, don't ask.
+    if (!body.albumQid && !body.rows.some((r) => r.performers.length)) return;
+    const abort = new AbortController();
+    api<MatchesResponse>("/api/items/matches", { method: "POST", body, signal: abort.signal })
+      .then((r) => setAnswered({ request: body, rows: r.rows }))
+      .catch(() => {});
+    return () => abort.abort();
+  }, [key]);
+  // Rows edited since the last answer drop their matches at once; the rest
+  // keep them while the next request is in flight.
+  return stillValid(answered, request);
 }
 
 export default function DiscsSection({ state, update, plan }: SectionProps) {
