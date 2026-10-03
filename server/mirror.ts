@@ -4,6 +4,7 @@
 // away), and by "add an item" for things created since the last dump.
 import { inArray, sql } from "drizzle-orm";
 import { db, retryOnLockConflict } from "./db.ts";
+import { propertyNumber, qidNumber } from "./ids.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { ID_PROPERTIES, kindOf, type MusicKind } from "../src/lib/music.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
@@ -46,7 +47,7 @@ export function entityToRow(entity: Entity): MirrorRow | null {
   const claims = entity.claims ?? {};
   const instanceOf = bestRank(claims.P31)
     .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
-    .filter((id): id is string => typeof id === "string");
+    .filter((id): id is string => typeof id === "string" && /^Q\d+$/.test(id));
   const kind = kindOf(instanceOf, Object.keys(claims));
   if (!kind) return null;
   const ids: MirrorRow["ids"] = [];
@@ -95,13 +96,13 @@ export async function upsertRows(
         .where(
           inArray(
             musicItems.qid,
-            input.map((r) => r.qid),
+            input.map((r) => qidNumber(r.qid)),
           ),
         )
         .for("update");
       const stored = new Map(have.map((r) => [r.qid, r.revid]));
       const rows = input.filter((r) => {
-        const revid = stored.get(r.qid);
+        const revid = stored.get(qidNumber(r.qid));
         return revid == null || r.revid == null || r.revid >= revid;
       });
       if (rows.length === 0) return;
@@ -114,19 +115,25 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "app") {
   const values = rows.map((r) => ({
-    qid: r.qid,
+    qid: qidNumber(r.qid),
     kind: r.kind,
     label: r.label,
     labelSearch: labelSearchKey(r.label),
     description: r.description,
-    instanceOf: r.instanceOf,
+    instanceOf: r.instanceOf.map(qidNumber),
     revid: r.revid,
     rowVersion: MIRROR_VERSION,
     source,
     updatedAt: sql`CURRENT_TIMESTAMP`,
   }));
-  const qids = rows.map((r) => r.qid);
-  const ids = rows.flatMap((r) => r.ids.map((id) => ({ qid: r.qid, ...id })));
+  const qids = values.map((v) => v.qid);
+  const ids = rows.flatMap((r) =>
+    r.ids.map((id) => ({
+      qid: qidNumber(r.qid),
+      property: propertyNumber(id.property),
+      value: id.value,
+    })),
+  );
   await tx
     .insert(musicItems)
     .values(values)

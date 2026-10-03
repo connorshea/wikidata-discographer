@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import { db } from "./db.ts";
+import { propertyNumber, toProperty, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { type AuthEnv, requireUser } from "./auth/session.ts";
 import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
@@ -28,8 +29,12 @@ const columns = {
   label: musicItems.label,
   description: musicItems.description,
 };
-type Selected = { qid: string; kind: string; label: string | null; description: string | null };
-const toItem = (r: Selected): MirrorItem => ({ ...r, kind: r.kind as MusicKind });
+type Selected = { qid: number; kind: string; label: string | null; description: string | null };
+const toItem = (r: Selected): MirrorItem => ({
+  ...r,
+  qid: toQid(r.qid),
+  kind: r.kind as MusicKind,
+});
 
 const isKind = (k: unknown): k is MusicKind => MUSIC_KINDS.includes(k as MusicKind);
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -52,7 +57,7 @@ items.get("/search", async (c) => {
           .where(and(like(musicItems.labelSearch, `${escapeLike(key)}%`), kindFilter))
           .limit(10)
       : [];
-  const seen = new Set<string>();
+  const seen = new Set<number>();
   const result = [...exact, ...prefix].filter((r) => !seen.has(r.qid) && seen.add(r.qid));
   return c.json({ items: result.map(toItem) } satisfies SearchResponse);
 });
@@ -63,8 +68,8 @@ items.post("/duplicates", async (c) => {
   const ids = Object.entries(body.ids ?? {}).filter(
     ([p, v]) => p in ID_PROPERTIES && typeof v === "string" && v.trim() !== "",
   );
-  const reasons = new Map<string, string[]>();
-  const add = (qid: string, reason: string) =>
+  const reasons = new Map<number, string[]>();
+  const add = (qid: number, reason: string) =>
     reasons.set(qid, [...(reasons.get(qid) ?? []), reason]);
 
   if (ids.length) {
@@ -74,12 +79,15 @@ items.post("/duplicates", async (c) => {
       .where(
         or(
           ...ids.map(([p, v]) =>
-            and(eq(musicExternalIds.property, p), eq(musicExternalIds.value, v.trim())),
+            and(
+              eq(musicExternalIds.property, propertyNumber(p)),
+              eq(musicExternalIds.value, v.trim()),
+            ),
           ),
         ),
       )
       .limit(50);
-    for (const h of hits) add(h.qid, `same ${ID_PROPERTIES[h.property]}`);
+    for (const h of hits) add(h.qid, `same ${ID_PROPERTIES[toProperty(h.property)]}`);
   }
   const key = labelSearchKey(typeof body.title === "string" ? body.title.trim() : "");
   if (key && kinds.length) {

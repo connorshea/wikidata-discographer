@@ -19,6 +19,7 @@ import { musicExternalIds, submissions, wikidataEdits } from "../db/schema.ts";
 import { type AuthEnv, type AuthUser, requireUser } from "./auth/session.ts";
 import { toSqlDatetime } from "./auth/time.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
+import { propertyNumber, qidNumber, toQid } from "./ids.ts";
 import {
   editRequest,
   type EditUser,
@@ -98,12 +99,17 @@ submissionRoutes.post(
         const [hit] = await db
           .select({ qid: musicExternalIds.qid })
           .from(musicExternalIds)
-          .where(and(eq(musicExternalIds.property, property), eq(musicExternalIds.value, value)))
+          .where(
+            and(
+              eq(musicExternalIds.property, propertyNumber(property)),
+              eq(musicExternalIds.value, value),
+            ),
+          )
           .limit(1);
         if (hit)
           return c.json(
             {
-              error: `${hit.qid} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
+              error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
             },
             409,
           );
@@ -116,7 +122,8 @@ submissionRoutes.post(
       editGroup,
       status: "running",
       title: state.album.mode === "create" ? state.album.title.trim() : state.album.qid.trim(),
-      albumQid: state.album.mode === "create" ? null : state.album.qid.trim(),
+      // buildPlan has checked it's a QID.
+      albumQid: state.album.mode === "create" ? null : qidNumber(state.album.qid.trim()),
       input: state,
     });
     const id = res.insertId;
@@ -138,7 +145,7 @@ submissionRoutes.get("/", requireUser, async (c) => {
       id: r.id,
       status: r.status as SubmissionStatus,
       title: r.title,
-      albumQid: r.albumQid,
+      albumQid: r.albumQid == null ? null : toQid(r.albumQid),
       editGroupUrl: editGroupUrl(r.editGroup),
       error: r.error,
       createdAt: r.createdAt,
@@ -166,7 +173,7 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     id: row.id,
     status: row.status as SubmissionStatus,
     title: row.title,
-    albumQid: row.albumQid,
+    albumQid: row.albumQid == null ? null : toQid(row.albumQid),
     editGroupUrl: editGroupUrl(row.editGroup),
     error: row.error,
     createdAt: row.createdAt,
@@ -177,7 +184,7 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
       key: e.key,
       kind: e.kind,
       what: e.what,
-      qid: e.qid,
+      qid: e.qid == null ? null : toQid(e.qid),
       revid: e.revid,
       ok: e.ok,
       skipped: e.skipped,
@@ -221,8 +228,15 @@ export async function runPlan(
     if (!qid) throw new Error(`No item was created for ${key}`);
     return qid;
   };
-  const log = (values: Omit<typeof wikidataEdits.$inferInsert, "submissionId" | "userId">) =>
-    db.insert(wikidataEdits).values({ submissionId, userId: user.id, ...values });
+  const log = ({
+    qid,
+    ...values
+  }: Omit<typeof wikidataEdits.$inferInsert, "submissionId" | "userId" | "qid"> & {
+    qid?: string | null;
+  }) =>
+    db
+      .insert(wikidataEdits)
+      .values({ submissionId, userId: user.id, ...values, qid: qid ? qidNumber(qid) : null });
 
   let status: SubmissionStatus = "done";
   let error: string | null = null;
@@ -260,7 +274,7 @@ export async function runPlan(
         if (op.key === "album")
           await db
             .update(submissions)
-            .set({ albumQid: entity.id })
+            .set({ albumQid: qidNumber(entity.id) })
             .where(eq(submissions.id, submissionId));
         // Add it to the mirror now, so duplicate checks see it before the next dump.
         const row = entityToRow({ ...(body.entity as object), id: entity.id } as Parameters<

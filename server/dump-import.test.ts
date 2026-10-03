@@ -79,15 +79,26 @@ describe("readHeader", () => {
 
 describe("MirrorIndex", () => {
   const index = new MirrorIndex([
-    { qid: "Q10", revid: 500, rowVersion: MIRROR_VERSION },
-    { qid: "Q9", revid: 400, rowVersion: MIRROR_VERSION },
-    { qid: "Q200", revid: null, rowVersion: MIRROR_VERSION },
-    { qid: "Q3", revid: 300, rowVersion: MIRROR_VERSION - 1 },
+    { qid: 3, revid: 300, rowVersion: MIRROR_VERSION - 1 },
+    { qid: 9, revid: 400, rowVersion: MIRROR_VERSION },
+    { qid: 10, revid: 500, rowVersion: MIRROR_VERSION },
+    { qid: 200, revid: null, rowVersion: MIRROR_VERSION },
   ]);
-  it("finds QIDs by number, though they were read in string order", () => {
-    expect([...index.qids]).toEqual([3, 9, 10, 200]);
+  it("finds Q-numbers", () => {
     expect(index.find(10)).toBe(2);
     expect(index.find(11)).toBe(-1);
+    // Past 2^32: the ids are 64-bit.
+    const big = new MirrorIndex([{ qid: 2 ** 40, revid: 1, rowVersion: MIRROR_VERSION }]);
+    expect(big.find(2 ** 40)).toBe(0);
+  });
+  it("needs rows in QID order", () => {
+    expect(
+      () =>
+        new MirrorIndex([
+          { qid: 10, revid: 1, rowVersion: MIRROR_VERSION },
+          { qid: 9, revid: 1, rowVersion: MIRROR_VERSION },
+        ]),
+    ).toThrow("out of order");
   });
   it("skips only rows built from that revision or a later one, at this version", () => {
     expect(index.isCurrent(index.find(10), 500)).toBe(true);
@@ -99,11 +110,11 @@ describe("MirrorIndex", () => {
   });
   it("lists the QIDs not seen", () => {
     const fresh = new MirrorIndex([
-      { qid: "Q1", revid: 1, rowVersion: MIRROR_VERSION },
-      { qid: "Q2", revid: 1, rowVersion: MIRROR_VERSION },
+      { qid: 1, revid: 1, rowVersion: MIRROR_VERSION },
+      { qid: 2, revid: 1, rowVersion: MIRROR_VERSION },
     ]);
     fresh.seen[fresh.find(2)] = 1;
-    expect(fresh.unseen()).toEqual(["Q1"]);
+    expect(fresh.unseen()).toEqual([1]);
   });
 });
 
