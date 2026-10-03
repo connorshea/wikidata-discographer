@@ -6,7 +6,7 @@
 // streamed once:
 //
 //   0. Load every mirrored QID with the revision it was built from into
-//      memory (`MirrorIndex`, ~13 bytes per item).
+//      memory (`MirrorIndex`, ~17 bytes per item).
 //   1. Inflate in ~1 MB chunks; only complete lines are handled.
 //   2. Read the line's id and `lastrevid`, which sit at its start and end. An
 //      item the mirror already has at that revision (or newer) is marked seen
@@ -37,6 +37,7 @@ import { createGunzip } from "node:zlib";
 import type { Readable } from "node:stream";
 import { and, asc, eq, gt, inArray, lt, notExists } from "drizzle-orm";
 import { db, retryOnLockConflict } from "./db.ts";
+import { toQid } from "./ids.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { entityToRow, MIRROR_VERSION, type MirrorRow, upsertRows } from "./mirror.ts";
 import type { Entity } from "./wikidata-client.ts";
@@ -92,44 +93,37 @@ export function readHeader(line: Buffer): { qid: number; revid: number } | null 
 }
 
 /**
- * The mirror's QIDs and the revision each row was built from, as sorted typed
- * arrays (a JS Map of millions of entries would cost several times as much),
+ * The mirror's Q-numbers and the revision each row was built from, as sorted
+ * typed arrays (a JS Map of millions of entries would cost several times as much),
  * plus which ones this pass has seen.
  */
 export class MirrorIndex {
-  readonly qids: Uint32Array;
+  readonly qids: Float64Array;
   /** -1 for a row that must be re-read (unknown revid, or an older MIRROR_VERSION). */
   readonly revids: Float64Array;
   readonly seen: Uint8Array;
 
-  constructor(rows: Iterable<{ qid: string; revid: number | null; rowVersion: number }>) {
-    let qids = new Uint32Array(1024);
+  /** `rows` must be in ascending QID order (the table's primary key order). */
+  constructor(rows: Iterable<{ qid: number; revid: number | null; rowVersion: number }>) {
+    let qids = new Float64Array(1024);
     let revids = new Float64Array(1024);
     let n = 0;
     for (const r of rows) {
-      if (!/^Q\d+$/.test(r.qid)) continue;
       if (n === qids.length) {
-        const grown = new Uint32Array(n * 2);
-        grown.set(qids);
-        qids = grown;
+        const grownQids = new Float64Array(n * 2);
+        grownQids.set(qids);
+        qids = grownQids;
         const grownRevids = new Float64Array(n * 2);
         grownRevids.set(revids);
         revids = grownRevids;
       }
-      qids[n] = Number(r.qid.slice(1));
+      if (n > 0 && r.qid <= qids[n - 1]) throw new Error("MirrorIndex: rows out of order");
+      qids[n] = r.qid;
       revids[n] = r.revid != null && r.rowVersion >= MIRROR_VERSION ? r.revid : -1;
       n++;
     }
-    // Sort by QID number; rows were read in string order (Q10 < Q9).
-    const order = new Uint32Array(n);
-    for (let i = 0; i < n; i++) order[i] = i;
-    order.sort((a, b) => qids[a] - qids[b]);
-    this.qids = new Uint32Array(n);
-    this.revids = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      this.qids[i] = qids[order[i]];
-      this.revids[i] = revids[order[i]];
-    }
+    this.qids = qids.slice(0, n);
+    this.revids = revids.slice(0, n);
     this.seen = new Uint8Array(n);
   }
 
@@ -137,7 +131,7 @@ export class MirrorIndex {
     return this.qids.length;
   }
 
-  /** The position of QID number `qid`, or -1. */
+  /** The position of item `qid` (its Q-number), or -1. */
   find(qid: number): number {
     let lo = 0;
     let hi = this.qids.length - 1;
@@ -156,17 +150,17 @@ export class MirrorIndex {
     return this.revids[i] >= revid;
   }
 
-  /** The QIDs this pass hasn't seen. */
-  unseen(): string[] {
-    const out: string[] = [];
-    for (let i = 0; i < this.seen.length; i++) if (!this.seen[i]) out.push(`Q${this.qids[i]}`);
+  /** The Q-numbers this pass hasn't seen. */
+  unseen(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < this.seen.length; i++) if (!this.seen[i]) out.push(this.qids[i]);
     return out;
   }
 
-  /** Read the whole mirror, a page at a time. */
+  /** Read the whole mirror in QID order, a page at a time. */
   static async load(): Promise<MirrorIndex> {
-    const rows: { qid: string; revid: number | null; rowVersion: number }[][] = [];
-    let after = "";
+    const pages: { qid: number; revid: number | null; rowVersion: number }[][] = [];
+    let after = 0;
     for (;;) {
       const page = await db
         .select({ qid: musicItems.qid, revid: musicItems.revid, rowVersion: musicItems.rowVersion })
@@ -175,10 +169,10 @@ export class MirrorIndex {
         .orderBy(asc(musicItems.qid))
         .limit(LOAD_PAGE);
       if (page.length === 0) break;
-      rows.push(page);
+      pages.push(page);
       after = page[page.length - 1].qid;
     }
-    return new MirrorIndex(rows.flat());
+    return new MirrorIndex(pages.flat());
   }
 }
 
@@ -407,6 +401,7 @@ async function prune(index: MirrorIndex, stamp: string, force: boolean): Promise
     return 0;
   }
   console.log(`import-dump: pruning up to ${n} of ${total} items not in dump ${stamp}`);
+  if (n > 0) console.log(`import-dump: e.g. ${unseen.slice(0, 5).map(toQid).join(", ")}`);
   const started = Date.now();
   let lastLog = started;
   let pruned = 0;

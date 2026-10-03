@@ -1,4 +1,5 @@
-// MariaDB schema (Drizzle's MySQL dialect). The database is created with
+// MariaDB schema (Drizzle's MySQL dialect). Item and property IDs are stored
+// as numbers (Q123 → 123, P175 → 175); server/ids.ts converts at the boundary. The database is created with
 // `CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`, so string comparisons are exact
 // — right for external identifiers; label search lowercases explicitly.
 import {
@@ -9,8 +10,8 @@ import {
   index,
   int,
   mysqlTable,
+  primaryKey,
   text,
-  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
@@ -30,6 +31,9 @@ const json = <T>(name: string) =>
     },
   })(name);
 
+/** An item's Q-number (123 for Q123). 64-bit, exact as a JS number to 2^53. */
+const itemId = (name: string) => bigint(name, { mode: "number", unsigned: true });
+
 // ---------------------------------------------------------------------------
 // The music mirror: artists, albums, EPs, singles, compositions and tracks
 // from Wikidata, refreshed weekly from the entity dump (server/dump-import.ts)
@@ -39,13 +43,13 @@ const json = <T>(name: string) =>
 export const musicItems = mysqlTable(
   "music_items",
   {
-    qid: varchar("qid", { length: 32 }).primaryKey(),
+    qid: itemId("qid").primaryKey(),
     kind: varchar("kind", { length: 16 }).notNull(), // MusicKind (src/lib/music.ts)
     label: varchar("label", { length: 400 }), // en, else mul, else any
     // Lowercased label, truncated to fit the index, for case-insensitive search.
     labelSearch: varchar("label_search", { length: 191 }),
     description: varchar("description", { length: 400 }),
-    instanceOf: json<string[]>("instance_of").notNull(),
+    instanceOf: json<number[]>("instance_of").notNull(), // Q-numbers
     // The revision the row was built from: the dump import skips an item whose
     // dump revision is no newer. Null if unknown (always re-read).
     revid: bigint("revid", { mode: "number" }),
@@ -64,13 +68,12 @@ export const musicItems = mysqlTable(
 export const musicExternalIds = mysqlTable(
   "music_external_ids",
   {
-    id: int("id").autoincrement().primaryKey(),
-    qid: varchar("qid", { length: 32 }).notNull(),
-    property: varchar("property", { length: 16 }).notNull(), // e.g. "P2205"
+    qid: itemId("qid").notNull(),
+    property: int("property", { unsigned: true }).notNull(), // 2205 for P2205
     value: varchar("value", { length: 400 }).notNull(),
   },
   (t) => [
-    uniqueIndex("idx_music_external_ids_unique").on(t.qid, t.property, t.value),
+    primaryKey({ columns: [t.qid, t.property, t.value] }),
     index("idx_music_external_ids_lookup").on(t.property, t.value),
   ],
 );
@@ -142,7 +145,7 @@ export const submissions = mysqlTable(
     editGroup: varchar("edit_group", { length: 32 }).notNull(),
     status: varchar("status", { length: 16 }).notNull(), // running | done | failed | interrupted
     title: varchar("title", { length: 400 }).notNull(), // the album's title or QID, for listings
-    albumQid: varchar("album_qid", { length: 32 }),
+    albumQid: itemId("album_qid"),
     input: json<unknown>("input").notNull(), // the submitted form state
     error: text("error"),
     createdAt: datetime("created_at", { mode: "string" })
@@ -169,7 +172,7 @@ export const wikidataEdits = mysqlTable(
     key: varchar("key", { length: 64 }), // the plan key of a created item, e.g. "track:0:3"
     kind: varchar("kind", { length: 16 }), // what was created (MusicKind)
     what: varchar("what", { length: 400 }).notNull(), // human-readable target
-    qid: varchar("qid", { length: 32 }),
+    qid: itemId("qid"),
     revid: bigint("revid", { mode: "number" }),
     ok: boolean("ok").notNull(),
     // Statements that were already on the item and so not added again.
