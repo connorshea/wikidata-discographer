@@ -1,0 +1,220 @@
+import { useEffect, useRef, useState } from "react";
+import { api, FetchError } from "../lib/client.ts";
+import { useAuth } from "../lib/auth-context.ts";
+import { opsText, type State } from "../lib/plan.ts";
+import type { EditLogEntry, SubmissionInfo, SubmissionListResponse } from "../lib/api-types.ts";
+import { WikiLink } from "./common.tsx";
+import type { SectionProps, Update } from "./types.ts";
+
+const POLL_MS = 2000;
+
+/** Write the QIDs a run created back into the form, so a rerun reuses them instead of duplicating. */
+function applyCreated(edits: EditLogEntry[], update: Update) {
+  const created = edits.filter((e) => e.op === "create" && e.ok && e.key && e.qid);
+  if (!created.length) return;
+  update((s: State) => {
+    for (const { key, qid } of created) {
+      const [kind, di, n] = key!.split(":");
+      const disc = s.discs[Number(di)];
+      if (kind === "album") {
+        s.album.mode = "existing";
+        s.album.qid = qid!;
+      } else if (!disc) continue;
+      else if (kind === "comp") disc.comp[n] = qid!;
+      else if (kind === "track") disc.track[n] = qid!;
+      else if (kind === "single")
+        disc.single[n] = { ...(disc.single[n] ?? { date: "" }), qid: qid! };
+    }
+  });
+}
+
+export default function RunSection({ update, plan, state }: SectionProps) {
+  const { user } = useAuth();
+  const [runId, setRunId] = useState<number | null>(null);
+  const [run, setRun] = useState<SubmissionInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  // Only a run started from this form writes its QIDs back into it.
+  const ownRun = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (runId === null) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = () =>
+      api<SubmissionInfo>(`/api/submissions/${runId}`)
+        .then((r) => {
+          if (cancelled) return;
+          setRun(r);
+          if (r.status === "running") timer = setTimeout(poll, POLL_MS);
+          else if (ownRun.current === r.id) {
+            ownRun.current = null;
+            applyCreated(r.edits, update);
+          }
+        })
+        .catch((e: unknown) => {
+          if (cancelled) return;
+          setError(e instanceof Error ? e.message : "Couldn't load the run.");
+          timer = setTimeout(poll, POLL_MS * 3);
+        });
+    void poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [runId, update]);
+
+  const running = run?.status === "running";
+  const start = () => {
+    setStarting(true);
+    setError(null);
+    api<{ id: number }>("/api/submissions", { method: "POST", body: { state } })
+      .then(({ id }) => {
+        ownRun.current = id;
+        setRun(null);
+        setRunId(id);
+      })
+      .catch((e: unknown) =>
+        setError(e instanceof FetchError ? e.message : "Couldn't start the run."),
+      )
+      .finally(() => setStarting(false));
+  };
+
+  const edits = plan.ops.length;
+  return (
+    <section className="block">
+      <h2>Create on Wikidata</h2>
+      {plan.messages.map(([kind, text], i) => (
+        <p key={i} className={`msg ${kind}`}>
+          {text}
+        </p>
+      ))}
+      {plan.ops.length > 0 && (
+        <details>
+          <summary>Preview the {edits} edits</summary>
+          <pre className="out">{opsText(plan.ops)}</pre>
+        </details>
+      )}
+      <div className="row">
+        <button
+          type="button"
+          disabled={!user || user.blocked || !plan.ready || running || starting}
+          onClick={start}
+        >
+          {starting
+            ? "Starting…"
+            : running
+              ? "Running…"
+              : `Make ${edits} edit${edits === 1 ? "" : "s"} as ${user?.username ?? "you"}`}
+        </button>
+        {!user && <span className="hint">Log in to edit.</span>}
+      </div>
+      <p className="hint">
+        Edits are made with your account and grouped in EditGroups, so the whole run can be reviewed
+        or undone together. Statements an item already has are skipped, so a failed run can be
+        started again.
+      </p>
+      {error && <p className="msg err">{error}</p>}
+      {run && <RunProgress run={run} />}
+      {user && <RecentRuns current={runId} onOpen={setRunId} refresh={run?.status} />}
+    </section>
+  );
+}
+
+function RunProgress({ run }: { run: SubmissionInfo }) {
+  const { wikiBaseUrl } = useAuth();
+  const done = run.edits.length;
+  return (
+    <div>
+      <h3 className="sub">
+        {run.title} —{" "}
+        {run.status === "running"
+          ? `${done} of ${run.total}`
+          : run.status === "done"
+            ? "done"
+            : run.status === "failed"
+              ? "stopped on an error"
+              : "interrupted"}
+      </h3>
+      {run.status === "running" && <progress max={run.total} value={done} />}
+      {run.error && <p className="msg err">{run.error}</p>}
+      {run.status === "interrupted" && (
+        <p className="msg warn">The server restarted during this run. Start it again to finish.</p>
+      )}
+      <p className="hint">
+        <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
+          View this run in EditGroups
+        </a>
+        {run.albumQid && (
+          <>
+            {" · album "}
+            <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
+          </>
+        )}
+      </p>
+      <ol className="log">
+        {run.edits.map((e, i) => (
+          <li key={i} className={e.ok ? undefined : "fail"}>
+            {e.op === "create" ? "Created" : "Updated"} {e.what}
+            {e.qid && (
+              <>
+                {" "}
+                <WikiLink base={wikiBaseUrl} qid={e.qid} />
+              </>
+            )}
+            {e.skipped > 0 && <span className="muted"> ({e.skipped} already there)</span>}
+            {e.revid === null && e.ok && e.op === "addClaims" && (
+              <span className="muted"> (nothing to add)</span>
+            )}
+            {e.error && <>: {e.error}</>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function RecentRuns({
+  current,
+  onOpen,
+  refresh,
+}: {
+  current: number | null;
+  onOpen: (id: number) => void;
+  refresh: string | undefined;
+}) {
+  const [runs, setRuns] = useState<SubmissionListResponse["submissions"]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api<SubmissionListResponse>("/api/submissions")
+      .then((r) => !cancelled && setRuns(r.submissions))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [current, refresh]);
+  if (!runs.length) return null;
+  return (
+    <details>
+      <summary>Your recent runs</summary>
+      <ul className="matches">
+        {runs.map((r) => (
+          <li key={r.id}>
+            <button
+              type="button"
+              className="ghost small"
+              disabled={r.id === current}
+              onClick={() => onOpen(r.id)}
+            >
+              Show
+            </button>
+            <span>{r.title}</span>
+            <span className="muted">
+              {r.createdAt} · {r.status}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}

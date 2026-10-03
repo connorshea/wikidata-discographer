@@ -1,102 +1,98 @@
-import { useState } from "react";
-import heroImg from "./assets/hero.png";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "./assets/vite.svg";
-import "./App.css";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AuthBar from "./AuthBar.tsx";
+import { buildPlan, type State } from "./lib/plan.ts";
+import { coerceState, EMPTY, EXAMPLE } from "./lib/state.ts";
+import AlbumSection from "./components/AlbumSection.tsx";
+import SettingsSection from "./components/SettingsSection.tsx";
+import PerformersSection from "./components/PerformersSection.tsx";
+import DiscsSection from "./components/DiscsSection.tsx";
+import RunSection from "./components/RunSection.tsx";
+import type { Update } from "./components/types.ts";
 
-function App() {
-  const [count, setCount] = useState(0);
+const STORAGE_KEY = "discographer:state";
 
+function loadState(): State {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return coerceState(JSON.parse(raw));
+  } catch {
+    // unavailable or corrupt: start fresh
+  }
+  return structuredClone(EXAMPLE);
+}
+
+export default function App() {
+  const [state, setState] = useState<State>(loadState);
+  const plan = useMemo(() => buildPlan(state), [state]);
+  const update = useCallback<Update>(
+    (fn) =>
+      setState((prev) => {
+        const next = structuredClone(prev);
+        fn(next);
+        return next;
+      }),
+    [],
+  );
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // storage full or blocked; the form still works
+    }
+  }, [state]);
+
+  const props = { state, update, plan };
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <main>
+      <header className="top">
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+          <h1>Wikidata Discographer</h1>
+          <p className="lede">
+            Turn an album's tracklist into Wikidata items: the album, a composition and a track for
+            each song, and any singles, all linked together and made with your account.
           </p>
         </div>
-        <button type="button" className="counter" onClick={() => setCount((count) => count + 1)}>
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg className="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <AuthBar />
+      </header>
+      <p className="flow">album —P658→ track —P2550→ composition · single —P658→ track</p>
+      <AlbumSection {...props} />
+      <SettingsSection {...props} />
+      <DiscsSection {...props} />
+      <PerformersSection {...props} />
+      <RunSection {...props} />
+      <ResetButtons onSet={(s) => setState(structuredClone(s))} />
+      <footer>
+        <a href="https://github.com/connorshea/wikidata-discographer">Source</a> · MIT License
+      </footer>
+    </main>
   );
 }
 
-export default App;
+/** Clear and load-the-example, each needing a second click to confirm. */
+function ResetButtons({ onSet }: { onSet: (s: State) => void }) {
+  const [armed, setArmed] = useState<"clear" | "example" | null>(null);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(null), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  const button = (which: "clear" | "example", label: string, target: State) => (
+    <button
+      type="button"
+      className="danger"
+      onClick={() => {
+        if (armed !== which) return setArmed(which);
+        setArmed(null);
+        onSet(target);
+      }}
+    >
+      {armed === which ? "Click again to confirm" : label}
+    </button>
+  );
+  return (
+    <div className="row" style={{ marginBottom: 24 }}>
+      {button("clear", "Clear the form", EMPTY)}
+      {button("example", "Load the example", EXAMPLE)}
+    </div>
+  );
+}
