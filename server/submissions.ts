@@ -36,7 +36,7 @@ import {
   valueKey,
   WikidataEditError,
 } from "./wikidata-client.ts";
-import { buildPlan, type Op } from "../src/lib/plan.ts";
+import { buildPlan, describeOp, type Op } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { ALBUM_ID_FIELDS, ID_PROPERTIES } from "../src/lib/music.ts";
 import type {
@@ -379,15 +379,6 @@ async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unkn
   };
 }
 
-function describe(op: Op): string {
-  if (op.op === "addClaims") return `Add ${op.claims.length} statement(s) to ${op.what}`;
-  const label = Object.values(op.labels)[0] ?? "";
-  const kind = { album: "album", ep: "EP", single: "single", work: "composition", track: "track" }[
-    op.kind as string
-  ];
-  return `${kind ?? "item"} “${label}”`;
-}
-
 /** Execute the plan's operations in order as `user`. Stops at the first failure. */
 export async function runPlan(
   submissionId: number,
@@ -415,7 +406,7 @@ export async function runPlan(
   let status: SubmissionStatus = "done";
   let error: string | null = null;
   for (const op of ops) {
-    const what = describe(op);
+    const what = describeOp(op);
     try {
       if (op.op === "create") {
         const summary = editSummary(`Create ${what}`, editGroup);

@@ -249,12 +249,12 @@ export const PARTS = [
 ] as const;
 const KNOWN_PARTS = new Set<string>(PARTS.flatMap(([, o]) => o.map(([q]) => q)));
 
-const SINGLE_CLASS = "Q134556";
-const COMPOSITION_CLASS = "Q105543609";
-const SONG_FORM = "Q7366";
-const TRACK_UNIT = "Q7302866";
-const SECOND_UNIT = "Q11574";
-const EP_CLASS = "Q169930";
+export const SINGLE_CLASS = "Q134556";
+export const COMPOSITION_CLASS = "Q105543609";
+export const SONG_FORM = "Q7366";
+export const TRACK_UNIT = "Q7302866";
+export const SECOND_UNIT = "Q11574";
+export const EP_CLASS = "Q169930";
 
 // ---------------------------------------------------------------------------
 // Small helpers (also used by the form)
@@ -778,50 +778,26 @@ export function buildPlan(state: State): Plan {
 }
 
 // ---------------------------------------------------------------------------
-// Preview text
+// Describing operations
 // ---------------------------------------------------------------------------
 
-function refText(r: ItemRef): string {
-  return "id" in r ? r.id : `{${r.ref}}`;
-}
+const KIND_NAMES: Record<string, string> = {
+  album: "album",
+  ep: "EP",
+  single: "single",
+  work: "composition",
+  track: "track",
+};
 
-function valueText(v: Value): string {
-  switch (v.type) {
-    case "item":
-      return refText(v);
-    case "string":
-      return JSON.stringify(v.value);
-    case "monolingual":
-      return `${v.language}:${JSON.stringify(v.text)}`;
-    case "time":
-      return `${v.time}/${v.precision}`;
-    case "quantity":
-      return `${v.amount}${v.unit ? `U${v.unit.slice(1)}` : ""}`;
+/**
+ * What an operation does, in a few words: the run log's line for it and the
+ * preview's heading. A create's is what it makes, e.g. `track “Versailles”`.
+ */
+export function describeOp(op: Op): string {
+  if (op.op === "addClaims") {
+    const n = op.claims.length;
+    return `Add ${n} statement${n === 1 ? "" : "s"} to ${op.what}`;
   }
-}
-
-function claimText(c: Claim): string {
-  return [
-    c.property,
-    valueText(c.value),
-    ...(c.qualifiers ?? []).flatMap((q) => [q.property, valueText(q.value)]),
-  ].join("|");
-}
-
-/** The operations as QuickStatements-like lines, for the preview. */
-export function opsText(ops: readonly Op[]): string {
-  const lines: string[] = [];
-  for (const o of ops) {
-    if (o.op === "create") {
-      const k = `{${o.key}}`;
-      lines.push(`CREATE ${k}`);
-      for (const [l, t] of Object.entries(o.labels)) lines.push(`${k}|L${l}|${JSON.stringify(t)}`);
-      for (const [l, t] of Object.entries(o.descriptions))
-        lines.push(`${k}|D${l}|${JSON.stringify(t)}`);
-      for (const c of o.claims) lines.push(`${k}|${claimText(c)}`);
-    } else {
-      for (const c of o.claims) lines.push(`${refText(o.target)}|${claimText(c)}`);
-    }
-  }
-  return lines.join("\n");
+  const label = Object.values(op.labels)[0] ?? "";
+  return `${KIND_NAMES[op.kind] ?? "item"} “${label}”`;
 }
