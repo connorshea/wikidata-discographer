@@ -144,8 +144,6 @@ toolforge webservice buildservice start --mount none
 ```
 
 The server refuses to start while migrations are pending (`server/preflight.ts`).
-After a deploy that adds a migration, run `migrate` again before
-`toolforge webservice restart`.
 
 Load the mirror once by hand. The dump is visible only with `--mount all`:
 
@@ -165,6 +163,25 @@ curl -fsSL https://raw.githubusercontent.com/connorshea/wikidata-discographer/ma
 
 Job and Procfile commands call `node` directly, because the launch image has
 npm but not pnpm.
+
+### Redeploying
+
+The Build Service clones the repo itself, so there is no checkout on the
+bastion to `git pull`. Each build takes the latest `main` (pass `--ref <branch>`
+for another). Watch it with `toolforge build show`. A running web service and
+the scheduled jobs keep the old image until they restart:
+
+```sh
+toolforge build start https://github.com/connorshea/wikidata-discographer
+# only if the build adds a migration, and before the restart:
+toolforge jobs run migrate --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
+  --command "node scripts/migrate.ts" --wait
+toolforge webservice restart
+```
+
+Run the migration first. The new code may query tables or columns that only
+exist after it. Scheduled jobs pick up the new image on their next run. A
+running `import-dump` keeps the old one until it finishes.
 
 ## License
 
