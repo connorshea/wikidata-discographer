@@ -13,6 +13,7 @@ import {
   releaseToForm,
   wikidataLink,
 } from "./musicbrainz.ts";
+import { normalizeAlbumId } from "./music.ts";
 import { buildPlan, parseDisc } from "./plan.ts";
 import { EMPTY, EXAMPLE } from "./state.ts";
 
@@ -168,7 +169,12 @@ describe("releaseToForm", () => {
       artists: "Carly Rae Jepsen",
       type: "Q482994",
       form: "Q208569",
-      ids: { spotify: "", musicbrainz: "b012a117-afa3-4ea3-879f-eeb61b974b0a", appleMusic: "" },
+      ids: {
+        spotify: "",
+        musicbrainz: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+        appleMusic: "",
+        discogs: "4348311",
+      },
     });
     expect(form.date).toBe("2026-09-18");
     expect(form.p407).toBe("Q1860");
@@ -181,7 +187,9 @@ describe("releaseToForm", () => {
       ].join("\n"),
     );
     expect(form.notes).toEqual([]);
-    expect(form.summary).toMatch(/^Loaded 2 discs and 6 tracks\. Found nothing else/);
+    expect(form.summary).toMatch(
+      /^Loaded 2 discs and 6 tracks\. The new album gets the Discogs master ID MusicBrainz links to\. Found nothing else/,
+    );
     expect(form.summary).toContain(
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
     );
@@ -276,6 +284,42 @@ describe("releaseToForm", () => {
     });
   });
 
+  it("reads the Discogs master ID from the release group, not the release", () => {
+    const r = release();
+    r["release-group"].relations = [];
+    r.relations = [
+      {
+        type: "discogs",
+        "target-type": "url",
+        url: { resource: "https://www.discogs.com/release/12345678" },
+      },
+      {
+        type: "discogs",
+        "target-type": "url",
+        url: { resource: "https://www.discogs.com/master/4348311" },
+      },
+    ];
+    const form = releaseToForm(r, NONE);
+    expect(form.album.ids.discogs).toBe("");
+    expect(form.summary).not.toContain("The new album gets");
+    expect(form.notes).toEqual([]);
+  });
+
+  it("fills in no Discogs master when the release group links several", () => {
+    const r = release();
+    const masters = ["4348311", "4348312"].map((id) => ({
+      type: "discogs",
+      "target-type": "url",
+      url: { resource: `https://www.discogs.com/master/${id}` },
+    }));
+    r["release-group"].relations = masters;
+    const form = releaseToForm(r, NONE);
+    expect(form.album.ids.discogs).toBe("");
+    expect(form.notes).toEqual([expect.stringContaining("links 2 Discogs masters")]);
+    // An existing album gets no IDs, so there's nothing to note.
+    expect(releaseToForm(r, { ...NONE, albumQid: "Q140316456" }).notes).toEqual([]);
+  });
+
   it("notes what it can't fill in", () => {
     const r = release();
     r["release-group"]["primary-type"] = "Single";
@@ -328,5 +372,25 @@ describe("applyMbForm", () => {
     expect(rows.every((r) => r.error === undefined)).toBe(true);
     expect(rows[0]).toMatchObject({ n: 1, title: "After All", seconds: 252 });
     expect(buildPlan(next).fieldErrs.albumQid).toBe("");
+  });
+  it("adds the Discogs master ID to a new album", () => {
+    const next = applyMbForm(EMPTY, releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" } }));
+    const album = buildPlan(next).ops.find((o) => o.op === "create" && o.key === "album");
+    expect(album?.op === "create" && album.claims).toContainEqual(
+      expect.objectContaining({ property: "P1954", value: { type: "string", value: "4348311" } }),
+    );
+  });
+});
+
+describe("normalizeAlbumId", () => {
+  it("reads a Discogs master ID from a pasted URL", () => {
+    for (const url of [
+      "https://www.discogs.com/master/4348311-Carly-Rae-Jepsen-Day-And-Night",
+      "https://www.discogs.com/de/master/4348311",
+    ])
+      expect(normalizeAlbumId("discogs", url)).toBe("4348311");
+    expect(normalizeAlbumId("discogs", "https://www.discogs.com/release/12345678")).toBe(
+      "https://www.discogs.com/release/12345678",
+    );
   });
 });
