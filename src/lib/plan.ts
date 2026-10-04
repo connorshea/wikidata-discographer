@@ -30,7 +30,6 @@ export interface Settings {
   albumDesc: string;
   compPerformer: boolean;
   duration: boolean;
-  publishedIn: boolean;
   straight: boolean;
   splitArtists: boolean;
   extendExisting: boolean;
@@ -451,8 +450,8 @@ const chars = (s: string) => s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "_").l
 export const MAX_TRACKS_PER_DISC = 50;
 /** Tracks per run, across all discs; a bigger release goes in several runs. */
 export const MAX_TRACKS = 100;
-/** A backstop on edits per run. At most ~4 per track (composition, track,
- * single, and linking the single), so MAX_TRACKS keeps runs well under it. */
+/** A backstop on edits per run. At most ~3 per track (composition, track and
+ * single), so MAX_TRACKS keeps runs well under it. */
 export const MAX_OPS = 500;
 
 export function buildPlan(state: State): Plan {
@@ -720,7 +719,6 @@ export function buildPlan(state: State): Plan {
   // 3. Tracks, each linked to its composition.
   const compOf = (it: PlanItem): Value => (it.existComp ? item(it.existComp) : ref(compKey(it)));
   for (const it of items) {
-    const publishedIn = S.publishedIn ? [claim("P1433", albumValue)] : [];
     const perf = it.perf.map((p) => claim("P175", item(p)));
     if (it.existTrack) {
       if (S.extendExisting)
@@ -728,7 +726,7 @@ export function buildPlan(state: State): Plan {
           op: "addClaims",
           target: { id: it.existTrack },
           what: where(it),
-          claims: [claim("P2550", compOf(it)), ...publishedIn, ...perf],
+          claims: [claim("P2550", compOf(it)), ...perf],
         });
       continue;
     }
@@ -745,8 +743,6 @@ export function buildPlan(state: State): Plan {
         ...(S.duration
           ? [claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT })]
           : []),
-        ...workLang,
-        ...publishedIn,
       ],
     });
   }
@@ -770,7 +766,7 @@ export function buildPlan(state: State): Plan {
     ],
   });
 
-  // 5. Singles, each pointing at its track and the album; then track → single.
+  // 5. Singles, each pointing at its track and the album.
   let made = 0;
   let reused = 0;
   for (const it of items) {
@@ -780,10 +776,8 @@ export function buildPlan(state: State): Plan {
       { property: "P1545", value: { type: "string", value: "1" } },
     ]);
     const takenFrom = claim("P13602", albumValue);
-    let single: Value;
     if (sg.qid) {
       reused++;
-      single = item(sg.qid);
       ops.push({
         op: "addClaims",
         target: { id: sg.qid },
@@ -797,7 +791,6 @@ export function buildPlan(state: State): Plan {
     } else {
       made++;
       const key = `single:${it.di}:${it.r.n}`;
-      single = ref(key);
       const sd = sg.date.ok ? sg.date : null;
       ops.push({
         op: "create",
@@ -815,13 +808,6 @@ export function buildPlan(state: State): Plan {
         ],
       });
     }
-    if (S.publishedIn)
-      ops.push({
-        op: "addClaims",
-        target: it.existTrack ? { id: it.existTrack } : { ref: trackKey(it) },
-        what: where(it),
-        claims: [claim("P1433", single)],
-      });
   }
 
   // Wikidata rejects an over-long label or description, which would stop the run partway.

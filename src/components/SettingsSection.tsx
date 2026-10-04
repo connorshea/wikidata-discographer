@@ -13,21 +13,14 @@ import { FieldErr, InfoTip, Pids } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc" | "singleDesc";
-type FlagKey =
-  | "compPerformer"
-  | "duration"
-  | "publishedIn"
-  | "straight"
-  | "splitArtists"
-  | "extendExisting";
+type FlagKey = "compPerformer" | "duration" | "straight" | "splitArtists" | "extendExisting";
 
 const FLAGS: [FlagKey, string][] = [
   ["compPerformer", "Add performer (P175) to compositions as well as tracks"],
   ["duration", "Add duration (P2047, in seconds) to tracks"],
-  ["publishedIn", "Add published in (P1433) the album, and any single, on each track"],
   ["straight", "Convert curly apostrophes and quotes to straight ones"],
   ["splitArtists", "Split artists on “,” “&” “feat.” “ft.”"],
-  ["extendExisting", "Add missing links to existing items you reuse (P2550, P1433, P175)"],
+  ["extendExisting", "Add missing links to existing items you reuse (P2550, P175)"],
 ];
 
 export default function SettingsSection({ state, update, plan }: SectionProps) {
@@ -152,7 +145,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
               onChange={(e) => set("p407", normalizeQid(e.target.value))}
             />
           )}
-          <span className="sub">Added to compositions and tracks</span>
+          <span className="sub">Added to a new album, compositions and singles (not tracks)</span>
           <FieldErr id="p407" msg={errs.p407} />
         </div>
       </div>

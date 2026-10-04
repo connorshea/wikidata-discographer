@@ -93,11 +93,9 @@ describe("buildPlan", () => {
 
     const track = find(ops, "track:0:2");
     expect(track?.op === "create" && track.claims).toEqual(
-      expect.arrayContaining([
-        { property: "P2550", value: { type: "item", ref: "comp:0:2" } },
-        { property: "P1433", value: { type: "item", ref: "album" } },
-      ]),
+      expect.arrayContaining([{ property: "P2550", value: { type: "item", ref: "comp:0:2" } }]),
     );
+    expect(track?.op === "create" && track.claims.some((c) => c.property === "P1433")).toBe(false);
     const single = find(ops, "single:0:2");
     expect(single?.op === "create" && single.claims).toEqual(
       expect.arrayContaining([
@@ -105,12 +103,8 @@ describe("buildPlan", () => {
         expect.objectContaining({ property: "P658", value: { type: "item", ref: "track:0:2" } }),
       ]),
     );
-    // The track gets P1433 the single once the single exists.
-    expect(ops.at(-1)).toMatchObject({
-      op: "addClaims",
-      target: { ref: "track:0:2" },
-      claims: [{ property: "P1433", value: { type: "item", ref: "single:0:2" } }],
-    });
+    // Nothing adds P1433 to the track afterwards.
+    expect(ops.at(-1)).toBe(single);
   });
 
   it("puts the disc and position on each tracklist statement", () => {
@@ -126,14 +120,16 @@ describe("buildPlan", () => {
     });
   });
 
-  it("gives compositions a publication date but not tracks", () => {
+  it("gives compositions a publication date and language but not tracks", () => {
     const { ops } = buildPlan(EXAMPLE);
-    const has577 = (key: string) => {
+    const has = (key: string, property: string) => {
       const o = find(ops, key);
-      return o?.op === "create" && o.claims.some((c) => c.property === "P577");
+      return o?.op === "create" && o.claims.some((c) => c.property === property);
     };
-    expect(has577("comp:0:2")).toBe(true);
-    expect(has577("track:0:2")).toBe(false);
+    for (const p of ["P577", "P407"]) {
+      expect(has("comp:0:2", p)).toBe(true);
+      expect(has("track:0:2", p)).toBe(false);
+    }
   });
 
   it("adds the number of tracks to an existing album only if it has none", () => {
