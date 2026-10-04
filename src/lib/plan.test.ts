@@ -103,6 +103,7 @@ describe("buildPlan", () => {
         expect.objectContaining({ property: "P658", value: { type: "item", ref: "track:0:2" } }),
       ]),
     );
+    expect(single?.op === "create" && single.claims.some((c) => c.property === "P407")).toBe(false);
     // Nothing adds P1433 to the track afterwards.
     expect(ops.at(-1)).toBe(single);
   });
