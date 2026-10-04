@@ -94,6 +94,16 @@ describe("fillUnambiguous", () => {
     expect(disc.track).toEqual({ 2: "Q50", 3: "Q13" });
     expect(disc.comp).toEqual({ 1: "Q99", 3: "Q23" });
   });
+
+  it("fills an empty composition from the track already in the field", () => {
+    const disc = emptyDisc();
+    disc.track[1] = "Q50"; // e.g. found by its MusicBrainz recording ID
+    const rows = {
+      "0:1": rm({ track: [track("Q50", "Q60")], comp: [match("Q60"), match("Q61")] }),
+    };
+    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
+    expect(disc.comp).toEqual({ 1: "Q60" });
+  });
 });
 
 describe("fillUnambiguous with guesses", () => {
@@ -203,6 +213,17 @@ describe("reviewTracks", () => {
       [true, false],
       [false, false],
     ]);
+  });
+
+  it("keeps a used track open until its own composition is used or dismissed", () => {
+    const disc = emptyDisc();
+    disc.track[1] = "Q50";
+    const recorded = { "0:1": rm({ track: [track("Q50", "Q60")], comp: [match("Q60")] }) };
+    expect(reviewTracks([disc], [[row(1)]], recorded, new Set())[0].reviewed).toBe(false);
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q60")]);
+    expect(reviewTracks([disc], [[row(1)]], recorded, dismissed)[0].reviewed).toBe(true);
+    disc.comp[1] = "Q60";
+    expect(reviewTracks([disc], [[row(1)]], recorded, new Set())[0].reviewed).toBe(true);
   });
 
   it("counts a track reviewed once every candidate is dismissed or its field filled", () => {

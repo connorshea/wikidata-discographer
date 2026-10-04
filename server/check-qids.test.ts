@@ -42,6 +42,7 @@ function stubWiki({
   tooBig = [],
   instanceOf = ["Q482994"],
   tracklist = [],
+  compositions = {},
 }: {
   missing?: string[];
   redirects?: Record<string, string>;
@@ -50,6 +51,8 @@ function stubWiki({
   instanceOf?: string[];
   /** The album's P658 values. */
   tracklist?: string[];
+  /** Each track's P2550 values. */
+  compositions?: Record<string, string[]>;
 }) {
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
@@ -67,6 +70,27 @@ function stubWiki({
       });
     }
     expect(q.get("action")).toBe("wbgetentities");
+    if (q.get("props")!.includes("claims")) {
+      const ids = q.get("ids")!.split("|");
+      expect(ids.length).toBeLessThanOrEqual(50);
+      const claim = (id: string) => ({
+        mainsnak: { snaktype: "value", property: "P2550", datavalue: { value: { id } } },
+        rank: "normal",
+      });
+      return Response.json({
+        entities: Object.fromEntries(
+          ids.map((id) => [
+            id,
+            {
+              id,
+              type: "item",
+              lastrevid: 1,
+              claims: { P2550: (compositions[id] ?? []).map(claim) },
+            },
+          ]),
+        ),
+      });
+    }
     expect(q.get("props")).toBe("info");
     const ids = q.get("ids")!.split("|");
     expect(ids.length).toBeLessThanOrEqual(50);
@@ -138,6 +162,27 @@ describe("checkPlanQids", () => {
     stubWiki({ tracklist: ["Q1"] });
     expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
       `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 1 track. The app only adds tracklists to albums without one.`,
+    ]);
+  });
+
+  it("refuses to give a reused track a second composition", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].track[1] = "Q50"; // records Q60, and the form has its composition
+    state.discs[0].comp[1] = "Q60";
+    state.discs[0].track[2] = "Q51"; // records Q61, and the run would create one
+    delete state.discs[0].comp[2];
+    state.discs[0].track[3] = "Q52"; // records none
+    delete state.discs[0].comp[3];
+    stubWiki({ compositions: { Q50: ["Q60"], Q51: ["Q61"] } });
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      "Disc 1 track 2 track: Q51 already records the composition Q61. Put Q61 in the track's composition field, so the track isn't given a second one.",
+    ]);
+    // A different composition in the field is refused too.
+    state.discs[0].comp[2] = "Q62";
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      "Disc 1 track 2 track: Q51 already records the composition Q61. Put Q61 in the track's composition field, so the track isn't given a second one.",
     ]);
   });
 
