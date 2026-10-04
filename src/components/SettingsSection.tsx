@@ -4,6 +4,7 @@ import {
   LABEL_LANGS,
   LANGS,
   NO_LINGUISTIC_CONTENT,
+  normalizeDate,
   normalizeQid,
   type Settings,
   TRACK_TYPES,
@@ -105,10 +106,11 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
             spellCheck={false}
             value={S.date}
             onChange={(e) => set("date", e.target.value)}
+            onBlur={(e) => set("date", normalizeDate(e.target.value))}
           />
           <span className="sub">
-            Album release date, also used for compositions and tracks. YYYY, YYYY-MM or YYYY-MM-DD;
-            blank to skip
+            Album release date, also used for compositions and tracks. YYYY, YYYY-MM or YYYY-MM-DD
+            (“June 12, 2012” is converted), blank to skip
           </span>
           <FieldErr id="date" msg={errs.date} />
         </label>
