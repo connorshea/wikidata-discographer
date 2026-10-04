@@ -17,6 +17,23 @@ import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import { ConfirmButton } from "./components/ConfirmDialog.tsx";
 import MusicBrainzImport from "./components/MusicBrainzImport.tsx";
 
+/**
+ * The ID Wikidata gave the production OAuth consumer when it was registered,
+ * listed on Special:OAuthListConsumers. MediaWiki tags every edit made through it
+ * with "OAuth CID: <id>". A local or test consumer gets a different ID, but only
+ * the production consumer's edits are worth linking to.
+ */
+const OAUTH_CONSUMER_ID = 19583;
+
+/** Every user's edits through the tool in the last 30 days, grouped by page. */
+const RECENT_CHANGES_URL = `https://www.wikidata.org/w/index.php?${new URLSearchParams({
+  title: "Special:RecentChanges",
+  tagfilter: `OAuth CID: ${OAUTH_CONSUMER_ID}`,
+  hidecategorization: "1",
+  enhanced: "1",
+  urlversion: "2",
+})}`;
+
 /** An item type's name with its colour swatch. */
 function Kind({ edge, children }: { edge: string; children: string }) {
   return (
@@ -164,7 +181,11 @@ export default function App() {
         />
       </div>
       <footer>
-        <a href="https://github.com/connorshea/wikidata-discographer">Source</a> · MIT License
+        <a href="https://github.com/connorshea/wikidata-discographer">Source</a> ·{" "}
+        <a href={RECENT_CHANGES_URL} title="Edits made with this tool in the last 30 days">
+          Recent changes
+        </a>{" "}
+        · MIT License
       </footer>
     </main>
   );
