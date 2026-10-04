@@ -81,9 +81,10 @@ export function pickSingle(disc: Disc, n: number, qid: string): void {
  *
  * A reused track is linked to the composition field (P2550), so the two must
  * agree: a track is left out when it records a different composition than the
- * one filled in, and the composition is only filled from the row's own
- * matches when the track is new, or a matched one that records none (a track
- * entered by hand may record one this doesn't know about).
+ * one filled in, an empty composition takes the one the track records, and
+ * the composition is only filled from the row's own matches when the track is
+ * new, or a matched one that records none (a track entered by hand may record
+ * one this doesn't know about).
  */
 export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, RowMatches>): number {
   let filled = 0;
@@ -104,6 +105,7 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
       }
     }
     const track = disc.track[n] ? m.track.find((t) => t.qid === disc.track[n]) : undefined;
+    if (track?.composition) set(disc.comp, n, track.composition);
     const compFree = !disc.track[n] || (track !== undefined && !track.composition);
     if (compFree && m.comp.length === 1 && !isGuess(m.comp[0])) set(disc.comp, n, m.comp[0].qid);
     const sg = disc.single[n];
@@ -207,6 +209,8 @@ export interface TrackReview {
 /**
  * Each track's candidates and whether it's been reviewed: a candidate is
  * used, or every one is dismissed or has its field filled with something else.
+ * A used track's own composition must also be used or dismissed, since the
+ * run links the track to the composition field.
  */
 export function reviewTracks(
   discs: readonly Disc[],
@@ -238,13 +242,19 @@ export function reviewTracks(
       );
       if (!all.length) continue;
       const candidates = all.filter((c) => !dismissed.has(c.id));
+      const recorded = (
+        all.find((c) => c.slot === "track" && c.used)?.match as TrackMatch | undefined
+      )?.composition;
+      const compOpen = candidates.some(
+        (c) => c.slot === "comp" && c.match.qid === recorded && !c.used,
+      );
       out.push({
         di,
         n: r.n,
         title: r.title,
         candidates,
         dismissed: all.length - candidates.length,
-        reviewed: all.some((c) => c.used) || candidates.every((c) => c.taken),
+        reviewed: !compOpen && (all.some((c) => c.used) || candidates.every((c) => c.taken)),
       });
     }
   });

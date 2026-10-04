@@ -1,11 +1,22 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
+import {
+  adoptOwnRun,
+  applyCreated,
+  createdAny,
+  initialRunId,
+  isGone,
+  loadOwnRun,
+  OWN_RUN_KEY,
+  type OwnRun,
+  saveOwnRun,
+  settleOwnRun,
+} from "../lib/own-run.ts";
 import type { Plan, State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type {
-  EditLogEntry,
   SubmissionInfo,
   SubmissionListResponse,
   SubmissionRequest,
@@ -14,30 +25,39 @@ import type {
 import { WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import PlanPreview from "./PlanPreview.tsx";
-import type { SectionProps, Update } from "./types.ts";
+import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
+import { useStorageEvent } from "./use-storage-event.ts";
 
 const POLL_MS = 2000;
 
 type UnknownRun = UnknownRunConflict["unknownRun"];
 
-/** Write the QIDs a run created back into the form, so a rerun reuses them instead of duplicating. */
-function applyCreated(edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[], update: Update) {
-  const created = edits.filter((e) => e.op === "create" && e.ok && e.key && e.qid);
-  if (!created.length) return;
-  update((s: State) => {
-    for (const { key, qid } of created) {
-      const [kind, di, n] = key!.split(":");
-      const disc = s.discs[Number(di)];
-      if (kind === "album") {
-        s.album.mode = "existing";
-        s.album.qid = qid!;
-      } else if (!disc) continue;
-      else if (kind === "comp") disc.comp[n] = qid!;
-      else if (kind === "track") disc.track[n] = qid!;
-      else if (kind === "single") disc.single[n] = { date: "", qid: qid! };
-    }
-  });
+/** Poll a run until it ends, calling `onRun` with each answer. Returns a cleanup. */
+function watchRun(
+  id: number,
+  onRun: (r: SubmissionInfo) => void,
+  onError: (e: unknown) => void,
+): () => void {
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const poll = () =>
+    api<SubmissionInfo>(`/api/submissions/${id}`)
+      .then((r) => {
+        if (cancelled) return;
+        onRun(r);
+        if (r.status === "running") timer = setTimeout(poll, POLL_MS);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        onError(e);
+        if (!isGone(e)) timer = setTimeout(poll, POLL_MS * 3);
+      });
+  void poll();
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+  };
 }
 
 export default function RunSection({
@@ -47,21 +67,31 @@ export default function RunSection({
   albumTracklist,
   unreviewed,
   matchesPending,
+  formId,
+  stale,
 }: SectionProps & {
   albumTracklist: AlbumTracklist | null;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
   unreviewed: number;
   /** The lookup for possible matches is in flight, so there may be more to review. */
   matchesPending: boolean;
+  /** Identifies the form until it's cleared or replaced (see `useFormId`). */
+  formId: string;
+  /** Another tab changed the form since: this tab mustn't run it. */
+  stale: boolean;
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
   const search = useSearch();
   const [, navigate] = useLocation();
-  const [runId, setRunId] = useState<number | null>(() => {
-    const id = Number(new URLSearchParams(search).get("run"));
-    return Number.isInteger(id) && id > 0 ? id : null;
-  });
+  // Only a run started from this form writes its QIDs back into it.
+  const [ownRun, setOwnRun] = useState(loadOwnRun);
+  const ownRunRef = useRef(ownRun);
+  const formIdRef = useRef(formId);
+  useEffect(() => {
+    formIdRef.current = formId;
+  }, [formId]);
+  const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!new URLSearchParams(search).has("run")) return;
@@ -73,35 +103,66 @@ export default function RunSection({
   const [starting, setStarting] = useState(false);
   // The last run ended "unknown": what the server wants done before another.
   const [unknownRun, setUnknownRun] = useState<UnknownRun | null>(null);
-  // Only a run started from this form writes its QIDs back into it.
-  const ownRun = useRef<number | null>(null);
 
+  const followOwnRun = useCallback((o: OwnRun | null) => {
+    ownRunRef.current = o;
+    setOwnRun(o);
+    saveOwnRun(o);
+  }, []);
+  // Once the own run ends, stop following it, and write its QIDs back if the
+  // form is still the one it started from.
+  const settle = useCallback(
+    (r: SubmissionInfo) => {
+      const action = settleOwnRun(r, ownRunRef.current, formIdRef.current);
+      if (action === "keep") return;
+      followOwnRun(null);
+      if (action === "apply" && createdAny(r.edits)) update((s) => applyCreated(s, r.edits));
+    },
+    [followOwnRun, update],
+  );
+  // A run started in another tab on the same form: follow it here too, so its
+  // QIDs are saved even if that tab is closed before the run ends.
+  useStorageEvent(OWN_RUN_KEY, (saved) => {
+    const cur = ownRunRef.current;
+    const next = adoptOwnRun(cur, saved);
+    if (next?.run === cur?.run && next?.form === cur?.form) return;
+    // Not saved again: it came from storage.
+    ownRunRef.current = next;
+    setOwnRun(next);
+    if (next) setRunId((id) => id ?? next.run);
+  });
+  const dropIfGone = useCallback(
+    (id: number, e: unknown) => {
+      if (isGone(e) && ownRunRef.current?.run === id) followOwnRun(null);
+    },
+    [followOwnRun],
+  );
+
+  // Runs are only readable logged in.
+  const loggedIn = !!user;
+
+  // The run on show.
   useEffect(() => {
-    if (runId === null) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = () =>
-      api<SubmissionInfo>(`/api/submissions/${runId}`)
-        .then((r) => {
-          if (cancelled) return;
-          setRun(r);
-          if (r.status === "running") timer = setTimeout(poll, POLL_MS);
-          else if (ownRun.current === r.id) {
-            ownRun.current = null;
-            applyCreated(r.edits, update);
-          }
-        })
-        .catch((e: unknown) => {
-          if (cancelled) return;
-          setError(e instanceof Error ? e.message : "Couldn't load the run.");
-          timer = setTimeout(poll, POLL_MS * 3);
-        });
-    void poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [runId, update]);
+    if (runId === null || !loggedIn) return;
+    return watchRun(
+      runId,
+      (r) => {
+        setRun(r);
+        settle(r);
+      },
+      (e) => {
+        setError(e instanceof Error ? e.message : "Couldn't load the run.");
+        dropIfGone(runId, e);
+      },
+    );
+  }, [runId, loggedIn, settle, dropIfGone]);
+
+  // The own run, while another is on show.
+  const ownRunId = ownRun?.run ?? null;
+  useEffect(() => {
+    if (ownRunId === null || ownRunId === runId || !loggedIn) return;
+    return watchRun(ownRunId, settle, (e) => dropIfGone(ownRunId, e));
+  }, [ownRunId, runId, loggedIn, settle, dropIfGone]);
 
   const running = run?.status === "running";
   const start = (confirmUnknown?: number) => {
@@ -111,7 +172,7 @@ export default function RunSection({
     const body: SubmissionRequest = { state, confirmUnknown };
     api<{ id: number }>("/api/submissions", { method: "POST", body })
       .then(({ id }) => {
-        ownRun.current = id;
+        followOwnRun({ run: id, form: formId });
         setRun(null);
         setRunId(id);
       })
@@ -151,6 +212,7 @@ export default function RunSection({
             !!albumTracklist ||
             unreviewed > 0 ||
             matchesPending ||
+            stale ||
             running ||
             starting
           }
@@ -160,6 +222,9 @@ export default function RunSection({
           onConfirm={() => start()}
         />
         {!user && <span className="hint">Log in to edit.</span>}
+        {user && stale && (
+          <span className="hint">The form was changed in another tab. Reload this page first.</span>
+        )}
         {user && albumTracklist && (
           <span className="hint">The album already has a tracklist. See the Album section.</span>
         )}
@@ -181,10 +246,13 @@ export default function RunSection({
           run={unknownRun}
           disabled={starting}
           onUse={() => {
-            applyCreated(
-              [{ op: "create", ok: true, key: unknownRun.key, qid: unknownRun.qid }],
-              update,
-            );
+            const found = {
+              op: "create" as const,
+              ok: true,
+              key: unknownRun.key,
+              qid: unknownRun.qid,
+            };
+            update((s) => applyCreated(s, [found]));
             setUnknownRun(null);
           }}
           onConfirm={() => start(unknownRun.id)}

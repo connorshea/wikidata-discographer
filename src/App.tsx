@@ -5,6 +5,7 @@ import { useAuth } from "./lib/auth-context.ts";
 import { PROPERTY_LABELS } from "./lib/preview.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY, EXAMPLE } from "./lib/state.ts";
+import { useStorageEvent } from "./components/use-storage-event.ts";
 import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
 import PerformersSection from "./components/PerformersSection.tsx";
@@ -91,6 +92,34 @@ function loadState(): State {
   return structuredClone(EMPTY);
 }
 
+// Identifies the form until it's cleared or replaced, so a run's QIDs only go
+// back into the form it started from (src/components/RunSection.tsx).
+const FORM_ID_KEY = "discographer:formId";
+
+// Not crypto.randomUUID, which only exists on HTTPS and localhost.
+const newFormId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+/** The form's id, and a function that gives it a new one. */
+function useFormId(): [string, () => void] {
+  const [id, setId] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FORM_ID_KEY);
+      if (saved) return saved;
+    } catch {
+      // unavailable: a new id for this page load
+    }
+    return newFormId();
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(FORM_ID_KEY, id);
+    } catch {
+      // storage blocked; the id lasts for this page load
+    }
+  }, [id]);
+  return [id, useCallback(() => setId(newFormId()), [])];
+}
+
 /** Whether the form is as Clear leaves it, so replacing it loses nothing. */
 const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
 
@@ -169,6 +198,12 @@ export default function App() {
 /** The form for an album's tracklist, and the run that puts it on Wikidata. */
 function Form() {
   const [state, setState] = useState<State>(loadState);
+  const [formId, renewFormId] = useFormId();
+  // Clear, the example and a MusicBrainz import start a new form.
+  const replace = (next: State) => {
+    setState(next);
+    renewFormId();
+  };
   const plan = useMemo(() => buildPlan(state), [state]);
   const update = useCallback<Update>(
     (fn) =>
@@ -179,13 +214,29 @@ function Form() {
       }),
     [],
   );
+  // The form another tab saved, while this tab's differs from it. Such a tab
+  // is stale: it may lack QIDs a run wrote back there, so it neither runs nor
+  // saves (which would undo the other tab's changes) until it's reloaded.
+  const [otherTab, setOtherTab] = useState<string | null>(null);
+  const json = useMemo(() => JSON.stringify(coerceState(state)), [state]);
+  if (otherTab !== null && otherTab === json) setOtherTab(null);
+  const stale = otherTab !== null;
+  useStorageEvent(STORAGE_KEY, (saved) => {
+    if (!saved) return;
+    try {
+      setOtherTab(JSON.stringify(coerceState(JSON.parse(saved))));
+    } catch {
+      // corrupt: nothing to compare with
+    }
+  });
   useEffect(() => {
+    if (stale) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // storage full or blocked; the form still works
     }
-  }, [state]);
+  }, [state, stale]);
 
   const albumTracklist = useAlbumTracklist(state);
   const { matches, status } = useMatches(state, plan);
@@ -196,6 +247,17 @@ function Form() {
   return (
     <main>
       <Header />
+      {stale && (
+        <div className="msg warn row">
+          <span>
+            The form was changed in another tab. Reload to get those changes. Until then this tab
+            can't run, and what you change here isn't saved.
+          </span>
+          <button type="button" onClick={() => location.reload()}>
+            Reload
+          </button>
+        </div>
+      )}
       <ItemModel />
       <div className="row example">
         <ConfirmButton
@@ -210,15 +272,11 @@ function Form() {
                   action: "Replace",
                 }
           }
-          onConfirm={() => setState(structuredClone(EXAMPLE))}
+          onConfirm={() => replace(structuredClone(EXAMPLE))}
         />
         <span className="hint">A filled-in album, to see how the form works.</span>
       </div>
-      <MusicBrainzImport
-        state={state}
-        needsConfirm={!isEmpty(state)}
-        onLoad={(next) => setState(next)}
-      />
+      <MusicBrainzImport state={state} needsConfirm={!isEmpty(state)} onLoad={replace} />
       <AlbumSection {...props} albumTracklist={albumTracklist} />
       <SettingsSection {...props} />
       <DiscsSection {...props} reviews={reviews} />
@@ -229,6 +287,8 @@ function Form() {
         albumTracklist={albumTracklist}
         unreviewed={reviews.filter((r) => !r.reviewed).length}
         matchesPending={status === "pending"}
+        formId={formId}
+        stale={stale}
       />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton
@@ -243,7 +303,7 @@ function Form() {
                   action: "Clear the form",
                 }
           }
-          onConfirm={() => setState(structuredClone(EMPTY))}
+          onConfirm={() => replace(structuredClone(EMPTY))}
         />
       </div>
       <Footer />

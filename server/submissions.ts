@@ -8,8 +8,9 @@
 //   GET  /api/submissions/:id    one run, with its edit log (the client polls this)
 //
 // One run per user at a time. Runs live in this process: a restart marks the
-// ones it cut off as "interrupted" (see markInterrupted), and the client has
-// already been told which items were created, so it can reuse them on a retry.
+// ones it cut off as "interrupted", or "unknown" if a create was in flight
+// (see markInterrupted). The client has already been told which items were
+// created, so it can reuse them on a retry.
 //
 // A create that gets no answer may have been saved anyway, so it is never sent
 // again: the run looks for the item (server/recover.ts) and carries on with it
@@ -186,7 +187,16 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
     input: state,
   });
   const id = res.insertId;
-  void runPlan(id, user, plan.ops, editGroup).finally(() => running.delete(user.id));
+  // The guard is only let go once the run's end is saved. Otherwise the DB
+  // still says "running" and the form never got its QIDs, so another run of
+  // the same form would create them again. It's held until the next boot's
+  // markInterrupted.
+  void runPlan(id, user, plan.ops, editGroup).then(
+    (saved) => {
+      if (saved) running.delete(user.id);
+    },
+    (err: unknown) => console.error(`submission ${id}: run failed`, err),
+  );
   return c.json({ id }, 202);
 }
 
@@ -237,18 +247,21 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     finishedAt: row.finishedAt,
     total: buildPlan(coerceState(row.input)).ops.length,
     waitingUntil: waitingUntil(row.status, row.userId),
-    edits: edits.map((e): EditLogEntry => ({
-      op: e.op as EditLogEntry["op"],
-      key: e.key,
-      kind: e.kind,
-      what: e.what,
-      qid: e.qid == null ? null : toQid(e.qid),
-      revid: e.revid,
-      ok: e.ok,
-      unknown: e.unknown,
-      skipped: e.skipped,
-      error: e.errorText,
-    })),
+    edits: edits
+      // A create still waiting on Wikidata's answer isn't in the log yet.
+      .filter((e) => !(row.status === "running" && e.unknown && e.errorCode == null))
+      .map((e): EditLogEntry => ({
+        op: e.op as EditLogEntry["op"],
+        key: e.key,
+        kind: e.kind,
+        what: e.what,
+        qid: e.qid == null ? null : toQid(e.qid),
+        revid: e.revid,
+        ok: e.ok,
+        unknown: e.unknown,
+        skipped: e.skipped,
+        error: e.errorText,
+      })),
   } satisfies SubmissionInfo);
 });
 
@@ -264,7 +277,13 @@ function waitingUntil(status: string, userId: number): string | null {
  */
 export async function markInterrupted(): Promise<void> {
   const pending = await db
-    .select({ id: submissions.id, what: wikidataEdits.what, key: wikidataEdits.key })
+    .select({
+      id: submissions.id,
+      editId: wikidataEdits.id,
+      errorCode: wikidataEdits.errorCode,
+      what: wikidataEdits.what,
+      key: wikidataEdits.key,
+    })
     .from(submissions)
     .innerJoin(wikidataEdits, eq(wikidataEdits.submissionId, submissions.id))
     .where(
@@ -274,7 +293,17 @@ export async function markInterrupted(): Promise<void> {
         eq(wikidataEdits.ok, false),
       ),
     );
-  for (const p of pending)
+  for (const p of pending) {
+    // Cut off while Wikidata had the create, before any answer.
+    if (p.errorCode == null)
+      await db
+        .update(wikidataEdits)
+        .set({
+          errorCode: "interrupted",
+          errorText:
+            "The server restarted while creating this, so it may have been created anyway.",
+        })
+        .where(eq(wikidataEdits.id, p.editId));
     await db
       .update(submissions)
       .set({
@@ -283,6 +312,7 @@ export async function markInterrupted(): Promise<void> {
         finishedAt: toSqlDatetime(new Date()),
       })
       .where(eq(submissions.id, p.id));
+  }
   await db
     .update(submissions)
     .set({
@@ -384,6 +414,11 @@ async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unkn
           .update(wikidataEdits)
           .set({ qid: qidNumber(qid), revid: entity.lastrevid ?? null })
           .where(eq(wikidataEdits.id, pending.id));
+        if (pending.key === "album")
+          await db
+            .update(submissions)
+            .set({ albumQid: qidNumber(qid) })
+            .where(eq(submissions.id, last.id));
         const row = entityToRow(entity);
         if (row)
           await upsertRows([row], { source: "app" }).catch((e: unknown) =>
@@ -410,7 +445,8 @@ export async function runPlan(
   user: AuthUser,
   ops: readonly Op[],
   editGroup: string,
-): Promise<void> {
+  { retryMs = [2_000, 10_000] }: { retryMs?: readonly number[] } = {},
+): Promise<boolean> {
   const editUser: EditUser = { id: user.id, username: user.username };
   const created = new Map<string, string>();
   const resolve = (key: string) => {
@@ -432,31 +468,43 @@ export async function runPlan(
   let error: string | null = null;
   for (const op of ops) {
     const what = describeOp(op);
+    // A create's log row, until it's settled, and whether the item may exist.
+    let pendingId: number | null = null;
+    let mayExist = false;
     try {
       if (op.op === "create") {
         const summary = editSummary(`Create ${what}`, editGroup);
         const startedAt = new Date();
         let entity: Entity;
-        let pendingId: number | null = null;
+        // Log it as unknown before sending, so a restart before Wikidata
+        // answers ends the run "unknown" (markInterrupted) rather than
+        // inviting a rerun that would create it twice.
+        const [res] = await log({
+          op: "create",
+          key: op.key,
+          kind: op.kind,
+          what,
+          ok: false,
+          unknown: true,
+          startedAt: toSqlDatetime(startedAt),
+        });
+        pendingId = res.insertId;
+        mayExist = true;
         try {
           entity = await createItem(editUser, op, resolve, summary);
         } catch (err) {
-          if (!(err instanceof WikidataEditError && err.ambiguous)) throw err;
-          // It may have been saved, so it is never sent again. Log it as
-          // unknown before looking, so a restart meanwhile ends the run
-          // "unknown" (markInterrupted) rather than inviting a rerun.
-          const [res] = await log({
-            op: "create",
-            key: op.key,
-            kind: op.kind,
-            what,
-            ok: false,
-            unknown: true,
-            startedAt: toSqlDatetime(startedAt),
-            errorCode: err.code.slice(0, 64),
-            errorText: `Wikidata didn't answer (${err.message}), so it may have been created anyway.`,
-          });
-          pendingId = res.insertId;
+          if (!(err instanceof WikidataEditError && err.ambiguous)) {
+            mayExist = false;
+            throw err;
+          }
+          // It may have been saved, so it is never sent again.
+          await db
+            .update(wikidataEdits)
+            .set({
+              errorCode: err.code.slice(0, 64),
+              errorText: `Wikidata didn't answer (${err.message}), so it may have been created anyway.`,
+            })
+            .where(eq(wikidataEdits.id, pendingId));
           const found = await waitForCreated(
             {
               username: user.username,
@@ -480,28 +528,18 @@ export async function runPlan(
           entity = found[0];
         }
         created.set(op.key, entity.id);
-        if (pendingId === null)
-          await log({
-            op: "create",
-            key: op.key,
-            kind: op.kind,
-            what,
-            qid: entity.id,
-            revid: entity.lastrevid ?? null,
+        // Settled. If it was found after no answer, `error_code` keeps what went wrong.
+        await db
+          .update(wikidataEdits)
+          .set({
             ok: true,
-          });
-        // Found it: carry on as if it had answered. `error_code` keeps what went wrong.
-        else
-          await db
-            .update(wikidataEdits)
-            .set({
-              ok: true,
-              unknown: false,
-              qid: qidNumber(entity.id),
-              revid: entity.lastrevid ?? null,
-              errorText: null,
-            })
-            .where(eq(wikidataEdits.id, pendingId));
+            unknown: false,
+            qid: qidNumber(entity.id),
+            revid: entity.lastrevid ?? null,
+            errorText: null,
+          })
+          .where(eq(wikidataEdits.id, pendingId));
+        pendingId = null;
         if (op.key === "album")
           await db
             .update(submissions)
@@ -553,26 +591,53 @@ export async function runPlan(
         error = err.message;
         break;
       }
+      // The create may have been saved but its row isn't settled (e.g. the
+      // search after no answer failed): its pending row keeps a rerun from
+      // sending it again.
+      if (op.op === "create" && mayExist && pendingId !== null) {
+        console.error(`submission ${submissionId}: ${what} failed`, err);
+        status = "unknown";
+        error = unknownMessage(what, op.key);
+        break;
+      }
       const code = err instanceof WikidataEditError ? err.code : "internal";
       const text = err instanceof Error ? err.message : String(err);
       if (!(err instanceof WikidataEditError))
         console.error(`submission ${submissionId}: ${what} failed`, err);
-      await log({
-        op: op.op,
-        key: op.op === "create" ? op.key : null,
-        kind: op.op === "create" ? op.kind : null,
-        what,
-        ok: false,
-        errorCode: code.slice(0, 64),
-        errorText: text,
-      }).catch(() => {});
+      const failure = { ok: false, errorCode: code.slice(0, 64), errorText: text };
+      // Wikidata refused the create: its pending row becomes the failure.
+      await (
+        pendingId !== null
+          ? db
+              .update(wikidataEdits)
+              .set({ ...failure, unknown: false })
+              .where(eq(wikidataEdits.id, pendingId))
+          : log({
+              op: op.op,
+              key: op.op === "create" ? op.key : null,
+              kind: op.op === "create" ? op.kind : null,
+              what,
+              ...failure,
+            })
+      ).catch(() => {});
       status = "failed";
       error = `${what}: ${text}`;
       break;
     }
   }
-  await db
-    .update(submissions)
-    .set({ status, error, finishedAt: toSqlDatetime(new Date()) })
-    .where(eq(submissions.id, submissionId));
+  // Whether the run's end was saved. If not, it stays "running" until the
+  // next boot's markInterrupted.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db
+        .update(submissions)
+        .set({ status, error, finishedAt: toSqlDatetime(new Date()) })
+        .where(eq(submissions.id, submissionId));
+      return true;
+    } catch (err) {
+      console.error(`submission ${submissionId}: status write failed`, err);
+      if (attempt >= retryMs.length) return false;
+      await new Promise((r) => setTimeout(r, retryMs[attempt]));
+    }
+  }
 }

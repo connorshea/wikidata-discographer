@@ -10,7 +10,10 @@
 // The existing album must also be an album or EP: an instance of one of the
 // album or EP classes the app knows. And it mustn't have a tracklist yet, or
 // the run would add a second one beside it.
-import { checkItems, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
+//
+// A reused track mustn't record a different composition than the one the run
+// links it to, or it would end up with two (P2550).
+import { checkItems, getEntities, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
 import { CLASS_KINDS } from "../src/lib/music.ts";
 import { ALBUM_FORMS, type Op, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
@@ -123,10 +126,11 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
     const problem = (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album));
     if (problem) problems.unshift(problem);
   }
+  problems.push(...(await checkTrackCompositions(ops, sources, results)));
   if (problems.length > MAX_PROBLEMS)
     return [
       ...problems.slice(0, MAX_PROBLEMS),
-      `…and ${problems.length - MAX_PROBLEMS} more QIDs that don't exist or redirect.`,
+      `…and ${problems.length - MAX_PROBLEMS} more problems with the QIDs.`,
     ];
   return problems;
 }
@@ -154,4 +158,50 @@ async function checkAlbumTracklist(qid: string): Promise<string | null> {
   const n = (await getStatementItems(qid, "P658", { retries: 1 })).length;
   if (n === 0) return null;
   return `The existing album: ${qid} already has a tracklist (P658) with ${n} track${n === 1 ? "" : "s"}. The app only adds tracklists to albums without one.`;
+}
+
+/**
+ * Reused tracks the run would give a second composition (P2550), one
+ * sentence each: one that already records a composition other than one the
+ * run links it to, or one used in several rows that link it to different
+ * compositions. The tracks are fetched 50 per request, one request at a time.
+ */
+async function checkTrackCompositions(
+  ops: readonly Op[],
+  sources: Map<string, string[]>,
+  results: Map<string, ItemCheck>,
+): Promise<string[]> {
+  // Each existing track, with every composition the run links it to: a QID,
+  // or the plan key of one it creates.
+  const links = new Map<string, Set<string>>();
+  for (const op of ops) {
+    if (op.op !== "addClaims" || !("id" in op.target)) continue;
+    const v = op.claims.find((c) => c.property === "P2550")?.value;
+    if (v?.type !== "item" || results.get(op.target.id)?.status !== "ok") continue;
+    const set = links.get(op.target.id) ?? new Set();
+    set.add("id" in v ? v.id : v.ref);
+    links.set(op.target.id, set);
+  }
+  const problems: string[] = [];
+  const qids = [...links.keys()];
+  for (let i = 0; i < qids.length; i += 50) {
+    const entities = await getEntities(qids.slice(i, i + 50), { retries: 1 });
+    for (const [qid, entity] of entities) {
+      const recorded = (entity.claims?.P2550 ?? [])
+        .filter((s) => s.rank !== "deprecated")
+        .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
+        .filter((id): id is string => id !== undefined);
+      const linked = [...links.get(qid)!];
+      const where = sources.get(qid)?.join(", ") ?? "A reused track";
+      if (recorded.length > 0 && linked.some((l) => !recorded.includes(l)))
+        problems.push(
+          `${where}: ${qid} already records the composition ${recorded.join(", ")}. Put ${recorded[0]} in the track's composition field, so the track isn't given a second one.`,
+        );
+      else if (recorded.length === 0 && linked.length > 1)
+        problems.push(
+          `${where}: ${qid} is used in more than one row with different compositions. Give each of those rows the same composition, so the track isn't given more than one.`,
+        );
+    }
+  }
+  return problems;
 }
