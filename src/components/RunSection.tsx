@@ -54,7 +54,17 @@ export default function RunSection({
   matchesPending: boolean;
 }) {
   const { user } = useAuth();
-  const [runId, setRunId] = useState<number | null>(null);
+  // The album list's "Open run" links here with ?run=<id>.
+  const [runId, setRunId] = useState<number | null>(() => {
+    const id = Number(new URLSearchParams(window.location.search).get("run"));
+    return Number.isInteger(id) && id > 0 ? id : null;
+  });
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("run")) return;
+    history.replaceState(null, "", window.location.pathname);
+    sectionRef.current?.scrollIntoView();
+  }, []);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -112,7 +122,7 @@ export default function RunSection({
 
   const edits = plan.ops.length;
   return (
-    <section className="block">
+    <section className="block" ref={sectionRef}>
       <h2>Create on Wikidata</h2>
       {plan.messages.map(([kind, text], i) => (
         // The summary is neutral: green stands for compositions elsewhere.

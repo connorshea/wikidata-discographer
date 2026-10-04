@@ -1,0 +1,1 @@
+CREATE INDEX `idx_submissions_album` ON `submissions` (`album_qid`,`id`);

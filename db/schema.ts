@@ -171,7 +171,11 @@ export const submissions = mysqlTable(
       .default(sql`CURRENT_TIMESTAMP`),
     finishedAt: datetime("finished_at", { mode: "string" }),
   },
-  (t) => [index("idx_submissions_user_id").on(t.userId, t.id)],
+  (t) => [
+    index("idx_submissions_user_id").on(t.userId, t.id),
+    // The album list (server/albums.ts) groups runs by album, newest first.
+    index("idx_submissions_album").on(t.albumQid, t.id),
+  ],
 );
 
 // One row per edit attempt, success or failure: the audit trail of what the

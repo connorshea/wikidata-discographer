@@ -121,6 +121,39 @@ export interface SubmissionListResponse {
   submissions: Omit<SubmissionInfo, "edits" | "total" | "waitingUntil">[];
 }
 
+/** One run in the album list. */
+export interface AlbumRun {
+  id: number;
+  status: SubmissionStatus;
+  username: string;
+  /** Whether the logged-in user made it, so it can open in the run view. */
+  mine: boolean;
+  createdAt: string;
+  finishedAt: string | null;
+  editGroupUrl: string;
+  /** Items the run created, the album included. */
+  created: number;
+  /** Whether this run created the album, not just added to it. */
+  createdAlbum: boolean;
+}
+
+/** An album the tool created or added a tracklist to, with its runs, newest first. */
+export interface AlbumListEntry {
+  qid: string;
+  /** The label in the mirror, else the title the latest run was given. */
+  label: string;
+  /** Whether the tool created the album, not just added to an existing one. */
+  created: boolean;
+  runs: AlbumRun[];
+}
+
+/** GET /api/albums. */
+export interface AlbumListResponse {
+  albums: AlbumListEntry[];
+  /** Pass as `before` for the next page, or null on the last page. */
+  next: number | null;
+}
+
 /** Body of POST /api/items/matches: the tracklist rows to find existing items for. */
 export interface MatchesRequest {
   /** The existing album being added to, or "" when creating one. */

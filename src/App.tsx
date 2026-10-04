@@ -16,6 +16,7 @@ import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import { ConfirmButton } from "./components/ConfirmDialog.tsx";
 import MusicBrainzImport from "./components/MusicBrainzImport.tsx";
+import AlbumList from "./components/AlbumList.tsx";
 
 /**
  * The ID Wikidata gave the production OAuth consumer when it was registered,
@@ -92,7 +93,51 @@ function loadState(): State {
 /** Whether the form is as Clear leaves it, so replacing it loses nothing. */
 const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
 
+/** The page's title, with a link to the other view and the login control. */
+function Header({ view }: { view: "form" | "albums" }) {
+  return (
+    <header className="top">
+      <div>
+        <h1>Wikidata Discographer</h1>
+        <p className="lede">
+          Turn an album's tracklist into Wikidata items: the album, a composition and a track for
+          each song, and any singles, all linked together and made with your account.
+        </p>
+      </div>
+      <nav className="top-nav">
+        {view === "form" ? <a href="/?view=albums">Albums</a> : <a href="/">Back to the form</a>}
+        <AuthBar />
+      </nav>
+    </header>
+  );
+}
+
+function Footer() {
+  return (
+    <footer>
+      <a href="https://github.com/connorshea/wikidata-discographer">Source</a> ·{" "}
+      <a href={RECENT_CHANGES_URL} title="Edits made with this tool in the last 30 days">
+        Recent changes
+      </a>{" "}
+      · MIT License
+    </footer>
+  );
+}
+
 export default function App() {
+  if (new URLSearchParams(window.location.search).get("view") === "albums")
+    return (
+      <main>
+        <Header view="albums" />
+        <AlbumList />
+        <Footer />
+      </main>
+    );
+  return <Form />;
+}
+
+/** The form for an album's tracklist, and the run that puts it on Wikidata. */
+function Form() {
   const [state, setState] = useState<State>(loadState);
   const plan = useMemo(() => buildPlan(state), [state]);
   const update = useCallback<Update>(
@@ -120,16 +165,7 @@ export default function App() {
   const props = { state, update, plan };
   return (
     <main>
-      <header className="top">
-        <div>
-          <h1>Wikidata Discographer</h1>
-          <p className="lede">
-            Turn an album's tracklist into Wikidata items: the album, a composition and a track for
-            each song, and any singles, all linked together and made with your account.
-          </p>
-        </div>
-        <AuthBar />
-      </header>
+      <Header view="form" />
       <ItemModel />
       <div className="row example">
         <ConfirmButton
@@ -180,13 +216,7 @@ export default function App() {
           onConfirm={() => setState(structuredClone(EMPTY))}
         />
       </div>
-      <footer>
-        <a href="https://github.com/connorshea/wikidata-discographer">Source</a> ·{" "}
-        <a href={RECENT_CHANGES_URL} title="Edits made with this tool in the last 30 days">
-          Recent changes
-        </a>{" "}
-        · MIT License
-      </footer>
+      <Footer />
     </main>
   );
 }

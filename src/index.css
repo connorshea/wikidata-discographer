@@ -734,6 +734,37 @@ th .info {
   gap: 10px;
   align-items: center;
 }
+.top-nav {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+/* The album list: an album per row, its earlier runs folded under the latest. */
+table.album-list td {
+  vertical-align: top;
+}
+table.album-list td.count {
+  font-variant-numeric: tabular-nums;
+}
+.run-summary {
+  white-space: nowrap;
+}
+.earlier-runs {
+  margin-top: 4px;
+}
+.earlier-runs summary {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.earlier-runs ul {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+.earlier-runs li {
+  padding: 2px 0;
+}
 .log {
   list-style: none;
   padding: 0;
