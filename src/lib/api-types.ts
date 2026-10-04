@@ -6,6 +6,8 @@ export interface AuthUserInfo {
   id: number;
   username: string;
   blocked: boolean;
+  /** Whether a run would be refused for the account's age or edit count. */
+  eligibility: EditEligibility;
 }
 
 /** Whether the user's account may create items with this tool (see server/auth/eligibility.ts). */

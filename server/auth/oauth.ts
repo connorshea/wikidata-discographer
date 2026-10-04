@@ -18,6 +18,7 @@ import { sessions, users } from "../../db/schema.ts";
 import type { AuthMeResponse, LogoutResponse } from "../../src/lib/api-types.ts";
 import { authConfig, authConfigured, callbackUrl, cookiesSecure, wikiOrigin } from "./config.ts";
 import { pkceChallenge, randomToken, safeEqual } from "./crypto.ts";
+import { editEligibility } from "./eligibility.ts";
 import { type AuthEnv, createSession, deleteTokensIfLoggedOut, destroySession } from "./session.ts";
 import { registrationToSql, toSqlDatetime } from "./time.ts";
 import { FETCH_TIMEOUT_MS, storeTokens, tokenRequest, type TokenResponse } from "./tokens.ts";
@@ -187,8 +188,14 @@ authRoutes.post("/logout", async (c) => {
 
 authRoutes.get("/me", (c) => {
   c.header("Cache-Control", "no-store");
+  const user = c.get("user");
   const payload: AuthMeResponse = {
-    user: c.get("user"),
+    user: user && {
+      id: user.id,
+      username: user.username,
+      blocked: user.blocked,
+      eligibility: editEligibility(user),
+    },
     configured: authConfigured(),
     wikiBaseUrl: wikiOrigin(),
   };
