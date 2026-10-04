@@ -9,8 +9,9 @@ export default defineConfig({
     "*": "vp check --fix",
   },
   fmt: {
-    // drizzle-kit rewrites its migration metadata on every generate.
-    ignorePatterns: ["db/migrations/"],
+    // drizzle-kit rewrites its migration metadata on every generate, and
+    // Claude Code manages its own settings files under .claude/.
+    ignorePatterns: ["db/migrations/", ".claude/**/*.json"],
   },
   lint: {
     plugins: ["react", "typescript", "oxc", "import"],
