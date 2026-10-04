@@ -61,9 +61,9 @@ export default function AlbumSection({
           {albumTracklist && (
             <p className="msg err">
               <WikiLink base={wikiBaseUrl} qid={albumTracklist.qid} /> already has a tracklist with{" "}
-              {albumTracklist.foreign.length} track
-              {albumTracklist.foreign.length === 1 ? "" : "s"} not in this form. Adding another
-              would list its songs twice, so the run is disabled. Use an album without a tracklist.
+              {albumTracklist.tracks.length} track
+              {albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs
+              twice, so the run is disabled. Use an album without a tracklist.
             </p>
           )}
         </div>

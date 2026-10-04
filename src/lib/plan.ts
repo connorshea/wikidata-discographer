@@ -303,17 +303,6 @@ export function normalizeQid(v: string): string {
   return v;
 }
 
-/**
- * The tracks an existing album already lists (P658) that the form doesn't use.
- * Any at all means the album has a tracklist this run would add a second one
- * beside, so the run is refused. Tracks the form reuses don't count, so
- * starting a failed run again (its tracklist half added) still works.
- */
-export function foreignTracks(state: State, listed: readonly string[]): string[] {
-  const own = new Set(state.discs.flatMap((d) => Object.values(d.track).map((q) => q.trim())));
-  return listed.filter((q) => !own.has(q));
-}
-
 export const isCustomLang = (s: Settings) =>
   !!s.p407Custom || (s.p407.trim() !== "" && !KNOWN_LANGS.has(s.p407.trim()));
 export const isCustomLabelLang = (s: Settings) =>

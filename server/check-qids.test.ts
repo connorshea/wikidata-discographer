@@ -128,15 +128,17 @@ describe("checkPlanQids", () => {
   it("refuses an existing album that already has a tracklist", async () => {
     stubWiki({ tracklist: ["Q1", "Q2"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
-      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 2 tracks not in this form. The app only adds tracklists to albums without one.`,
+      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 2 tracks. The app only adds tracklists to albums without one.`,
     ]);
   });
 
-  it("allows a tracklist made only of tracks the form reuses, as a rerun has", async () => {
+  it("refuses it even when the form reuses the listed tracks", async () => {
     const state = structuredClone(EXAMPLE);
     state.discs[0].track[1] = "Q1";
     stubWiki({ tracklist: ["Q1"] });
-    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([]);
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 1 track. The app only adds tracklists to albums without one.`,
+    ]);
   });
 
   it("refuses an existing album that isn't an album or EP", async () => {
