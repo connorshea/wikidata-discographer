@@ -699,7 +699,6 @@ export function buildPlan(state: State): Plan {
           ? [claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT })]
           : []),
         ...workLang,
-        ...pubDate,
         ...publishedIn,
       ],
     });

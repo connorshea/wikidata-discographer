@@ -108,6 +108,16 @@ describe("buildPlan", () => {
     });
   });
 
+  it("gives compositions a publication date but not tracks", () => {
+    const { ops } = buildPlan(EXAMPLE);
+    const has577 = (key: string) => {
+      const o = find(ops, key);
+      return o?.op === "create" && o.claims.some((c) => c.property === "P577");
+    };
+    expect(has577("comp:0:2")).toBe(true);
+    expect(has577("track:0:2")).toBe(false);
+  });
+
   it("blocks on a bad performer QID", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";

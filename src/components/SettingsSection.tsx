@@ -107,8 +107,8 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
             onChange={(e) => set("date", e.target.value)}
           />
           <span className="sub">
-            Album release date, also used for compositions and tracks. YYYY, YYYY-MM or YYYY-MM-DD;
-            blank to skip
+            Album release date, also used for compositions (not tracks). YYYY, YYYY-MM or
+            YYYY-MM-DD; blank to skip
           </span>
           <FieldErr id="date" msg={errs.date} />
         </label>

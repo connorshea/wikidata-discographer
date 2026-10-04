@@ -60,10 +60,11 @@ describe("previewPlan", () => {
         ["performer", "Carly Rae Jepsen", false],
         ["recording or performance of", "composition “After All”", false],
         ["duration", "4:12", false],
-        ["publication date", "18 September 2026", false],
         ["published in", "new album “Day and Night”", true],
       ]),
     );
+    const comp = groups.find((g) => g.id === "comp")!.edits[0];
+    expect(show(comp)).toContainEqual(["publication date", "18 September 2026", false]);
 
     // Disc 2, track 2.
     const tracklist = groups[0].edits[1].statements[13];
