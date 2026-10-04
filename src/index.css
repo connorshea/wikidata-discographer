@@ -463,22 +463,42 @@ button.ghost.quiet {
   color: var(--muted);
   border-color: var(--line);
 }
-.single {
+/* A single's one-line summary, and its fields once Edit is clicked. */
+.single-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
+  gap: 4px 10px;
   align-items: center;
 }
 .single-label {
   font-weight: 600;
-  color: var(--muted);
+  color: var(--warn);
 }
-.single input[type="text"] {
-  width: 16ch;
+.single-summary a {
+  font-family: var(--mono);
+}
+.single-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-bottom: 6px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--rg-edge) 45%, var(--line));
+  border-radius: 8px;
+}
+.single-panel input[type="text"] {
+  width: 26ch;
   min-width: 0;
 }
-.single .field-err {
+/* Monospace is for QIDs only. */
+.single-panel input.date {
+  font-family: var(--sans);
+}
+.single-panel .field-err {
   flex-basis: 100%;
+  margin: 0;
 }
 .msg {
   font-size: 0.88rem;

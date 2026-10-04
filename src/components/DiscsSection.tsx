@@ -1,17 +1,19 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { useAuth } from "../lib/auth-context.ts";
 import { emptyDisc } from "../lib/state.ts";
 import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
   isCustomPart,
   normalizeQid,
   PARTS,
+  parseDate,
   QID,
   type Plan,
   type Row,
   splitArtists,
   type State,
 } from "../lib/plan.ts";
-import { InfoTip, Pids, QidInput } from "./common.tsx";
+import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import type { SectionProps } from "./types.ts";
 
@@ -162,8 +164,9 @@ function DiscBlock({
                   <InfoTip id={`disc${di}-single`} label="About singles" end>
                     Tick a track that was also released as a single. The single becomes its own
                     item, an instance of single (Q134556) with the track’s title and artists, that
-                    lists the track and is taken from the album. Give it a release date, or enter an
-                    existing single’s QID to link that one instead of creating a new one.
+                    lists the track and is taken from the album. Its Edit button sets a release date
+                    (the album’s if blank), or an existing single’s QID to link that one instead of
+                    creating a new one. Untick it to remove the single.
                   </InfoTip>
                 </th>
               </tr>
@@ -234,7 +237,7 @@ function DiscBlock({
                       <tr className="sub-row is-single">
                         <td />
                         <td colSpan={6}>
-                          <SingleFields di={di} n={r.n} {...{ state, update, plan }} />
+                          <SingleRow di={di} n={r.n} {...{ state, update, plan }} />
                         </td>
                       </tr>
                     )}
@@ -249,36 +252,94 @@ function DiscBlock({
   );
 }
 
-/** The single's fields, on their own row under the track. */
-function SingleFields({ di, n, state, update, plan }: SectionProps & { di: number; n: number }) {
+/**
+ * A track's single, on its own row under the track: a one-line summary, or
+ * its fields once Edit is clicked. The fields stay open while something is
+ * wrong with them, and Done only closes them once nothing is.
+ */
+function SingleRow({ di, n, state, update, plan }: SectionProps & { di: number; n: number }) {
+  const { wikiBaseUrl } = useAuth();
   const sg = state.discs[di].single[n];
-  const err = plan.singleErrs[`${di}:${n}`];
+  const qid = sg.qid.trim();
+  const date = sg.date.trim();
+  const problem = plan.singleErrs[`${di}:${n}`];
+  const [editing, setEditing] = useState(false);
+  if (problem && !editing) setEditing(true);
+  const open = editing || !!problem;
+
+  const editRef = useRef<HTMLButtonElement>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (open === wasOpen.current) return;
+    wasOpen.current = open;
+    // Focus follows Edit and Done, not a problem opening the fields.
+    if (open && editing) dateRef.current?.focus();
+    if (!open) editRef.current?.focus();
+  }, [open, editing]);
+
+  if (!open)
+    return (
+      <div className="single-summary">
+        <span className="single-label">Single</span>
+        {QID.test(qid) ? (
+          <span>
+            Reusing <WikiLink base={wikiBaseUrl} qid={qid} />
+          </span>
+        ) : (
+          <span>
+            New single{" "}
+            <span className="muted">· {date ? `released ${date}` : "released with the album"}</span>
+          </span>
+        )}
+        <button
+          ref={editRef}
+          type="button"
+          className="ghost quiet small"
+          aria-label={`Edit single for track ${n}`}
+          onClick={() => setEditing(true)}
+        >
+          Edit
+        </button>
+      </div>
+    );
   return (
-    <div className="single">
-      <span className="single-label">Single</span>
-      <input
-        type="text"
-        spellCheck={false}
-        placeholder="Release date"
-        aria-label={`Track ${n} single release date`}
-        value={sg.date}
-        onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
-      />
-      <QidInput
-        placeholder="or existing Q…"
-        aria-label={`Track ${n} existing single`}
-        value={sg.qid}
-        onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
-      />
+    <div className="single-panel">
+      <label className="f">
+        <Pids>Release date (P577)</Pids>
+        <input
+          ref={dateRef}
+          type="text"
+          className="date"
+          spellCheck={false}
+          placeholder="YYYY-MM-DD, blank = album"
+          aria-invalid={date !== "" && !parseDate(date).ok}
+          value={sg.date}
+          onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
+        />
+      </label>
+      <label className="f">
+        Existing single
+        <QidInput
+          placeholder="Q… to reuse, blank to create"
+          aria-invalid={qid !== "" && !QID.test(qid)}
+          value={sg.qid}
+          onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
+        />
+      </label>
       <button
         type="button"
-        className="danger small"
-        aria-label={`Remove single for track ${n}`}
-        onClick={() => update((s) => void delete s.discs[di].single[n])}
+        className="ghost small"
+        aria-label={`Done editing single for track ${n}`}
+        onClick={() => !problem && setEditing(false)}
       >
-        ×
+        Done
       </button>
-      {err && <p className="field-err">{err}</p>}
+      {problem && (
+        <p className="field-err" aria-live="polite">
+          {problem}
+        </p>
+      )}
     </div>
   );
 }
