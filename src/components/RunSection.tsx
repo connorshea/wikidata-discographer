@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import type { Plan, State } from "../lib/plan.ts";
@@ -55,16 +56,18 @@ export default function RunSection({
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
+  const search = useSearch();
+  const [, navigate] = useLocation();
   const [runId, setRunId] = useState<number | null>(() => {
-    const id = Number(new URLSearchParams(window.location.search).get("run"));
+    const id = Number(new URLSearchParams(search).get("run"));
     return Number.isInteger(id) && id > 0 ? id : null;
   });
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has("run")) return;
-    history.replaceState(null, "", window.location.pathname);
+    if (!new URLSearchParams(search).has("run")) return;
+    navigate("/", { replace: true });
     sectionRef.current?.scrollIntoView();
-  }, []);
+  }, [search, navigate]);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);

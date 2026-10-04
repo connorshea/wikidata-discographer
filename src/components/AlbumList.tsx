@@ -1,6 +1,7 @@
 // Every album the tool has created or added a tracklist to, newest run first,
 // a page at a time (GET /api/albums).
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import type { AlbumListEntry, AlbumListResponse, AlbumRun } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { api } from "../lib/client.ts";
@@ -180,7 +181,7 @@ function RunLinks({ run }: { run: AlbumRun }) {
       {run.mine && (
         <>
           {" · "}
-          <a href={`/?run=${run.id}`}>Open run</a>
+          <Link href={`/?run=${run.id}`}>Open run</Link>
         </>
       )}
     </>

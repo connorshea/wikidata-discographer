@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
 import { PROPERTY_LABELS } from "./lib/preview.ts";
@@ -93,8 +94,18 @@ function loadState(): State {
 /** Whether the form is as Clear leaves it, so replacing it loses nothing. */
 const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
 
-/** The page's title, with a link to the other view and the login control. */
-function Header({ view }: { view: "form" | "albums" }) {
+/** A header link, marked as the current page while it's open. */
+function NavLink({ href, children }: { href: string; children: string }) {
+  const [active] = useRoute(href);
+  return (
+    <Link href={href} aria-current={active ? "page" : undefined}>
+      {children}
+    </Link>
+  );
+}
+
+/** The page's title, with the links between pages and the login control. */
+function Header() {
   return (
     <header className="top">
       <div>
@@ -105,7 +116,8 @@ function Header({ view }: { view: "form" | "albums" }) {
         </p>
       </div>
       <nav className="top-nav">
-        {view === "form" ? <a href="/?view=albums">Albums</a> : <a href="/">Back to the form</a>}
+        <NavLink href="/">Add an album</NavLink>
+        <NavLink href="/albums">Albums</NavLink>
         <AuthBar />
       </nav>
     </header>
@@ -125,15 +137,33 @@ function Footer() {
 }
 
 export default function App() {
-  if (new URLSearchParams(window.location.search).get("view") === "albums")
-    return (
-      <main>
-        <Header view="albums" />
-        <AlbumList />
-        <Footer />
-      </main>
-    );
-  return <Form />;
+  return (
+    <Switch>
+      <Route path="/">
+        <Form />
+      </Route>
+      <Route path="/albums">
+        <main>
+          <Header />
+          <AlbumList />
+          <Footer />
+        </main>
+      </Route>
+      <Route>
+        <main>
+          <Header />
+          <section className="block">
+            <h2>Page not found</h2>
+            <p className="hint">
+              There's nothing here. Go to the <Link href="/">form</Link> or the{" "}
+              <Link href="/albums">album list</Link>.
+            </p>
+          </section>
+          <Footer />
+        </main>
+      </Route>
+    </Switch>
+  );
 }
 
 /** The form for an album's tracklist, and the run that puts it on Wikidata. */
@@ -165,7 +195,7 @@ function Form() {
   const props = { state, update, plan };
   return (
     <main>
-      <Header view="form" />
+      <Header />
       <ItemModel />
       <div className="row example">
         <ConfirmButton

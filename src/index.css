@@ -740,6 +740,11 @@ th .info {
   align-items: center;
   flex-wrap: wrap;
 }
+.top-nav a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
 /* The album list: an album per row, its earlier runs folded under the latest. */
 table.album-list td {
   vertical-align: top;
