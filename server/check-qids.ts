@@ -161,22 +161,26 @@ async function checkAlbumTracklist(qid: string): Promise<string | null> {
 }
 
 /**
- * Reused tracks that already record a composition (P2550) other than the one
- * the run links them to, one sentence each. The tracks are fetched 50 per
- * request, one request at a time.
+ * Reused tracks the run would give a second composition (P2550), one
+ * sentence each: one that already records a composition other than one the
+ * run links it to, or one used in several rows that link it to different
+ * compositions. The tracks are fetched 50 per request, one request at a time.
  */
 async function checkTrackCompositions(
   ops: readonly Op[],
   sources: Map<string, string[]>,
   results: Map<string, ItemCheck>,
 ): Promise<string[]> {
-  // Each existing track, with the composition the run links it to (null: one it creates).
-  const links = new Map<string, string | null>();
+  // Each existing track, with every composition the run links it to: a QID,
+  // or the plan key of one it creates.
+  const links = new Map<string, Set<string>>();
   for (const op of ops) {
     if (op.op !== "addClaims" || !("id" in op.target)) continue;
     const v = op.claims.find((c) => c.property === "P2550")?.value;
-    if (v?.type === "item" && results.get(op.target.id)?.status === "ok")
-      links.set(op.target.id, "id" in v ? v.id : null);
+    if (v?.type !== "item" || results.get(op.target.id)?.status !== "ok") continue;
+    const set = links.get(op.target.id) ?? new Set();
+    set.add("id" in v ? v.id : v.ref);
+    links.set(op.target.id, set);
   }
   const problems: string[] = [];
   const qids = [...links.keys()];
@@ -187,12 +191,16 @@ async function checkTrackCompositions(
         .filter((s) => s.rank !== "deprecated")
         .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
         .filter((id): id is string => id !== undefined);
-      const link = links.get(qid);
-      if (recorded.length === 0 || (link && recorded.includes(link))) continue;
+      const linked = [...links.get(qid)!];
       const where = sources.get(qid)?.join(", ") ?? "A reused track";
-      problems.push(
-        `${where}: ${qid} already records the composition ${recorded.join(", ")}. Put ${recorded[0]} in the track's composition field, so the track isn't given a second one.`,
-      );
+      if (recorded.length > 0 && linked.some((l) => !recorded.includes(l)))
+        problems.push(
+          `${where}: ${qid} already records the composition ${recorded.join(", ")}. Put ${recorded[0]} in the track's composition field, so the track isn't given a second one.`,
+        );
+      else if (recorded.length === 0 && linked.length > 1)
+        problems.push(
+          `${where}: ${qid} is used in more than one row with different compositions. Give each of those rows the same composition, so the track isn't given more than one.`,
+        );
     }
   }
   return problems;

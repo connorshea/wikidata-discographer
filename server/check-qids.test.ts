@@ -186,6 +186,30 @@ describe("checkPlanQids", () => {
     ]);
   });
 
+  it("checks every row a reused track is in", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    // Q50 records Q60. One row has it, but the other would create a composition.
+    state.discs[0].track[2] = "Q50";
+    state.discs[0].comp[2] = "Q60";
+    state.discs[0].track[3] = "Q50";
+    // Q51 records none, and its two rows give it two different ones.
+    state.discs[0].track[4] = "Q51";
+    state.discs[0].comp[4] = "Q70";
+    state.discs[0].track[5] = "Q51";
+    state.discs[0].comp[5] = "Q71";
+    stubWiki({ compositions: { Q50: ["Q60"] } });
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      "Disc 1 track 2 track, Disc 1 track 3 track: Q50 already records the composition Q60. Put Q60 in the track's composition field, so the track isn't given a second one.",
+      "Disc 1 track 4 track, Disc 1 track 5 track: Q51 is used in more than one row with different compositions. Give each of those rows the same composition, so the track isn't given more than one.",
+    ]);
+    // The same composition in every row is fine.
+    state.discs[0].comp[3] = "Q60";
+    state.discs[0].comp[5] = "Q70";
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([]);
+  });
+
   it("refuses an existing album that isn't an album or EP", async () => {
     stubWiki({ instanceOf: ["Q5"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
