@@ -8,6 +8,9 @@ export interface AuthUserInfo {
   blocked: boolean;
 }
 
+/** Whether the user's account may create items with this tool (see server/auth/eligibility.ts). */
+export type EditEligibility = { ok: true } | { ok: false; reason: string };
+
 export interface AuthMeResponse {
   user: AuthUserInfo | null;
   /** False when the server has no OAuth consumer configured (login is unavailable). */

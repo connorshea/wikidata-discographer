@@ -22,6 +22,7 @@ import { bodyLimit } from "hono/body-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db.ts";
 import { musicExternalIds, submissions, wikidataEdits } from "../db/schema.ts";
+import { editEligibility } from "./auth/eligibility.ts";
 import { type AuthEnv, type AuthUser, requireUser } from "./auth/session.ts";
 import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
@@ -92,6 +93,8 @@ submissionRoutes.post(
   async (c) => {
     const user = c.get("user")!;
     if (user.blocked) return c.json({ error: "Your account is blocked on Wikidata." }, 403);
+    const eligibility = editEligibility(user);
+    if (!eligibility.ok) return c.json({ error: eligibility.reason }, 403);
     if (running.has(user.id)) return c.json({ error: "You already have a run in progress." }, 409);
     // Held from here, so a double click can't start two runs during the checks.
     running.add(user.id);
