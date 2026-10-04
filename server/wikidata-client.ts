@@ -2,7 +2,8 @@
 // their OAuth grant (never `bot=1`): `editRequest` loads their access token,
 // fetches a CSRF token with `assert=user&assertuser=<name>`, and retries on
 // `badtoken` and `ratelimited`. Anything else becomes a `WikidataEditError`
-// carrying Wikidata's own message. No `maxlag`: each run is started by hand by
+// carrying Wikidata's own message. Every write, retries included, first waits
+// its turn (server/edit-pace.ts), so a run's edits go out a few seconds apart. No `maxlag`: each run is started by hand by
 // the user, like edits made in the Wikidata UI, not by an automated process.
 //
 // An edit is only retried when Wikidata refused it before saving (a bad token
@@ -12,6 +13,7 @@
 import { wikidataApiUrl } from "./auth/config.ts";
 import { deleteTokens, getAccessToken, TokenError } from "./auth/tokens.ts";
 import { userAgent } from "./auth/user-agent.ts";
+import { type EditPacer, editPacer } from "./edit-pace.ts";
 import type { ItemSummary } from "../src/lib/api-types.ts";
 import type { Claim, Snak, Value } from "../src/lib/plan.ts";
 
@@ -188,12 +190,13 @@ function retryAfterMs(headers: Headers, fallback: number): number {
 /**
  * Perform one write action as `user`; resolves to the API's JSON body. A
  * timeout, dropped connection or 5xx once the edit is sent throws an
- * `ambiguous` error: the edit may have been saved anyway.
+ * `ambiguous` error: the edit may have been saved anyway. Each attempt waits
+ * for its turn from `pacer`, a create (`new`) for longer than other edits.
  */
 export async function editRequest(
   user: EditUser,
   params: Record<string, string>,
-  { timeoutMs = TIMEOUT_MS }: { timeoutMs?: number } = {},
+  { timeoutMs = TIMEOUT_MS, pacer = editPacer }: { timeoutMs?: number; pacer?: EditPacer } = {},
 ): Promise<Record<string, unknown>> {
   let accessToken: string;
   try {
@@ -210,6 +213,7 @@ export async function editRequest(
   let tokenRetries = 0;
   let rateRetries = 0;
   for (;;) {
+    await pacer.waitTurn(user.id, params.new ? "create" : "edit");
     let res: ApiResponse;
     try {
       res = await call(

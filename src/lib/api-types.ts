@@ -87,6 +87,8 @@ export interface SubmissionInfo {
   finishedAt: string | null;
   /** Operations in the plan, so the client can show progress. */
   total: number;
+  /** While the run waits before its next edit (they go out a few seconds apart): when it goes. */
+  waitingUntil: string | null;
   edits: EditLogEntry[];
 }
 
@@ -116,7 +118,7 @@ export interface UnknownRunConflict {
 }
 
 export interface SubmissionListResponse {
-  submissions: Omit<SubmissionInfo, "edits" | "total">[];
+  submissions: Omit<SubmissionInfo, "edits" | "total" | "waitingUntil">[];
 }
 
 /** Body of POST /api/items/matches: the tracklist rows to find existing items for. */

@@ -159,8 +159,8 @@ export default function RunSection({
       </div>
       <p className="hint">
         Edits are made with your account and grouped in EditGroups, so the whole run can be reviewed
-        or undone together. Statements an item already has are skipped, so a failed run can be
-        started again.
+        or undone together. They go out a few seconds apart, so a long album takes a few minutes.
+        Statements an item already has are skipped, so a failed run can be started again.
       </p>
       {error && <p className="msg err">{error}</p>}
       {unknownRun && (
@@ -365,6 +365,13 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
                 : "interrupted"}
       </h3>
       {run.status === "running" && <progress max={run.total} value={done} />}
+      {run.status === "running" && (
+        <p className="hint">
+          {run.waitingUntil
+            ? "Waiting a few seconds before the next edit, so they go out at a steady pace."
+            : "Making the next edit…"}
+        </p>
+      )}
       {run.error && (
         <p className={`msg ${run.status === "unknown" ? "warn" : "err"}`}>{run.error}</p>
       )}
