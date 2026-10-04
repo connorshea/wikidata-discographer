@@ -14,7 +14,6 @@ import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { type AuthEnv, requireUser } from "./auth/session.ts";
 import { rankDuplicates, titleReasons } from "./duplicates.ts";
 import { findMatches } from "./matches.ts";
-import { tracksMadeFor } from "./app-tracks.ts";
 import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
 import {
   describeItems,
@@ -179,8 +178,7 @@ items.get("/:qid/tracklist", async (c) => {
   try {
     // Asked live, not from the mirror: a tracklist added since the last dump counts.
     const tracks = await getStatementItems(qid, "P658", { retries: 0 });
-    const madeHere = await tracksMadeFor(qid, tracks);
-    return c.json({ tracks, madeHere } satisfies TracklistResponse);
+    return c.json({ tracks } satisfies TracklistResponse);
   } catch (err) {
     if (err instanceof WikidataEditError) return c.json({ error: err.message }, 502);
     throw err;

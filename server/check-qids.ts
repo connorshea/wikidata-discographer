@@ -8,14 +8,12 @@
 // one typo doesn't fetch the rest again.
 //
 // The existing album must also be an album or EP: an instance of one of the
-// album or EP classes the app knows. And it mustn't have a tracklist yet
-// (besides tracks an earlier run made for it, which a rerun reuses), or the run
-// would add a second one beside it.
+// album or EP classes the app knows. And it mustn't have a tracklist yet, or
+// the run would add a second one beside it.
 import { checkItems, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
 import { CLASS_KINDS } from "../src/lib/music.ts";
-import { ALBUM_FORMS, foreignTracks, type Op, type State, type Value } from "../src/lib/plan.ts";
+import { ALBUM_FORMS, type Op, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
-import { tracksMadeFor } from "./app-tracks.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
 export function planQids(ops: readonly Op[]): Map<string, string> {
@@ -104,14 +102,9 @@ const MAX_PROBLEMS = 10;
 /**
  * Problems with the items the plan points at, one sentence each, naming
  * where in the form each bad QID came from. Empty when every item exists.
- * Throws if Wikidata can't be asked. `madeFor` finds the album's tracks
- * earlier runs created (a stand-in in tests).
+ * Throws if Wikidata can't be asked.
  */
-export async function checkPlanQids(
-  ops: readonly Op[],
-  state: State,
-  madeFor = tracksMadeFor,
-): Promise<string[]> {
+export async function checkPlanQids(ops: readonly Op[], state: State): Promise<string[]> {
   const used = planQids(ops);
   const sources = formSources(state);
   const results = await check([...used.keys()]);
@@ -127,8 +120,7 @@ export async function checkPlanQids(
   }
   const album = state.album.mode === "existing" ? state.album.qid.trim() : null;
   if (album && results.get(album)?.status === "ok") {
-    const problem =
-      (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album, state, madeFor));
+    const problem = (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album));
     if (problem) problems.unshift(problem);
   }
   if (problems.length > MAX_PROBLEMS)
@@ -157,14 +149,9 @@ async function checkAlbumKind(qid: string): Promise<string | null> {
   return `The existing album: ${qid} is an instance of ${classes.join(", ")}, not an album or EP. Check the QID.`;
 }
 
-/** Why the existing album can't take this tracklist, or null if it has none of its own. */
-async function checkAlbumTracklist(
-  qid: string,
-  state: State,
-  madeFor: typeof tracksMadeFor,
-): Promise<string | null> {
-  const listed = await getStatementItems(qid, "P658", { retries: 1 });
-  const n = foreignTracks(state, listed, await madeFor(qid, listed)).length;
+/** Why the existing album can't take a tracklist, or null if it has none yet. */
+async function checkAlbumTracklist(qid: string): Promise<string | null> {
+  const n = (await getStatementItems(qid, "P658", { retries: 1 })).length;
   if (n === 0) return null;
   return `The existing album: ${qid} already has a tracklist (P658) with ${n} track${n === 1 ? "" : "s"}. The app only adds tracklists to albums without one.`;
 }

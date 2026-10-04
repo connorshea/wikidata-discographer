@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
-import { foreignTracks, QID, type State } from "../lib/plan.ts";
+import { QID, type State } from "../lib/plan.ts";
 import type { TracklistResponse } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
 
 /** An existing album that already has a tracklist of its own, which blocks the run. */
 export interface AlbumTracklist {
   qid: string;
-  /** Listed tracks (P658) that block the run (see `foreignTracks`). */
-  foreign: string[];
+  /** The tracks it lists (P658). */
+  tracks: string[];
 }
 
 /**
@@ -32,6 +32,5 @@ export function useAlbumTracklist(state: State): AlbumTracklist | null {
     };
   }, [qid]);
   if (!qid || qid !== typed || result?.qid !== qid) return null;
-  const foreign = foreignTracks(state, result.tracks, result.madeHere);
-  return foreign.length ? { qid, foreign } : null;
+  return result.tracks.length ? { qid, tracks: result.tracks } : null;
 }

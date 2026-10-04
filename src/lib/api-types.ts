@@ -57,8 +57,6 @@ export interface AddItemResponse {
 /** GET /api/items/:qid/tracklist: the item's tracks (P658) on Wikidata now. */
 export interface TracklistResponse {
   tracks: string[];
-  /** Which of `tracks` this app's runs created for the album. */
-  madeHere: string[];
 }
 
 export interface EditLogEntry {
