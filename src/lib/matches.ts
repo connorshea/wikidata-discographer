@@ -56,18 +56,22 @@ export function stillValid(
 /**
  * Use `t` as track `n`'s existing track, with the composition it records (in
  * place of any other: the run links a reused track to the composition field,
- * so a different one would give it a second P2550), and its single where empty.
+ * so a different one would give it a second P2550), and its single where neither
+ * a QID nor a release date (which means a new single) is filled in.
  */
 export function pickTrack(disc: Disc, n: number, t: TrackMatch): void {
   disc.track[n] = t.qid;
   if (t.composition) disc.comp[n] = t.composition;
   const sg = disc.single[n];
-  if (sg && !sg.qid && t.singles.length === 1) sg.qid = t.singles[0];
+  if (sg && !sg.qid.trim() && !sg.date.trim() && t.singles.length === 1) sg.qid = t.singles[0];
 }
 
-/** Use `qid` as track `n`'s single, adding the single if it has none. */
+/**
+ * Use `qid` as track `n`'s single, adding the single if it has none. Any
+ * release date goes, since a single is either reused or dated.
+ */
 export function pickSingle(disc: Disc, n: number, qid: string): void {
-  disc.single[n] = { date: disc.single[n]?.date ?? "", qid };
+  disc.single[n] = { date: "", qid };
 }
 
 /**
@@ -103,7 +107,7 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     const compFree = !disc.track[n] || (track !== undefined && !track.composition);
     if (compFree && m.comp.length === 1 && !isGuess(m.comp[0])) set(disc.comp, n, m.comp[0].qid);
     const sg = disc.single[n];
-    if (sg && !sg.qid) {
+    if (sg && !sg.qid.trim() && !sg.date.trim()) {
       const qid = track?.singles.length === 1 ? track.singles[0] : m.single[0]?.qid;
       if (
         qid &&

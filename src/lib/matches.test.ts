@@ -33,13 +33,17 @@ const rm = (m: Partial<RowMatches>): RowMatches => ({ comp: [], track: [], singl
 describe("pickTrack and pickSingle", () => {
   it("fills the track's composition, and its single where empty", () => {
     const disc = emptyDisc();
-    disc.single[1] = { date: "2026", qid: "" };
+    disc.single[1] = { date: "", qid: "" };
     pickTrack(disc, 1, track("Q10", "Q20", ["Q30"]));
     expect([disc.track[1], disc.comp[1], disc.single[1]]).toEqual([
       "Q10",
       "Q20",
-      { date: "2026", qid: "Q30" },
+      { date: "", qid: "Q30" },
     ]);
+    // A single with a release date is a new one, so it isn't filled.
+    disc.single[5] = { date: "2026", qid: "" };
+    pickTrack(disc, 5, track("Q15", "Q25", ["Q35"]));
+    expect(disc.single[5]).toEqual({ date: "2026", qid: "" });
     // The track's own composition replaces another, which would be a second P2550.
     disc.comp[2] = "Q99";
     pickTrack(disc, 2, track("Q11", "Q21"));
@@ -50,6 +54,9 @@ describe("pickTrack and pickSingle", () => {
     expect(disc.comp[4]).toBe("Q98");
     pickSingle(disc, 3, "Q31");
     expect(disc.single[3]).toEqual({ date: "", qid: "Q31" });
+    // Picking a single replaces a release date: it's one or the other.
+    pickSingle(disc, 5, "Q36");
+    expect(disc.single[5]).toEqual({ date: "", qid: "Q36" });
   });
 });
 

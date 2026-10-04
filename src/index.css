@@ -499,6 +499,7 @@ button.ghost.quiet {
 .single-panel input.date {
   font-family: var(--sans);
 }
+.single-panel .single-hint,
 .single-panel .field-err {
   flex-basis: 100%;
   margin: 0;

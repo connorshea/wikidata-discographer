@@ -286,13 +286,14 @@ function SingleRow({
   const open = editing || !!problem;
 
   const editRef = useRef<HTMLButtonElement>(null);
-  const dateRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(open);
   useEffect(() => {
     if (open === wasOpen.current) return;
     wasOpen.current = open;
     // Focus follows Edit and Done, not a problem opening the fields.
-    if (open && editing) dateRef.current?.focus();
+    if (open && editing)
+      panelRef.current?.querySelector<HTMLInputElement>("input:enabled")?.focus();
     if (!open) editRef.current?.focus();
   }, [open, editing]);
 
@@ -330,16 +331,16 @@ function SingleRow({
       </div>
     );
   return (
-    <div className="single-panel">
+    <div className="single-panel" ref={panelRef}>
       <label className="f">
         <Pids>Release date (P577)</Pids>
         <input
-          ref={dateRef}
           type="text"
           className="date"
           spellCheck={false}
           placeholder="YYYY-MM-DD, blank = album"
           aria-invalid={date !== "" && !parseDate(date).ok}
+          disabled={qid !== "" && date === ""}
           value={sg.date}
           onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
         />
@@ -349,6 +350,7 @@ function SingleRow({
         <QidInput
           placeholder="Q… to reuse, blank to create"
           aria-invalid={(qid !== "" && !QID.test(qid)) || !!notSingle}
+          disabled={date !== "" && qid === ""}
           value={sg.qid}
           onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
         />
@@ -361,6 +363,12 @@ function SingleRow({
       >
         Done
       </button>
+      {(qid === "") !== (date === "") && (
+        <p className="single-hint muted">
+          A single takes a release date if it's new, or its QID if it already exists. Clear one to
+          fill in the other.
+        </p>
+      )}
       {problem && (
         <p className="field-err" aria-live="polite">
           {problem}

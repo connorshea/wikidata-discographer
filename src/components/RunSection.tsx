@@ -34,8 +34,7 @@ function applyCreated(edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[], 
       } else if (!disc) continue;
       else if (kind === "comp") disc.comp[n] = qid!;
       else if (kind === "track") disc.track[n] = qid!;
-      else if (kind === "single")
-        disc.single[n] = { ...(disc.single[n] ?? { date: "" }), qid: qid! };
+      else if (kind === "single") disc.single[n] = { date: "", qid: qid! };
     }
   });
 }

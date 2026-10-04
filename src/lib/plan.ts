@@ -528,7 +528,9 @@ export function buildPlan(state: State): Plan {
         const sd = parseDate(sg.date ?? "");
         const sq = (sg.qid ?? "").trim();
         const errs: string[] = [];
-        if (!sd.ok) errs.push(sd.error);
+        if ((sg.date ?? "").trim() && sq)
+          errs.push("Give a release date for a new single or an existing single's QID, not both.");
+        else if (!sd.ok) errs.push(sd.error);
         else if (!sd.val && singleUsesYear && !sq)
           errs.push("Enter a release date, since the description uses {year}.");
         if (sq && !QID.test(sq)) errs.push(`"${sq}" isn't a QID.`);
