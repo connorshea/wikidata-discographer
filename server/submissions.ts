@@ -187,9 +187,16 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
     input: state,
   });
   const id = res.insertId;
-  void runPlan(id, user, plan.ops, editGroup)
-    .catch((err: unknown) => console.error(`submission ${id}: run failed`, err))
-    .finally(() => running.delete(user.id));
+  // The guard is only let go once the run's end is saved. Otherwise the DB
+  // still says "running" and the form never got its QIDs, so another run of
+  // the same form would create them again. It's held until the next boot's
+  // markInterrupted.
+  void runPlan(id, user, plan.ops, editGroup).then(
+    (saved) => {
+      if (saved) running.delete(user.id);
+    },
+    (err: unknown) => console.error(`submission ${id}: run failed`, err),
+  );
   return c.json({ id }, 202);
 }
 
@@ -438,7 +445,8 @@ export async function runPlan(
   user: AuthUser,
   ops: readonly Op[],
   editGroup: string,
-): Promise<void> {
+  { retryMs = [2_000, 10_000] }: { retryMs?: readonly number[] } = {},
+): Promise<boolean> {
   const editUser: EditUser = { id: user.id, username: user.username };
   const created = new Map<string, string>();
   const resolve = (key: string) => {
@@ -617,10 +625,19 @@ export async function runPlan(
       break;
     }
   }
-  // If this fails the run stays "running" until the next boot's markInterrupted.
-  await db
-    .update(submissions)
-    .set({ status, error, finishedAt: toSqlDatetime(new Date()) })
-    .where(eq(submissions.id, submissionId))
-    .catch((err: unknown) => console.error(`submission ${submissionId}: status write failed`, err));
+  // Whether the run's end was saved. If not, it stays "running" until the
+  // next boot's markInterrupted.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db
+        .update(submissions)
+        .set({ status, error, finishedAt: toSqlDatetime(new Date()) })
+        .where(eq(submissions.id, submissionId));
+      return true;
+    } catch (err) {
+      console.error(`submission ${submissionId}: status write failed`, err);
+      if (attempt >= retryMs.length) return false;
+      await new Promise((r) => setTimeout(r, retryMs[attempt]));
+    }
+  }
 }
