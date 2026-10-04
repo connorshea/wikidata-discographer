@@ -342,6 +342,9 @@ tr.has-sub td {
 tr.sub-row td {
   padding-top: 0;
 }
+tr.sub-row.is-single td {
+  background: color-mix(in srgb, var(--rg-edge) 10%, transparent);
+}
 /* A track with possible matches to review: a warning icon by its title. */
 .title-cell {
   display: inline-flex;
