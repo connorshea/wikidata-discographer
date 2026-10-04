@@ -711,7 +711,6 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...pubDate,
       ],
     });
   }

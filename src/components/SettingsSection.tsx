@@ -102,7 +102,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
             onBlur={(e) => set("date", normalizeDate(e.target.value))}
           />
           <span className="sub">
-            Album release date, also used for compositions (not tracks). YYYY, YYYY-MM or YYYY-MM-DD
+            Album release date, not added to compositions or tracks. YYYY, YYYY-MM or YYYY-MM-DD
             (“June 12, 2012” is converted), blank to skip
           </span>
           <FieldErr id="date" msg={errs.date} />
