@@ -118,6 +118,13 @@ export const ALBUM_ID_FIELDS = [
     pattern: /^\d+$/,
     fromUrl: /music\.apple\.com\/.*\/album\/(?:[^/?#]*\/)?(\d+)/,
   },
+  {
+    key: "discogs",
+    property: "P1954",
+    label: "Discogs master ID",
+    pattern: /^\d+$/,
+    fromUrl: /discogs\.com\/(?:[a-z]{2}(?:-[A-Za-z]+)?\/)?master\/(\d+)/,
+  },
 ] as const;
 
 export type AlbumIdKey = (typeof ALBUM_ID_FIELDS)[number]["key"];

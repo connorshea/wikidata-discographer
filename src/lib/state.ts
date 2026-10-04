@@ -39,7 +39,7 @@ export const EMPTY: State = {
     artists: "",
     type: "Q482994",
     form: "Q208569",
-    ids: { spotify: "", musicbrainz: "", appleMusic: "" },
+    ids: { spotify: "", musicbrainz: "", appleMusic: "", discogs: "" },
   },
   artists: {},
   discs: [emptyDisc()],
@@ -176,6 +176,7 @@ export function coerceState(raw: unknown): State {
       spotify: str(ids.spotify),
       musicbrainz: str(ids.musicbrainz),
       appleMusic: str(ids.appleMusic),
+      discogs: str(ids.discogs),
     },
   };
   if (album.form && !/^Q\d+$/.test(album.form)) album.form = "";

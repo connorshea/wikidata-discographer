@@ -417,16 +417,28 @@ export function releaseToForm(
     ? (secondary.map((s) => SECONDARY_FORMS[s]).find(Boolean) ?? "")
     : STUDIO_ALBUM;
 
-  const ids: AlbumState["ids"] = { spotify: "", musicbrainz: rg.id, appleMusic: "" };
+  const albumQid = lookups.albumQid;
+  const ids: AlbumState["ids"] = { spotify: "", musicbrainz: rg.id, appleMusic: "", discogs: "" };
   for (const f of ALBUM_ID_FIELDS) {
     if (f.key === "musicbrainz") continue;
-    for (const r of release.relations ?? []) {
-      const m = f.fromUrl.exec(r.url?.resource ?? "");
-      if (m && !ids[f.key]) ids[f.key] = m[1];
-    }
+    // A Discogs master is the album as a whole, so MusicBrainz links it from
+    // the release group. A /release/ link on the release is one edition and is skipped.
+    const relations = f.key === "discogs" ? rg.relations : release.relations;
+    const linked = [
+      ...new Set(
+        (relations ?? []).flatMap((r) => f.fromUrl.exec(r.url?.resource ?? "")?.[1] ?? []),
+      ),
+    ];
+    if (f.key === "discogs" && linked.length > 1) {
+      if (!albumQid)
+        notes.push(
+          `The release group links ${linked.length} Discogs masters, so none was filled in. Add the right one under Album.`,
+        );
+    } else ids[f.key] = linked[0] ?? "";
   }
-
-  const albumQid = lookups.albumQid;
+  const linkedIds = ALBUM_ID_FIELDS.filter((f) => f.key !== "musicbrainz" && ids[f.key]).map(
+    (f) => f.label,
+  );
   const language = release["text-representation"]?.language ?? "";
   const p407 = LANGUAGES[language] ?? "";
   if (language && !p407 && language !== "mul")
@@ -443,6 +455,9 @@ export function releaseToForm(
   const summary =
     `Loaded ${plural(discs.length, "disc")} and ${plural(songs, "track")}. ` +
     (albumQid ? `The album is already on Wikidata as ${albumQid}. ` : "") +
+    (!albumQid && linkedIds.length
+      ? `The new album gets the ${joinList(linkedIds)} MusicBrainz links to. `
+      : "") +
     (found.length
       ? `Found ${joinList(found as string[])} already on Wikidata by their MusicBrainz IDs.`
       : "Found nothing else already on Wikidata by its MusicBrainz ID.") +
