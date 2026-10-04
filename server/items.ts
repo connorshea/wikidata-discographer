@@ -3,6 +3,7 @@
 //   GET  /api/items/search?q=…&kind=artist   label search (exact, then prefix)
 //   POST /api/items/duplicates               possible duplicates of a new album
 //   POST /api/items/matches                  existing items for a tracklist (server/matches.ts)
+//   POST /api/items/describe                 labels, descriptions and classes, live from Wikidata
 //   POST /api/items/:qid                     fetch an item from Wikidata into the mirror
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -14,10 +15,18 @@ import { type AuthEnv, requireUser } from "./auth/session.ts";
 import { rankDuplicates, titleReasons } from "./duplicates.ts";
 import { findMatches } from "./matches.ts";
 import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
-import { getEntities, getStatementItems, WikidataEditError } from "./wikidata-client.ts";
+import {
+  describeItems,
+  getEntities,
+  getStatementItems,
+  WikidataEditError,
+} from "./wikidata-client.ts";
+import { WD_LANG_CODES } from "../src/lib/languages.ts";
 import { ID_PROPERTIES, MUSIC_KINDS, type MusicKind } from "../src/lib/music.ts";
 import type {
   AddItemResponse,
+  DescribeRequest,
+  DescribeResponse,
   DuplicateMatch,
   DuplicatesRequest,
   DuplicatesResponse,
@@ -142,6 +151,25 @@ items.post("/duplicates", async (c) => {
 items.post("/matches", bodyLimit({ maxSize: 256 << 10 }), async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Partial<MatchesRequest>;
   return c.json((await findMatches(body)) satisfies MatchesResponse);
+});
+
+const MAX_DESCRIBE = 200;
+
+items.post("/describe", bodyLimit({ maxSize: 16 << 10 }), async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Partial<DescribeRequest>;
+  const qids = (Array.isArray(body.qids) ? body.qids : []).filter(
+    (q): q is string => typeof q === "string" && /^Q\d+$/.test(q),
+  );
+  const lang = typeof body.lang === "string" && WD_LANG_CODES.has(body.lang) ? body.lang : "en";
+  if (qids.length > MAX_DESCRIBE) return c.json({ error: `At most ${MAX_DESCRIBE} QIDs` }, 400);
+  try {
+    // The user is waiting on this: retry a transient failure once.
+    const found = await describeItems(qids, lang, { retries: 1 });
+    return c.json({ items: Object.fromEntries(found) } satisfies DescribeResponse);
+  } catch (err) {
+    if (err instanceof WikidataEditError) return c.json({ error: err.message }, 502);
+    throw err;
+  }
 });
 
 items.get("/:qid/tracklist", async (c) => {

@@ -153,3 +153,21 @@ export interface MatchesResponse {
   /** By request row key; rows with no matches are left out. */
   rows: Record<string, RowMatches>;
 }
+
+/** What an item is called and what it's an instance of, or why it can't be shown. */
+export type ItemSummary =
+  | { status: "ok"; label: string | null; description: string | null; classes: string[] }
+  | { status: "missing" }
+  | { status: "redirect"; to: string };
+
+/** Body of POST /api/items/describe. */
+export interface DescribeRequest {
+  qids: string[];
+  /** The language for labels and descriptions, with Wikidata's fallbacks. */
+  lang: string;
+}
+
+export interface DescribeResponse {
+  /** By QID, each one asked for. */
+  items: Record<string, ItemSummary>;
+}

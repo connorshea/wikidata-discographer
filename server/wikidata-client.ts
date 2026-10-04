@@ -12,6 +12,7 @@
 import { wikidataApiUrl } from "./auth/config.ts";
 import { deleteTokens, getAccessToken, TokenError } from "./auth/tokens.ts";
 import { userAgent } from "./auth/user-agent.ts";
+import type { ItemSummary } from "../src/lib/api-types.ts";
 import type { Claim, Snak, Value } from "../src/lib/plan.ts";
 
 const TIMEOUT_MS = 30_000;
@@ -359,11 +360,6 @@ export function checkItems(
 ): Promise<Map<string, ItemCheck>> {
   return entityBatches(qids, { props: "info" }, () => ({ status: "ok" as const }), { retries });
 }
-
-/** What an item is called and what it's an instance of, or why it can't be shown. */
-export type ItemSummary =
-  | { status: "ok"; label: string | null; description: string | null; classes: string[] }
-  | Exclude<ItemCheck, { status: "ok" }>;
 
 /**
  * Each QID's label and description in `lang` (or a fallback language), and
