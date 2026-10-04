@@ -4,6 +4,7 @@ import { emptyDisc } from "../lib/state.ts";
 import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
   isCustomPart,
+  normalizeDate,
   normalizeQid,
   PARTS,
   parseDate,
@@ -350,6 +351,9 @@ function SingleRow({
           disabled={qid !== "" && date === ""}
           value={sg.date}
           onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
+          onBlur={(e) =>
+            update((s) => void (s.discs[di].single[n].date = normalizeDate(e.target.value)))
+          }
         />
       </label>
       <label className="f">

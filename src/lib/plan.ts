@@ -344,6 +344,49 @@ export function parseDate(raw: string): ParsedDate {
   return { ok: true, val: { time: `+${y}-00-00T00:00:00Z`, precision: 9 }, year: y };
 }
 
+const MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+const MONTH = String.raw`([a-z]{3,9})\.?`;
+const DAY = String.raw`(\d{1,2})(?:st|nd|rd|th)?`;
+const MDY = new RegExp(String.raw`^${MONTH}\s+${DAY},?\s+(\d{4})$`, "i");
+const DMY = new RegExp(String.raw`^${DAY}\s+(?:of\s+)?${MONTH},?\s+(\d{4})$`, "i");
+const MY = new RegExp(String.raw`^${MONTH},?\s+(\d{4})$`, "i");
+
+/** 1-based month number for an English month name or abbreviation ("Jun", "Sept"), or 0. */
+function monthNum(name: string): number {
+  const n = name.toLowerCase();
+  if (n.length < 3) return 0;
+  return MONTHS.findIndex((full) => full.startsWith(n)) + 1;
+}
+
+/**
+ * Rewrites a written-out English date such as "June 12, 2012", "12 June 2012" or "June 2012" as
+ * YYYY-MM-DD or YYYY-MM. Anything else comes back unchanged, so parseDate can report it.
+ */
+export function normalizeDate(raw: string): string {
+  const s = raw.trim().replace(/\s+/g, " ");
+  const pad = (n: string) => n.padStart(2, "0");
+  let m = MDY.exec(s);
+  if (m && monthNum(m[1])) return `${m[3]}-${pad(String(monthNum(m[1])))}-${pad(m[2])}`;
+  m = DMY.exec(s);
+  if (m && monthNum(m[2])) return `${m[3]}-${pad(String(monthNum(m[2])))}-${pad(m[1])}`;
+  m = MY.exec(s);
+  if (m && monthNum(m[1])) return `${m[2]}-${pad(String(monthNum(m[1])))}`;
+  return raw;
+}
+
 const EMPTY_TEMPLATE = "Empty, so no description will be added.";
 
 function checkTemplate(tpl: string, date: ParsedDate, vars = ["year", "artists"]): string[] {
