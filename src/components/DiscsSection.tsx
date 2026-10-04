@@ -337,7 +337,7 @@ function SingleRow({
           type="text"
           className="date"
           spellCheck={false}
-          placeholder="YYYY-MM-DD"
+          placeholder={qid ? "Not for an existing single" : "YYYY-MM-DD"}
           aria-invalid={date !== "" && !parseDate(date).ok}
           disabled={qid !== "" && date === ""}
           value={sg.date}
@@ -347,7 +347,7 @@ function SingleRow({
       <label className="f">
         Existing single
         <QidInput
-          placeholder="Q… to reuse, blank to create"
+          placeholder={date ? "Clear the date to reuse one" : "Q… to reuse one"}
           aria-invalid={(qid !== "" && !QID.test(qid)) || !!notSingle}
           disabled={date !== "" && qid === ""}
           value={sg.qid}
@@ -362,18 +362,9 @@ function SingleRow({
       >
         Done
       </button>
-      {qid === "" && date === "" ? (
-        // Just ticked: say what to fill in rather than show an error.
-        <p className="single-hint muted">
-          Enter the new single's release date, or an existing single's QID to reuse it.
-        </p>
-      ) : (
-        (qid === "") !== (date === "") && (
-          <p className="single-hint muted">
-            A single takes a release date if it's new, or its QID if it already exists. Clear one to
-            fill in the other.
-          </p>
-        )
+      {/* Just ticked: say what to fill in rather than show an error. */}
+      {qid === "" && date === "" && (
+        <p className="single-hint muted">Enter its release date, or an existing single's QID.</p>
       )}
       {problem && (qid !== "" || date !== "") && (
         <p className="field-err" aria-live="polite">
@@ -421,7 +412,7 @@ function singleProblem(qid: string, found: ItemLookup | undefined): string | nul
   if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
   if (found?.status === "ok" && !found.classes.includes(SINGLE_CLASS)) {
     const name = found.label ? `${qid} (${found.label})` : qid;
-    return `${name} isn't a single: it has no instance of (P31) single (${SINGLE_CLASS}).`;
+    return `${name} isn't an instance of single (${SINGLE_CLASS}).`;
   }
   return null;
 }

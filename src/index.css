@@ -342,8 +342,8 @@ tr.has-sub td {
 tr.sub-row td {
   padding-top: 0;
 }
-tr.sub-row.is-single td {
-  background: color-mix(in srgb, var(--rg-edge) 10%, transparent);
+tr.is-single td {
+  background: color-mix(in srgb, var(--rg-edge) 9%, var(--panel));
 }
 /* A track with possible matches to review: a warning icon by its title. */
 .title-cell {
@@ -482,6 +482,8 @@ button.ghost.quiet {
 }
 .single-panel {
   display: flex;
+  width: fit-content;
+  max-width: 100%;
   flex-wrap: wrap;
   gap: 10px 14px;
   align-items: flex-end;
@@ -492,16 +494,24 @@ button.ghost.quiet {
   border-radius: 8px;
 }
 .single-panel input[type="text"] {
-  width: 26ch;
+  width: 22ch;
   min-width: 0;
 }
 /* Monospace is for QIDs only. */
 .single-panel input.date {
   font-family: var(--sans);
 }
+.single-panel input:disabled {
+  background: transparent;
+  border-style: dashed;
+  font-family: var(--sans);
+  cursor: not-allowed;
+}
 .single-panel .single-hint,
 .single-panel .field-err {
   flex-basis: 100%;
+  /* Wrap to the fields' width rather than widen the panel. */
+  contain: inline-size;
   margin: 0;
 }
 .msg {
