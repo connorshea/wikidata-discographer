@@ -15,7 +15,8 @@ import {
 } from "./musicbrainz.ts";
 import { normalizeAlbumId } from "./music.ts";
 import { buildPlan, parseDisc } from "./plan.ts";
-import { EMPTY, EXAMPLE } from "./state.ts";
+import { EMPTY } from "./state.ts";
+import { EXAMPLE } from "./example.fixture.ts";
 
 // "Day and Night" by Carly Rae Jepsen, trimmed to three tracks a disc.
 const RELEASE = JSON.parse(

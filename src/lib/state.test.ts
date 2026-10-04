@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { coerceState, EMPTY, EXAMPLE } from "./state.ts";
+import { coerceState, EMPTY } from "./state.ts";
+import { EXAMPLE } from "./example.fixture.ts";
 
 describe("coerceState", () => {
   it("fills anything missing with defaults", () => {

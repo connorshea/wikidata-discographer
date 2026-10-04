@@ -10,7 +10,8 @@ import {
   parseDisc,
   splitArtists,
 } from "./plan.ts";
-import { EMPTY, emptyDisc, EXAMPLE } from "./state.ts";
+import { EMPTY, emptyDisc } from "./state.ts";
+import { EXAMPLE } from "./example.fixture.ts";
 
 const keys = (ops: Op[]) => ops.map((o) => (o.op === "create" ? o.key : `+${o.what}`));
 const find = (ops: Op[], key: string) => ops.find((o) => o.op === "create" && o.key === key);
