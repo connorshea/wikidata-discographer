@@ -181,28 +181,42 @@ export function releaseIds(release: MbRelease) {
     artists: [...new Set(credits.map((c) => c.artist.id))],
     recordings: [...new Set(tracks.map((t) => t.recording.id))],
     works: [...new Set(tracks.flatMap((t) => workOf(t) ?? []))],
-    spotifyTracks: [...new Set(tracks.flatMap(spotifyOf))],
+    spotifyTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "spotify")))],
+    appleMusicTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "appleMusic")))],
   };
 }
 
-/** The distinct Spotify track IDs a recording links to. */
-function spotifyLinks(t: MbTrack): string[] {
+/** The streaming services a recording's links give a track ID for. */
+const TRACK_LINKS = {
+  spotify: {
+    fromUrl: /open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([0-9A-Za-z]{22})/,
+    song: "Spotify track",
+    label: "Spotify track ID",
+  },
+  // MusicBrainz rewrites older Apple links on recordings to this form.
+  appleMusic: {
+    fromUrl: /^https:\/\/music\.apple\.com\/[a-z]{2}\/song\/(\d+)$/,
+    song: "Apple Music song",
+    label: "Apple Music track ID",
+  },
+} as const;
+type TrackLinkKey = keyof typeof TRACK_LINKS;
+
+/** The distinct IDs of one service a recording links to. */
+function trackLinks(t: MbTrack, key: TrackLinkKey): string[] {
   const ids = (t.recording.relations ?? []).flatMap(
-    (r) =>
-      /open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([0-9A-Za-z]{22})/.exec(
-        r.url?.resource ?? "",
-      )?.[1] ?? [],
+    (r) => TRACK_LINKS[key].fromUrl.exec(r.url?.resource ?? "")?.[1] ?? [],
   );
   return [...new Set(ids)];
 }
 
 /**
- * A recording's Spotify track ID, if it links exactly one. Several usually
- * means one per Spotify release the recording is on, and there's no telling
- * which is this album's.
+ * A recording's ID on a service, if it links exactly one. Several usually
+ * means one per release on that service the recording is on, and there's no
+ * telling which is this album's.
  */
-function spotifyOf(t: MbTrack): string[] {
-  const ids = spotifyLinks(t);
+function trackLinkOf(t: MbTrack, key: TrackLinkKey): string[] {
+  const ids = trackLinks(t, key);
   return ids.length === 1 ? ids : [];
 }
 
@@ -360,9 +374,9 @@ export function releaseToForm(
   let missingLength = 0;
   let comps = 0;
   let tracks = 0;
-  let manySpotify = 0;
+  const many: Record<TrackLinkKey, number> = { spotify: 0, appleMusic: 0 };
   const taken = new Set(lookups.taken);
-  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, refs: 0 };
+  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, appleMusic: 0, refs: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
     if (media.length > 1) {
@@ -386,19 +400,29 @@ export function releaseToForm(
           recording: taken.has(t.recording.id) ? "" : t.recording.id,
           work: work && !taken.has(work) ? work : "",
           isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
-          spotify: spotifyOf(t).filter((v) => !taken.has(v)),
+          spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
+          appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
           length:
             t.length === null
               ? null
               : { seconds: seconds(t.length), recording: t.recording.id, retrieved },
         };
-        if (ids.recording || ids.work || ids.isrcs.length || ids.spotify.length || ids.length) {
+        if (
+          ids.recording ||
+          ids.work ||
+          ids.isrcs.length ||
+          ids.spotify.length ||
+          ids.appleMusic.length ||
+          ids.length
+        ) {
           disc.mb[t.position] = ids;
           if (!disc.track[t.position]) {
             toAdd.recordings += ids.recording ? 1 : 0;
             toAdd.isrcs += ids.isrcs.length;
             toAdd.spotify += ids.spotify.length;
-            if (spotifyLinks(t).length > 1) manySpotify++;
+            toAdd.appleMusic += ids.appleMusic.length;
+            for (const key of Object.keys(many) as TrackLinkKey[])
+              if (trackLinks(t, key).length > 1) many[key]++;
             toAdd.refs += ids.length ? 1 : 0;
           }
           if (!disc.comp[t.position]) toAdd.works += ids.work ? 1 : 0;
@@ -414,10 +438,11 @@ export function releaseToForm(
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,
     );
-  if (manySpotify)
-    notes.push(
-      `${plural(manySpotify, "track links", "tracks link")} more than one Spotify track on MusicBrainz, so ${manySpotify === 1 ? "it gets" : "they get"} no Spotify track ID.`,
-    );
+  for (const [key, n] of Object.entries(many) as [TrackLinkKey, number][])
+    if (n)
+      notes.push(
+        `${plural(n, "track links", "tracks link")} more than one ${TRACK_LINKS[key].song} on MusicBrainz, so ${n === 1 ? "it gets" : "they get"} no ${TRACK_LINKS[key].label}.`,
+      );
   for (const name of nameTroubles)
     notes.push(
       `“${name}” has a comma, ampersand, “feat.” or dash in their name, so the tracklist may split it into several artists. Check the Performers table, or turn off splitting artists in Item settings.`,
@@ -502,11 +527,18 @@ export function releaseToForm(
 }
 
 /** What the import adds to the items the run creates, as a sentence. */
-function idsSummary(n: { recordings: number; works: number; isrcs: number; spotify: number }) {
+function idsSummary(n: {
+  recordings: number;
+  works: number;
+  isrcs: number;
+  spotify: number;
+  appleMusic: number;
+}) {
   const parts = [
     n.recordings && plural(n.recordings, "recording ID"),
     n.isrcs && plural(n.isrcs, "ISRC"),
-    n.spotify && plural(n.spotify, "Spotify track ID"),
+    n.spotify && plural(n.spotify, TRACK_LINKS.spotify.label),
+    n.appleMusic && plural(n.appleMusic, TRACK_LINKS.appleMusic.label),
   ].filter(Boolean) as string[];
   const tracks = parts.length ? `New tracks get ${joinList(parts)}` : "";
   const works = n.works

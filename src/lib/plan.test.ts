@@ -97,6 +97,7 @@ describe("buildPlan", () => {
       work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
       isrcs: ["USUM72604367"],
       spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
+      appleMusic: ["1820000002"],
       length: {
         seconds: 177,
         recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
@@ -114,7 +115,7 @@ describe("buildPlan", () => {
           claims: { property: string; value: { value?: string } }[];
         }
       ).claims
-        .filter((c) => ["P4404", "P435", "P1243", "P2207"].includes(c.property))
+        .filter((c) => ["P4404", "P435", "P1243", "P2207", "P10110"].includes(c.property))
         .map((c) => [c.property, c.value.value]);
 
     it("go on the new track and composition", () => {
@@ -122,6 +123,7 @@ describe("buildPlan", () => {
         ["P4404", ids.recording],
         ["P1243", "USUM72604367"],
         ["P2207", "6RSxVKsgvNIIN6IwYA8GsQ"],
+        ["P10110", "1820000002"],
       ]);
       expect(claimsOf(withIds(), "comp:0:2")).toEqual([["P435", ids.work]]);
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
@@ -167,7 +169,7 @@ describe("buildPlan", () => {
     it("match the title ignoring case and curly quotes", () => {
       const state = withIds();
       state.discs[0].mb["2"] = { ...ids, title: "habits  of creatures" };
-      expect(claimsOf(state, "track:0:2")).toHaveLength(3);
+      expect(claimsOf(state, "track:0:2")).toHaveLength(4);
     });
   });
 

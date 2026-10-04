@@ -415,6 +415,7 @@ function MbChip({
           ids.work && `Work ID (P435), for the composition, ${ids.work}`,
           ...ids.isrcs.map((v) => `ISRC (P1243) ${v}`),
           ...ids.spotify.map((v) => `Spotify track ID (P2207) ${v}`),
+          ...ids.appleMusic.map((v) => `Apple Music track ID (P10110) ${v}`),
         ]
       : []),
     S.duration &&

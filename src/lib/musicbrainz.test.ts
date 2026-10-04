@@ -203,6 +203,7 @@ describe("releaseToForm", () => {
       work: "2bf1a377-686f-426a-ab5a-309466d201e9",
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
+      appleMusic: [],
       length: {
         seconds: 252,
         recording: "263340e1-2f03-4b31-b404-a06a8acda193",
@@ -251,6 +252,57 @@ describe("releaseToForm", () => {
       "1 track links more than one Spotify track on MusicBrainz, so it gets no Spotify track ID.",
     ]);
     expect(form.summary).toContain("New tracks get 6 recording IDs and 6 ISRCs, and");
+  });
+
+  describe("Apple Music track IDs", () => {
+    const apple = (id: string, type = "streaming") => ({
+      type,
+      "target-type": "url",
+      url: { resource: `https://music.apple.com/gb/song/${id}` },
+    });
+    const withApple = (...ids: ReturnType<typeof apple>[]) => {
+      const r = release();
+      r.media[0].tracks![0].recording.relations!.push(...ids);
+      return r;
+    };
+
+    it("adds the one a recording links, once", () => {
+      const r = withApple(apple("1065973702"), apple("1065973702", "purchase for download"));
+      expect(releaseIds(r).appleMusicTracks).toEqual(["1065973702"]);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].appleMusic).toEqual(["1065973702"]);
+      expect(form.discs[0].mb["2"].appleMusic).toEqual([]);
+      expect(form.notes).toEqual([]);
+      expect(form.summary).toContain(
+        "New tracks get 6 recording IDs, 6 ISRCs, 1 Spotify track ID and 1 Apple Music track ID, and",
+      );
+    });
+
+    it("adds none when a recording links more than one", () => {
+      const r = withApple(apple("1065973702"), apple("1665303757"));
+      expect(releaseIds(r).appleMusicTracks).toEqual([]);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].appleMusic).toEqual([]);
+      expect(form.notes).toEqual([
+        "1 track links more than one Apple Music song on MusicBrainz, so it gets no Apple Music track ID.",
+      ]);
+    });
+
+    it("leaves out one an item already has", () => {
+      const form = releaseToForm(withApple(apple("1065973702")), {
+        ...NONE,
+        taken: ["1065973702"],
+      });
+      expect(form.discs[0].mb["1"].appleMusic).toEqual([]);
+    });
+
+    it("ignores other Apple links", () => {
+      const video = {
+        ...apple(""),
+        url: { resource: "https://music.apple.com/gb/music-video/1065973702" },
+      };
+      expect(releaseIds(withApple(video)).appleMusicTracks).toEqual([]);
+    });
   });
 
   it("doesn't count identifiers for rows that reuse an existing track", () => {
@@ -409,5 +461,15 @@ describe("normalizeAlbumId", () => {
     expect(normalizeAlbumId("discogs", "https://www.discogs.com/release/12345678")).toBe(
       "https://www.discogs.com/release/12345678",
     );
+  });
+
+  it("reads an Apple Music album ID from Apple Music and older iTunes URLs", () => {
+    for (const url of [
+      "https://music.apple.com/us/album/day-and-night/1820000000",
+      "https://music.apple.com/gb/album/1820000000",
+      "https://itunes.apple.com/us/album/id1820000000",
+      "https://itunes.apple.com/us/album/day-and-night/id1820000000?uo=4",
+    ])
+      expect(normalizeAlbumId("appleMusic", url)).toBe("1820000000");
   });
 });

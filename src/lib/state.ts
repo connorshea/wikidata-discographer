@@ -1,7 +1,12 @@
 // Default form states, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
 import type { Disc, MbRowIds, Settings, SingleState, State } from "./plan.ts";
-import { ISRC_PATTERN, MBID_PATTERN, SPOTIFY_TRACK_PATTERN } from "./music.ts";
+import {
+  APPLE_MUSIC_TRACK_PATTERN,
+  ISRC_PATTERN,
+  MBID_PATTERN,
+  SPOTIFY_TRACK_PATTERN,
+} from "./music.ts";
 
 const DEFAULT_SETTINGS: Settings = {
   lang: "en",
@@ -117,6 +122,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     work: matching(ids.work, MBID_PATTERN),
     isrcs: strList(ids.isrcs, ISRC_PATTERN),
     spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
+    appleMusic: strList(ids.appleMusic, APPLE_MUSIC_TRACK_PATTERN),
     length: coerceLength(ids.length),
   };
 }
