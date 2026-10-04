@@ -21,7 +21,7 @@ const RELEASE = JSON.parse(
   readFileSync(new URL("./musicbrainz.fixture.json", import.meta.url), "utf8"),
 ) as MbRelease;
 const release = () => structuredClone(RELEASE);
-const NONE: MbLookups = { artists: {}, recordings: {}, works: {} };
+const NONE: MbLookups = { artists: {}, recordings: {}, works: {}, taken: [] };
 const CRJ = "09887aa7-226e-4ecc-9a0c-02d2ae5777e1";
 const credit = (...parts: [string, string][]): MbArtistCredit[] =>
   parts.map(([name, joinphrase], i) => ({ name, joinphrase, artist: { id: `a${i}`, name } }));
@@ -154,6 +154,7 @@ describe("releaseIds", () => {
     expect(ids.artists).toEqual([CRJ]);
     expect(ids.recordings).toHaveLength(6);
     expect(ids.works).toHaveLength(6);
+    expect(ids.spotifyTracks).toEqual(["6HSinPEEP7FeS2k1y7BD7j"]);
   });
 });
 
@@ -181,6 +182,42 @@ describe("releaseToForm", () => {
     );
     expect(form.notes).toEqual([]);
     expect(form.summary).toMatch(/^Loaded 2 discs and 6 tracks\. Found nothing else/);
+    expect(form.summary).toContain(
+      "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
+    );
+  });
+
+  it("keeps each track's identifiers with its title", () => {
+    const [first] = releaseToForm(RELEASE, NONE).discs;
+    expect(first.mb["1"]).toEqual({
+      title: "After All",
+      recording: "263340e1-2f03-4b31-b404-a06a8acda193",
+      work: "2bf1a377-686f-426a-ab5a-309466d201e9",
+      isrcs: ["USUM72604366"],
+      spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
+    });
+    expect(Object.keys(first.mb)).toEqual(["1", "2", "3"]);
+  });
+
+  it("leaves out identifiers an item already has", () => {
+    const t = RELEASE.media[0].tracks![0];
+    const work = t.recording.relations!.find((r) => r.work)!.work!.id;
+    const form = releaseToForm(RELEASE, {
+      ...NONE,
+      taken: [t.recording.id, work, "6HSinPEEP7FeS2k1y7BD7j"],
+    });
+    expect(form.discs[0].mb["1"]).toMatchObject({
+      recording: "",
+      work: "",
+      isrcs: ["USUM72604366"],
+      spotify: [],
+    });
+  });
+
+  it("doesn't count identifiers for rows that reuse an existing track", () => {
+    const rec = RELEASE.media[0].tracks![0].recording.id;
+    const form = releaseToForm(RELEASE, { ...NONE, recordings: { [rec]: "Q10" }, taken: [rec] });
+    expect(form.summary).toContain("New tracks get 5 recording IDs and 5 ISRCs, and");
   });
 
   it("fills in what the mirror already has", () => {
@@ -191,6 +228,7 @@ describe("releaseToForm", () => {
       artists: { [CRJ]: "Q52583" },
       recordings: { [rec]: "Q10" },
       works: { [work]: "Q20" },
+      taken: [],
     });
     expect(form.album).toMatchObject({ mode: "existing", qid: "Q140316456" });
     expect(form.artists).toEqual({ "Carly Rae Jepsen": "Q52583" });

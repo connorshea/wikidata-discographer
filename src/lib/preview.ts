@@ -37,6 +37,7 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   P518: "applies to part",
   P1545: "series ordinal",
   P2047: "duration",
+  P1243: "ISRC",
   P13602: "single taken from",
 };
 

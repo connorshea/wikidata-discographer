@@ -90,8 +90,16 @@
                   "id": "2bf1a377-686f-426a-ab5a-309466d201e9",
                   "title": "After All"
                 }
+              },
+              {
+                "type": "free streaming",
+                "target-type": "url",
+                "url": {
+                  "resource": "https://open.spotify.com/track/6HSinPEEP7FeS2k1y7BD7j"
+                }
               }
-            ]
+            ],
+            "isrcs": ["USUM72604366"]
           }
         },
         {
@@ -119,7 +127,8 @@
                   "title": "Habits of Creatures"
                 }
               }
-            ]
+            ],
+            "isrcs": ["USUM72605045"]
           }
         },
         {
@@ -147,7 +156,8 @@
                   "title": "Versailles"
                 }
               }
-            ]
+            ],
+            "isrcs": ["USUM72605050"]
           }
         }
       ]
@@ -181,7 +191,8 @@
                   "title": "Never Let a Good Thing Die"
                 }
               }
-            ]
+            ],
+            "isrcs": ["USUM72605052"]
           }
         },
         {
@@ -209,7 +220,8 @@
                   "title": "Amalfi Coast"
                 }
               }
-            ]
+            ],
+            "isrcs": ["USUM72605053"]
           }
         },
         {
@@ -237,7 +249,8 @@
                   "title": "Patience Power Passion"
                 }
               }
-            ]
+            ],
+            "isrcs": ["USUM72605054"]
           }
         }
       ]

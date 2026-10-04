@@ -1,6 +1,7 @@
 // Default form states, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
-import type { Disc, Settings, SingleState, State } from "./plan.ts";
+import type { Disc, MbRowIds, Settings, SingleState, State } from "./plan.ts";
+import { ISRC_PATTERN, MBID_PATTERN, SPOTIFY_TRACK_PATTERN } from "./music.ts";
 
 const DEFAULT_SETTINGS: Settings = {
   lang: "en",
@@ -16,9 +17,17 @@ const DEFAULT_SETTINGS: Settings = {
   straight: false,
   splitArtists: true,
   extendExisting: true,
+  mbIds: true,
 };
 
-export const emptyDisc = (): Disc => ({ part: "", text: "", comp: {}, track: {}, single: {} });
+export const emptyDisc = (): Disc => ({
+  part: "",
+  text: "",
+  comp: {},
+  track: {},
+  single: {},
+  mb: {},
+});
 
 export const EMPTY: State = {
   settings: DEFAULT_SETTINGS,
@@ -45,6 +54,7 @@ export const EXAMPLE: State = {
       comp: { "1": "Q140882264" },
       track: {},
       single: {},
+      mb: {},
       text: `1. After All - Carly Rae Jepsen (04:12)
 2. Habits of Creatures - Carly Rae Jepsen (02:57)
 3. Versailles - Carly Rae Jepsen (03:14)
@@ -63,6 +73,7 @@ export const EXAMPLE: State = {
       comp: {},
       track: {},
       single: {},
+      mb: {},
       text: `1. Never Let a Good Thing Die - Carly Rae Jepsen (05:19)
 2. Amalfi Coast - Carly Rae Jepsen (02:59)
 3. Patience Power Passion - Carly Rae Jepsen (03:29)
@@ -90,6 +101,24 @@ const strMap = (v: unknown): Record<string, string> =>
       )
     : {};
 
+const strList = (v: unknown, pattern: RegExp): string[] =>
+  Array.isArray(v)
+    ? [...new Set(v.filter((x): x is string => typeof x === "string" && pattern.test(x)))]
+    : [];
+const matching = (v: unknown, pattern: RegExp) =>
+  typeof v === "string" && pattern.test(v) ? v : "";
+
+/** Imported identifiers, keeping only well-formed ones. */
+function coerceMbIds(ids: Obj): MbRowIds {
+  return {
+    title: str(ids.title),
+    recording: matching(ids.recording, MBID_PATTERN),
+    work: matching(ids.work, MBID_PATTERN),
+    isrcs: strList(ids.isrcs, ISRC_PATTERN),
+    spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
+  };
+}
+
 /** A well-formed copy of `raw`, filling anything missing or mistyped with defaults. */
 export function coerceState(raw: unknown): State {
   const r = isObj(raw) ? raw : {};
@@ -113,6 +142,7 @@ export function coerceState(raw: unknown): State {
     straight: bool(s.straight, d.straight),
     splitArtists: bool(s.splitArtists, d.splitArtists),
     extendExisting: bool(s.extendExisting, d.extendExisting),
+    mbIds: bool(s.mbIds, d.mbIds),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};
@@ -141,6 +171,13 @@ export function coerceState(raw: unknown): State {
           Object.entries(disc.single)
             .filter((e): e is [string, Obj] => isObj(e[1]))
             .map(([n, sg]): [string, SingleState] => [n, { date: str(sg.date), qid: str(sg.qid) }]),
+        )
+      : {},
+    mb: isObj(disc.mb)
+      ? Object.fromEntries(
+          Object.entries(disc.mb)
+            .filter((e): e is [string, Obj] => isObj(e[1]))
+            .map(([n, ids]): [string, MbRowIds] => [n, coerceMbIds(ids)]),
         )
       : {},
   }));

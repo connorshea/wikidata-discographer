@@ -6,8 +6,8 @@
 // many releases with different tracks. A pasted release group lists its
 // releases (`releaseChoices`) for the user to pick one, best guess first.
 import { ALBUM_FORMS, ALBUM_TYPES, NO_LINGUISTIC_CONTENT, PARTS, splitArtists } from "./plan.ts";
-import type { AlbumState, Disc, State } from "./plan.ts";
-import { ALBUM_ID_FIELDS } from "./music.ts";
+import type { AlbumState, Disc, MbRowIds, State } from "./plan.ts";
+import { ALBUM_ID_FIELDS, ISRC_PATTERN } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
 const MBID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
@@ -125,7 +125,7 @@ export function releaseChoices(releases: MbReleaseListing[]): ReleaseChoice[] {
 // ---------------------------------------------------------------------------
 // The parts of MusicBrainz's release JSON the import reads. The lookup is
 //   /ws/2/release/<mbid>?inc=recordings+artist-credits+release-groups+
-//     work-rels+recording-level-rels+url-rels+release-group-level-rels
+//     work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs
 // ---------------------------------------------------------------------------
 
 export interface MbArtistCredit {
@@ -146,7 +146,7 @@ export interface MbTrack {
   title: string;
   length: number | null;
   "artist-credit": MbArtistCredit[];
-  recording: { id: string; relations?: MbRelation[] };
+  recording: { id: string; isrcs?: string[]; relations?: MbRelation[] };
 }
 
 export interface MbMedium {
@@ -181,7 +181,19 @@ export function releaseIds(release: MbRelease) {
     artists: [...new Set(credits.map((c) => c.artist.id))],
     recordings: [...new Set(tracks.map((t) => t.recording.id))],
     works: [...new Set(tracks.flatMap((t) => workOf(t) ?? []))],
+    spotifyTracks: [...new Set(tracks.flatMap(spotifyOf))],
   };
+}
+
+/** A recording's Spotify track IDs, from its links. */
+function spotifyOf(t: MbTrack): string[] {
+  const ids = (t.recording.relations ?? []).flatMap(
+    (r) =>
+      /open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([0-9A-Za-z]{22})/.exec(
+        r.url?.resource ?? "",
+      )?.[1] ?? [],
+  );
+  return [...new Set(ids)];
 }
 
 /** Items in the mirror with these MusicBrainz IDs, MBID → QID. */
@@ -194,6 +206,11 @@ export interface MbLookups {
   recordings: Record<string, string>;
   /** P435 work ID → composition. */
   works: Record<string, string>;
+  /**
+   * Recording, work and Spotify track IDs some item in the mirror already
+   * has, however many. They aren't added to new items, which would duplicate them.
+   */
+  taken: string[];
 }
 
 /** What the import fills in. Settings other than the date and language are left as they are. */
@@ -325,6 +342,8 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
   let missingLength = 0;
   let comps = 0;
   let tracks = 0;
+  const taken = new Set(lookups.taken);
+  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
     if (media.length > 1) {
@@ -342,6 +361,22 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
         if (lookups.recordings[t.recording.id]) {
           disc.track[t.position] = lookups.recordings[t.recording.id];
           tracks++;
+        }
+        const ids: MbRowIds = {
+          title: t.title.trim(),
+          recording: taken.has(t.recording.id) ? "" : t.recording.id,
+          work: work && !taken.has(work) ? work : "",
+          isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
+          spotify: spotifyOf(t).filter((v) => !taken.has(v)),
+        };
+        if (ids.recording || ids.work || ids.isrcs.length || ids.spotify.length) {
+          disc.mb[t.position] = ids;
+          if (!disc.track[t.position]) {
+            toAdd.recordings += ids.recording ? 1 : 0;
+            toAdd.isrcs += ids.isrcs.length;
+            toAdd.spotify += ids.spotify.length;
+          }
+          if (!disc.comp[t.position]) toAdd.works += ids.work ? 1 : 0;
         }
         if (t.length === null) missingLength++;
         const len = t.length === null ? "" : ` (${duration(t.length)})`;
@@ -397,7 +432,8 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
     (albumQid ? `The album is already on Wikidata as ${albumQid}. ` : "") +
     (found.length
       ? `Found ${joinList(found as string[])} already on Wikidata by their MusicBrainz IDs.`
-      : "Found nothing else already on Wikidata by its MusicBrainz ID.");
+      : "Found nothing else already on Wikidata by its MusicBrainz ID.") +
+    idsSummary(toAdd);
 
   return {
     album: {
@@ -416,6 +452,21 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
     notes,
     summary,
   };
+}
+
+/** What the import adds to the items the run creates, as a sentence. */
+function idsSummary(n: { recordings: number; works: number; isrcs: number; spotify: number }) {
+  const parts = [
+    n.recordings && plural(n.recordings, "recording ID"),
+    n.isrcs && plural(n.isrcs, "ISRC"),
+    n.spotify && plural(n.spotify, "Spotify track ID"),
+  ].filter(Boolean) as string[];
+  const tracks = parts.length ? `New tracks get ${joinList(parts)}` : "";
+  const works = n.works
+    ? `${plural(n.works, "new composition")} ${n.works === 1 ? "gets its" : "get their"} work ID`
+    : "";
+  if (!tracks && !works) return "";
+  return ` ${[tracks, works].filter(Boolean).join(", and ")}, if adding identifiers is on in Item settings.`;
 }
 
 const joinList = (xs: string[]) =>

@@ -90,6 +90,54 @@ describe("buildPlan", () => {
     expect(props("track:0:3")).toContain("P2047");
   });
 
+  describe("identifiers from a MusicBrainz import", () => {
+    const ids = {
+      title: "Habits of Creatures",
+      recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+      work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+      isrcs: ["USUM72604367"],
+      spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
+    };
+    const withIds = () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].mb["2"] = ids;
+      return state;
+    };
+    const claimsOf = (state: typeof EXAMPLE, key: string) =>
+      (
+        buildPlan(state).ops.find((o) => o.op === "create" && o.key === key) as {
+          claims: { property: string; value: { value?: string } }[];
+        }
+      ).claims
+        .filter((c) => ["P4404", "P435", "P1243", "P2207"].includes(c.property))
+        .map((c) => [c.property, c.value.value]);
+
+    it("go on the new track and composition", () => {
+      expect(claimsOf(withIds(), "track:0:2")).toEqual([
+        ["P4404", ids.recording],
+        ["P1243", "USUM72604367"],
+        ["P2207", "6RSxVKsgvNIIN6IwYA8GsQ"],
+      ]);
+      expect(claimsOf(withIds(), "comp:0:2")).toEqual([["P435", ids.work]]);
+      expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
+    });
+
+    it("are left off once the row's title changes, or when the setting is off", () => {
+      const renamed = withIds();
+      renamed.discs[0].text = renamed.discs[0].text.replace("Habits of Creatures", "Habits");
+      expect(claimsOf(renamed, "track:0:2")).toEqual([]);
+      const off = withIds();
+      off.settings.mbIds = false;
+      expect(claimsOf(off, "track:0:2")).toEqual([]);
+    });
+
+    it("match the title ignoring case and curly quotes", () => {
+      const state = withIds();
+      state.discs[0].mb["2"] = { ...ids, title: "habits  of creatures" };
+      expect(claimsOf(state, "track:0:2")).toHaveLength(3);
+    });
+  });
+
   it("needs a single's own release date or an existing single, not both", () => {
     const state = structuredClone(EXAMPLE);
     state.discs[0].single["2"] = { date: "", qid: "" };

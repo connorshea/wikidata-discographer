@@ -90,6 +90,11 @@ export function kindOf(
   return null;
 }
 
+/** The formats of the identifiers a MusicBrainz import adds to new tracks and compositions. */
+export const MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
+export const SPOTIFY_TRACK_PATTERN = /^[0-9A-Za-z]{22}$/;
+
 /** The album identifiers the album form takes, with how to read a pasted URL. */
 export const ALBUM_ID_FIELDS = [
   {
