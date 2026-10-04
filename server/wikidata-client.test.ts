@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { describeItems, editRequest, getEntities, WikidataEditError } from "./wikidata-client.ts";
+import {
+  describeItems,
+  editRequest,
+  freshStatements,
+  getEntities,
+  WikidataEditError,
+} from "./wikidata-client.ts";
 
 vi.mock("./auth/tokens.ts", () => ({
   getAccessToken: async () => "access",
@@ -169,5 +175,41 @@ describe("describeItems", () => {
     const got = await describeItems(["Q1", "Q999999999"], "en");
     expect(got.get("Q999999999")).toEqual({ status: "missing" });
     expect(got.get("Q1")).toEqual({ status: "ok", label: null, description: null, classes: [] });
+  });
+});
+
+describe("freshStatements", () => {
+  const count = (amount: number) => ({
+    mainsnak: {
+      snaktype: "value",
+      property: "P2635",
+      datavalue: { type: "quantity", value: { amount: `+${amount}`, unit: "1" } },
+    },
+  });
+  const tracklist = { property: "P658", value: { type: "item" as const, id: "Q5" } };
+  const resolve = (ref: string) => ref;
+
+  it("skips an ifMissing claim when the item has the property with any value", () => {
+    const claims = [
+      tracklist,
+      {
+        property: "P2635",
+        value: { type: "quantity" as const, amount: 3 },
+        ifMissing: true as const,
+      },
+    ];
+    expect(
+      freshStatements({ P2635: [count(12)] }, claims, resolve).map((s) => s.mainsnak.property),
+    ).toEqual(["P658"]);
+    expect(freshStatements({}, claims, resolve).map((s) => s.mainsnak.property)).toEqual([
+      "P658",
+      "P2635",
+    ]);
+  });
+
+  it("skips a plain claim only when the item has that same value", () => {
+    const claim = { property: "P2635", value: { type: "quantity" as const, amount: 3 } };
+    expect(freshStatements({ P2635: [count(3)] }, [claim], resolve)).toEqual([]);
+    expect(freshStatements({ P2635: [count(12)] }, [claim], resolve)).toHaveLength(1);
   });
 });

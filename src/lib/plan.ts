@@ -88,6 +88,8 @@ export interface Snak {
 
 export interface Claim extends Snak {
   qualifiers?: Snak[];
+  /** Skip it if the item already has any statement for this property, whatever its value. */
+  ifMissing?: true;
 }
 
 export type Op =
@@ -610,19 +612,21 @@ export function buildPlan(state: State): Plan {
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
 
+  // Number of tracks: one statement per disc when every disc names its part, else one in all.
+  const perDisc = state.discs
+    .map((d, di) => ({ n: items.filter((it) => it.di === di).length, part: d.part.trim() }))
+    .filter((x) => x.n);
+  const counts =
+    perDisc.length > 1 && perDisc.every((x) => QID.test(x.part))
+      ? perDisc.map((x) =>
+          claim("P2635", { type: "quantity", amount: x.n, unit: TRACK_UNIT }, [
+            { property: "P518", value: item(x.part) },
+          ]),
+        )
+      : [claim("P2635", { type: "quantity", amount: items.length, unit: TRACK_UNIT })];
+
   // 1. The album, without its tracklist (the tracks don't exist yet).
   if (creatingAlbum) {
-    const perDisc = state.discs
-      .map((d, di) => ({ n: items.filter((it) => it.di === di).length, part: d.part.trim() }))
-      .filter((x) => x.n);
-    const counts =
-      perDisc.length > 1 && perDisc.every((x) => QID.test(x.part))
-        ? perDisc.map((x) =>
-            claim("P2635", { type: "quantity", amount: x.n, unit: TRACK_UNIT }, [
-              { property: "P518", value: item(x.part) },
-            ]),
-          )
-        : [claim("P2635", { type: "quantity", amount: items.length, unit: TRACK_UNIT })];
     ops.push({
       op: "create",
       key: "album",
@@ -705,19 +709,23 @@ export function buildPlan(state: State): Plan {
     });
   }
 
-  // 4. The album's tracklist, in one edit.
+  // 4. The album's tracklist, in one edit. An existing album also gets its number of tracks,
+  // which a tracklist needs, unless it already says how many it has.
   const trackOf = (it: PlanItem): Value =>
     it.existTrack ? item(it.existTrack) : ref(trackKey(it));
   ops.push({
     op: "addClaims",
     target: album,
     what: "album tracklist",
-    claims: items.map((it) =>
-      claim("P658", trackOf(it), [
-        { property: "P1545", value: { type: "string", value: String(it.r.n) } },
-        ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
-      ]),
-    ),
+    claims: [
+      ...items.map((it) =>
+        claim("P658", trackOf(it), [
+          { property: "P1545", value: { type: "string", value: String(it.r.n) } },
+          ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
+        ]),
+      ),
+      ...(creatingAlbum ? [] : counts.map((c): Claim => ({ ...c, ifMissing: true }))),
+    ],
   });
 
   // 5. Singles, each pointing at its track and the album; then track → single.
