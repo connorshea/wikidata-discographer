@@ -26,6 +26,7 @@ import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
 import { propertyNumber, qidNumber, toQid } from "./ids.ts";
 import { checkPlanQids } from "./check-qids.ts";
+import { editPacer } from "./edit-pace.ts";
 import { findCreated, waitForCreated } from "./recover.ts";
 import {
   CREATE_TIMEOUT_MS,
@@ -235,6 +236,7 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     createdAt: row.createdAt,
     finishedAt: row.finishedAt,
     total: buildPlan(coerceState(row.input)).ops.length,
+    waitingUntil: waitingUntil(row.status, row.userId),
     edits: edits.map((e): EditLogEntry => ({
       op: e.op as EditLogEntry["op"],
       key: e.key,
@@ -249,6 +251,12 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     })),
   } satisfies SubmissionInfo);
 });
+
+/** When a running run's next edit goes out, while it waits its turn (server/edit-pace.ts). */
+function waitingUntil(status: string, userId: number): string | null {
+  const at = status === "running" ? editPacer.waitingUntil(userId) : null;
+  return at === null ? null : new Date(at).toISOString();
+}
 
 /**
  * On boot: runs still marked running were cut off by the restart. One that

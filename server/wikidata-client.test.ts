@@ -7,6 +7,7 @@ import {
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
+import { createEditPacer, type EditPacer } from "./edit-pace.ts";
 
 vi.mock("./auth/tokens.ts", () => ({
   getAccessToken: async () => "access",
@@ -75,16 +76,87 @@ describe("getEntities retries", () => {
 describe("editRequest", () => {
   const user = { id: 1, username: "Example" };
   const csrf = () => Response.json({ query: { tokens: { csrftoken: "tok+\\" } } });
+  const saved = () => Response.json({ success: 1, entity: { id: "Q1", lastrevid: 1 } });
   let fetch: ReturnType<typeof vi.fn>;
+  // A fresh pacer for each test, with no gaps unless the test sets them.
+  let pacer: EditPacer;
   beforeEach(() => {
     fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
+    pacer = createEditPacer({ createGapMs: 0, editGapMs: 0, serverGapMs: 0 });
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+  /** The times (by the fake clock) each write was sent. */
+  const writeTimes = (start: number) => {
+    const times: number[] = [];
+    fetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return csrf();
+      times.push(Date.now() - start);
+      return saved();
+    });
+    return times;
+  };
+
+  it("spaces writes apart, creates by more than other edits", async () => {
+    vi.useFakeTimers();
+    pacer = createEditPacer({ createGapMs: 5000, editGapMs: 2000, serverGapMs: 1000 });
+    const times = writeTimes(Date.now());
+    const run = (async () => {
+      await editRequest(user, { action: "wbeditentity", new: "item" }, { pacer });
+      await editRequest(user, { action: "wbeditentity", new: "item" }, { pacer });
+      await editRequest(user, { action: "wbeditentity", id: "Q1" }, { pacer });
+      await editRequest(user, { action: "wbeditentity", id: "Q1" }, { pacer });
+    })();
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(times).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await run;
+    expect(times).toEqual([0, 5000, 7000, 9000]);
+  });
+
+  it("still waits out a rate limit, and paces the retry", async () => {
+    vi.useFakeTimers();
+    pacer = createEditPacer({ createGapMs: 5000, editGapMs: 2000, serverGapMs: 1000 });
+    const start = Date.now();
+    const times: number[] = [];
+    let posts = 0;
+    fetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return csrf();
+      times.push(Date.now() - start);
+      return posts++ === 0
+        ? Response.json({ errors: [{ code: "ratelimited", text: "Slow down" }] })
+        : saved();
+    });
+    const edit = editRequest(user, { action: "wbeditentity", new: "item" }, { pacer });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await edit).toMatchObject({ entity: { id: "Q1" } });
+    // The minute's wait for the rate limit covers the gap before the retry.
+    expect(times).toEqual([0, 60_000]);
+
+    // A short Retry-After still leaves the pacer's gap before the retry.
+    posts = 0;
+    times.length = 0;
+    fetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return csrf();
+      times.push(Date.now() - start);
+      return posts++ === 0
+        ? new Response("", { status: 429, headers: { "Retry-After": "1" } })
+        : saved();
+    });
+    const next = editRequest(user, { action: "wbeditentity", id: "Q1" }, { pacer });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await next;
+    expect(times).toEqual([62_000, 64_000]);
+  });
 
   it("marks a 5xx after sending as ambiguous, and doesn't send it again", async () => {
     fetch.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(new Response("", { status: 504 }));
-    const err = await editRequest(user, { action: "wbeditentity", new: "item" }).catch((e) => e);
+    const err = await editRequest(user, { action: "wbeditentity", new: "item" }, { pacer }).catch(
+      (e) => e,
+    );
     expect(err).toMatchObject({ code: "http-504", ambiguous: true });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
@@ -93,7 +165,9 @@ describe("editRequest", () => {
     fetch
       .mockResolvedValueOnce(csrf())
       .mockRejectedValueOnce(new DOMException("The operation timed out.", "TimeoutError"));
-    const err = await editRequest(user, { action: "wbeditentity", new: "item" }).catch((e) => e);
+    const err = await editRequest(user, { action: "wbeditentity", new: "item" }, { pacer }).catch(
+      (e) => e,
+    );
     expect(err).toMatchObject({ code: "network", ambiguous: true });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
@@ -104,14 +178,14 @@ describe("editRequest", () => {
       .mockResolvedValueOnce(
         Response.json({ errors: [{ code: "modification-failed", text: "Label taken" }] }),
       );
-    await expect(editRequest(user, { action: "wbeditentity" })).rejects.toMatchObject({
+    await expect(editRequest(user, { action: "wbeditentity" }, { pacer })).rejects.toMatchObject({
       code: "modification-failed",
       ambiguous: false,
     });
     // The CSRF token read retries, then fails before anything is sent.
     vi.useFakeTimers();
     fetch.mockImplementation(async () => new Response("", { status: 503 }));
-    const err = editRequest(user, { action: "wbeditentity" }).catch((e: unknown) => e);
+    const err = editRequest(user, { action: "wbeditentity" }, { pacer }).catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(5_000 + 15_000 + 45_000);
     expect(await err).toMatchObject({ ambiguous: false });
     vi.useRealTimers();
