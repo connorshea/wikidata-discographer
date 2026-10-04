@@ -8,6 +8,7 @@ import {
   PARTS,
   parseDate,
   QID,
+  SINGLE_CLASS,
   type Plan,
   type Row,
   splitArtists,
@@ -15,6 +16,7 @@ import {
 } from "../lib/plan.ts";
 import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
+import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 
 const cls = (...names: (string | false | null | undefined)[]) =>
@@ -41,6 +43,10 @@ export default function DiscsSection({
   reviews,
 }: SectionProps & { reviews: TrackReview[] }) {
   const mainArtists = albumArtists(state, plan);
+  const lookup = useItemSummaries(
+    state.discs.flatMap((d) => Object.values(d.single).map((sg) => sg.qid.trim())),
+    state.settings.lang,
+  );
   return (
     <section className="block">
       <h2>Discs</h2>
@@ -56,6 +62,7 @@ export default function DiscsSection({
           rows={plan.parsed[di] ?? []}
           reviews={reviews.filter((r) => r.di === di)}
           mainArtists={mainArtists}
+          lookup={lookup}
           {...{ state, update, plan }}
         />
       ))}
@@ -75,6 +82,7 @@ function DiscBlock({
   rows,
   reviews,
   mainArtists,
+  lookup,
   state,
   update,
   plan,
@@ -83,6 +91,7 @@ function DiscBlock({
   rows: Row[];
   reviews: TrackReview[];
   mainArtists: Set<string>;
+  lookup: Lookup;
 }) {
   const d = state.discs[di];
   const open = new Map(reviews.filter((r) => !r.reviewed).map((r) => [r.n, r]));
@@ -237,7 +246,7 @@ function DiscBlock({
                       <tr className="sub-row is-single">
                         <td />
                         <td colSpan={6}>
-                          <SingleRow di={di} n={r.n} {...{ state, update, plan }} />
+                          <SingleRow di={di} n={r.n} {...{ lookup, state, update, plan }} />
                         </td>
                       </tr>
                     )}
@@ -257,12 +266,21 @@ function DiscBlock({
  * its fields once Edit is clicked. The fields stay open while something is
  * wrong with them, and Done only closes them once nothing is.
  */
-function SingleRow({ di, n, state, update, plan }: SectionProps & { di: number; n: number }) {
+function SingleRow({
+  di,
+  n,
+  lookup,
+  state,
+  update,
+  plan,
+}: SectionProps & { di: number; n: number; lookup: Lookup }) {
   const { wikiBaseUrl } = useAuth();
   const sg = state.discs[di].single[n];
   const qid = sg.qid.trim();
   const date = sg.date.trim();
-  const problem = plan.singleErrs[`${di}:${n}`];
+  const found = QID.test(qid) ? lookup(qid) : undefined;
+  const notSingle = singleProblem(qid, found);
+  const problem = [plan.singleErrs[`${di}:${n}`], notSingle].filter(Boolean).join(" ");
   const [editing, setEditing] = useState(false);
   if (problem && !editing) setEditing(true);
   const open = editing || !!problem;
@@ -285,6 +303,14 @@ function SingleRow({ di, n, state, update, plan }: SectionProps & { di: number; 
         {QID.test(qid) ? (
           <span>
             Reusing <WikiLink base={wikiBaseUrl} qid={qid} />
+            {found?.status === "ok" && found.label && <> {found.label}</>}
+            {found?.status === "ok" && found.description && (
+              <span className="muted"> · {found.description}</span>
+            )}
+            {found?.status === "loading" && <span className="muted"> · looking it up…</span>}
+            {found?.status === "failed" && (
+              <span className="muted"> · couldn’t look it up on Wikidata</span>
+            )}
           </span>
         ) : (
           <span>
@@ -322,7 +348,7 @@ function SingleRow({ di, n, state, update, plan }: SectionProps & { di: number; 
         Existing single
         <QidInput
           placeholder="Q… to reuse, blank to create"
-          aria-invalid={qid !== "" && !QID.test(qid)}
+          aria-invalid={(qid !== "" && !QID.test(qid)) || !!notSingle}
           value={sg.qid}
           onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
         />
@@ -368,4 +394,20 @@ function MatchFlag({ review }: { review: TrackReview }) {
       </svg>
     </a>
   );
+}
+
+type Lookup = (qid: string) => ItemLookup | undefined;
+
+/**
+ * Why an existing single's QID can't be used, or null if it's fine or still
+ * being looked up.
+ */
+function singleProblem(qid: string, found: ItemLookup | undefined): string | null {
+  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
+  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
+  if (found?.status === "ok" && !found.classes.includes(SINGLE_CLASS)) {
+    const name = found.label ? `${qid} (${found.label})` : qid;
+    return `${name} isn't a single: it has no instance of (P31) single (${SINGLE_CLASS}).`;
+  }
+  return null;
 }
