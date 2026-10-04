@@ -256,6 +256,7 @@ export interface WikibaseStatement {
   mainsnak: WikibaseSnak;
   rank?: string;
   qualifiers?: Record<string, WikibaseSnak[]>;
+  references?: { snaks: Record<string, WikibaseSnak[]>; "snaks-order": string[] }[];
 }
 
 export interface Entity {
@@ -499,14 +500,25 @@ const snak = (s: Snak, resolve: Resolve): WikibaseSnak => ({
   datavalue: datavalue(s.value, resolve),
 });
 
+/** Snaks grouped by property, in the order their properties first appear. */
+function byProperty(snaks: readonly Snak[], resolve: Resolve) {
+  const out: Record<string, WikibaseSnak[]> = {};
+  for (const s of snaks) (out[s.property] ??= []).push(snak(s, resolve));
+  return out;
+}
+
 export function toStatement(c: Claim, resolve: Resolve) {
-  const qualifiers: Record<string, WikibaseSnak[]> = {};
-  for (const q of c.qualifiers ?? []) (qualifiers[q.property] ??= []).push(snak(q, resolve));
+  const qualifiers = byProperty(c.qualifiers ?? [], resolve);
+  const references = (c.references ?? []).map((r) => {
+    const snaks = byProperty(r, resolve);
+    return { snaks, "snaks-order": Object.keys(snaks) };
+  });
   return {
     type: "statement",
     rank: "normal",
     mainsnak: snak(c, resolve),
     ...(c.qualifiers?.length ? { qualifiers, "qualifiers-order": Object.keys(qualifiers) } : {}),
+    ...(references.length ? { references } : {}),
   };
 }
 

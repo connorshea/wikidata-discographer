@@ -17,6 +17,7 @@ import {
   SECOND_UNIT,
   SINGLE_CLASS,
   type Snak,
+  MUSICBRAINZ,
   SONG_FORM,
   type State,
   TRACK_TYPES,
@@ -39,6 +40,8 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   P2047: "duration",
   P1243: "ISRC",
   P13602: "single taken from",
+  P248: "stated in",
+  P813: "retrieved",
 };
 
 const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map(LABEL_LANGS);
@@ -60,6 +63,8 @@ export interface PreviewStatement {
   property: PreviewProperty;
   value: PreviewValue;
   qualifiers: { property: PreviewProperty; value: PreviewValue }[];
+  /** Each reference's snaks. */
+  references: { property: PreviewProperty; value: PreviewValue }[][];
   /** Only added if the item has no statement for the property yet. */
   ifMissing?: true;
 }
@@ -143,6 +148,7 @@ function itemNames(state: State, parsed: Plan["parsed"]): Map<string, string> {
     [COMPOSITION_CLASS, "musical work/composition"],
     [SONG_FORM, "song"],
     [SECOND_UNIT, "second"],
+    [MUSICBRAINZ, "MusicBrainz"],
   ]);
   const add = (qid: string | undefined, name: string) => {
     const q = qid?.trim();
@@ -204,6 +210,7 @@ export function previewPlan(plan: Pick<Plan, "ops" | "parsed">, state: State): P
   const statement = (c: Claim): PreviewStatement => ({
     ...snak(c),
     qualifiers: (c.qualifiers ?? []).map(snak),
+    references: (c.references ?? []).map((r) => r.map(snak)),
     ...(c.ifMissing ? { ifMissing: true as const } : {}),
   });
 

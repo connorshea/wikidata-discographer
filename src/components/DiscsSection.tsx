@@ -12,8 +12,10 @@ import {
   parseDate,
   QID,
   SINGLE_CLASS,
+  type ParsedRow,
   type Plan,
   type Row,
+  type Settings,
   splitArtists,
   type State,
 } from "../lib/plan.ts";
@@ -59,7 +61,8 @@ export default function DiscsSection({
         length is optional. Fill in a composition or track QID to reuse an existing item instead of
         creating one. Items already on Wikidata with a track's title are listed under Possible
         matches. A row marked MB has identifiers from a MusicBrainz import, kept while its title
-        stays the same.
+        stays the same. Its duration gets a MusicBrainz reference while its length stays the same
+        too.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
@@ -202,7 +205,7 @@ function DiscBlock({
                         <span className="title-cell">
                           {r.title}
                           {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
-                          {state.settings.mbIds && <MbChip ids={mbIdsFor(d, r)} />}
+                          <MbChip ids={mbIdsFor(d, r)} row={r} settings={state.settings} />
                         </span>
                       </td>
                       <td>
@@ -395,14 +398,31 @@ function SingleRow({
 
 /** A warning icon on a track with possible matches to review, linked to them. */
 /** Marks a row with identifiers from a MusicBrainz import, listing them on hover. */
-function MbChip({ ids }: { ids: MbRowIds | null }) {
+function MbChip({
+  ids,
+  row,
+  settings: S,
+}: {
+  ids: MbRowIds | null;
+  row: ParsedRow;
+  settings: Settings;
+}) {
   if (!ids) return null;
   const lines = [
-    ids.recording && `Recording ID (P4404) ${ids.recording}`,
-    ids.work && `Work ID (P435), for the composition, ${ids.work}`,
-    ...ids.isrcs.map((v) => `ISRC (P1243) ${v}`),
-    ...ids.spotify.map((v) => `Spotify track ID (P2207) ${v}`),
+    ...(S.mbIds
+      ? [
+          ids.recording && `Recording ID (P4404) ${ids.recording}`,
+          ids.work && `Work ID (P435), for the composition, ${ids.work}`,
+          ...ids.isrcs.map((v) => `ISRC (P1243) ${v}`),
+          ...ids.spotify.map((v) => `Spotify track ID (P2207) ${v}`),
+        ]
+      : []),
+    S.duration &&
+      S.mbRefs &&
+      ids.length?.seconds === row.seconds &&
+      `A reference for the duration, stated in MusicBrainz`,
   ].filter(Boolean);
+  if (!lines.length) return null;
   const text = `From MusicBrainz, added if this row creates the item:\n${lines.join("\n")}`;
   return (
     <span className="chip" title={text} aria-label={text.replace(/\n/g, ". ")}>

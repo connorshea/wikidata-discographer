@@ -31,6 +31,7 @@ export function planQids(ops: readonly Op[]): Map<string, string> {
     for (const c of op.claims) {
       value(c.property, c.value);
       for (const q of c.qualifiers ?? []) value(q.property, q.value);
+      for (const r of c.references ?? []) for (const s of r) value(s.property, s.value);
     }
   }
   return out;

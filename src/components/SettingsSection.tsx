@@ -19,7 +19,8 @@ type FlagKey =
   | "straight"
   | "splitArtists"
   | "extendExisting"
-  | "mbIds";
+  | "mbIds"
+  | "mbRefs";
 
 const FLAGS: [FlagKey, string][] = [
   ["compPerformer", "Add performer (P175) to compositions as well as tracks"],
@@ -30,6 +31,10 @@ const FLAGS: [FlagKey, string][] = [
   [
     "mbIds",
     "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify) and compositions (P435)",
+  ],
+  [
+    "mbRefs",
+    "Add a reference to durations from a MusicBrainz import (stated in MusicBrainz, its recording ID and the day it was imported)",
   ],
 ];
 

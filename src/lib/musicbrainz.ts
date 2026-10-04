@@ -295,8 +295,11 @@ export function creditText(credit: MbArtistCredit[]): string {
     .join("");
 }
 
+/** A MusicBrainz length in milliseconds as the whole seconds the tracklist shows. */
+const seconds = (ms: number) => Math.round(ms / 1000);
+
 const duration = (ms: number) => {
-  const s = Math.round(ms / 1000);
+  const s = seconds(ms);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const ss = String(s % 60).padStart(2, "0");
@@ -314,7 +317,12 @@ export function wikidataLink(relations: MbRelation[] | undefined): string | unde
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
+export function releaseToForm(
+  release: MbRelease,
+  lookups: MbLookups,
+  /** The day it was fetched, YYYY-MM-DD, for references. */
+  retrieved = new Date().toISOString().slice(0, 10),
+): MbForm {
   const notes: string[] = [];
   const rg = release["release-group"];
 
@@ -343,7 +351,7 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
   let comps = 0;
   let tracks = 0;
   const taken = new Set(lookups.taken);
-  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0 };
+  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, refs: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
     if (media.length > 1) {
@@ -368,13 +376,18 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
           work: work && !taken.has(work) ? work : "",
           isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
           spotify: spotifyOf(t).filter((v) => !taken.has(v)),
+          length:
+            t.length === null
+              ? null
+              : { seconds: seconds(t.length), recording: t.recording.id, retrieved },
         };
-        if (ids.recording || ids.work || ids.isrcs.length || ids.spotify.length) {
+        if (ids.recording || ids.work || ids.isrcs.length || ids.spotify.length || ids.length) {
           disc.mb[t.position] = ids;
           if (!disc.track[t.position]) {
             toAdd.recordings += ids.recording ? 1 : 0;
             toAdd.isrcs += ids.isrcs.length;
             toAdd.spotify += ids.spotify.length;
+            toAdd.refs += ids.length ? 1 : 0;
           }
           if (!disc.comp[t.position]) toAdd.works += ids.work ? 1 : 0;
         }
@@ -433,7 +446,10 @@ export function releaseToForm(release: MbRelease, lookups: MbLookups): MbForm {
     (found.length
       ? `Found ${joinList(found as string[])} already on Wikidata by their MusicBrainz IDs.`
       : "Found nothing else already on Wikidata by its MusicBrainz ID.") +
-    idsSummary(toAdd);
+    idsSummary(toAdd) +
+    (toAdd.refs
+      ? ` ${toAdd.refs === 1 ? "The new track's duration gets" : `${toAdd.refs} new tracks' durations get`} a MusicBrainz reference, if that's on in Item settings.`
+      : "");
 
   return {
     album: {

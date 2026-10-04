@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: Settings = {
   splitArtists: true,
   extendExisting: true,
   mbIds: true,
+  mbRefs: true,
 };
 
 export const emptyDisc = (): Disc => ({
@@ -116,7 +117,24 @@ function coerceMbIds(ids: Obj): MbRowIds {
     work: matching(ids.work, MBID_PATTERN),
     isrcs: strList(ids.isrcs, ISRC_PATTERN),
     spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
+    length: coerceLength(ids.length),
   };
+}
+
+/** An imported length and its source, or null unless all of it is well-formed. */
+function coerceLength(v: unknown): MbRowIds["length"] {
+  if (!isObj(v)) return null;
+  const { seconds, recording, retrieved } = v;
+  const day = typeof retrieved === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(retrieved) : null;
+  const real =
+    day && new Date(Date.UTC(+day[1], +day[2] - 1, +day[3])).toISOString().startsWith(day[0]);
+  return Number.isInteger(seconds) &&
+    (seconds as number) >= 0 &&
+    typeof recording === "string" &&
+    MBID_PATTERN.test(recording) &&
+    real
+    ? { seconds: seconds as number, recording, retrieved: day[0] }
+    : null;
 }
 
 /** A well-formed copy of `raw`, filling anything missing or mistyped with defaults. */
@@ -143,6 +161,7 @@ export function coerceState(raw: unknown): State {
     splitArtists: bool(s.splitArtists, d.splitArtists),
     extendExisting: bool(s.extendExisting, d.extendExisting),
     mbIds: bool(s.mbIds, d.mbIds),
+    mbRefs: bool(s.mbRefs, d.mbRefs),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};

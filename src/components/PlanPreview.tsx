@@ -78,6 +78,18 @@ function Edit({ edit }: { edit: PreviewEdit }) {
                 ))}
               </ul>
             )}
+            {s.references.map((r, j) => (
+              <div key={j} className="pv-ref">
+                <span className="muted">Reference</span>
+                <ul className="pv-quals">
+                  {r.map((q, k) => (
+                    <li key={k}>
+                      <Prop p={q.property} /> <Val v={q.value} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </li>
         ))}
       </ul>
