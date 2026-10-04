@@ -35,6 +35,8 @@ export interface Settings {
   extendExisting: boolean;
   /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
   mbIds: boolean;
+  /** Add a MusicBrainz reference to durations a MusicBrainz import filled in. */
+  mbRefs: boolean;
 }
 
 export interface AlbumState {
@@ -67,6 +69,12 @@ export interface MbRowIds {
   isrcs: string[];
   /** P2207 Spotify track IDs, for the track. */
   spotify: string[];
+  /**
+   * The length imported, in seconds, with the recording and day it came from,
+   * for the duration's reference. Only used while the row has that length.
+   * Null when MusicBrainz has no length for the track.
+   */
+  length: { seconds: number; recording: string; retrieved: string } | null;
 }
 
 export interface Disc {
@@ -108,6 +116,8 @@ export interface Snak {
 
 export interface Claim extends Snak {
   qualifiers?: Snak[];
+  /** Each reference is a group of snaks, e.g. stated in, an identifier and retrieved. */
+  references?: Snak[][];
   /** Skip it if the item already has any statement for this property, whatever its value. */
   ifMissing?: true;
 }
@@ -277,6 +287,7 @@ export const COMPOSITION_CLASS = "Q105543609";
 export const SONG_FORM = "Q7366";
 export const TRACK_UNIT = "Q7302866";
 export const SECOND_UNIT = "Q11574";
+export const MUSICBRAINZ = "Q14005";
 export const EP_CLASS = "Q169930";
 
 // ---------------------------------------------------------------------------
@@ -628,7 +639,7 @@ export function buildPlan(state: State): Plan {
         existComp: QID.test(ec) ? ec : null,
         existTrack: QID.test(et) ? et : null,
         single,
-        mb: S.mbIds ? mbIdsFor(d, r) : null,
+        mb: mbIdsFor(d, r),
       });
     }
   });
@@ -693,13 +704,30 @@ export function buildPlan(state: State): Plan {
   });
   const str = (property: string, value: string) => claim(property, { type: "string", value });
   const trackIds = (mb: MbRowIds | null) =>
-    mb
+    mb && S.mbIds
       ? [
           ...(mb.recording ? [str("P4404", mb.recording)] : []),
           ...mb.isrcs.map((v) => str("P1243", v)),
           ...mb.spotify.map((v) => str("P2207", v)),
         ]
       : [];
+  // Stated in MusicBrainz, for a duration still as the import filled it in.
+  const durationRefs = (it: PlanItem): Pick<Claim, "references"> => {
+    const l = it.mb?.length;
+    if (!S.mbRefs || !l || l.seconds !== it.r.seconds) return {};
+    return {
+      references: [
+        [
+          { property: "P248", value: item(MUSICBRAINZ) },
+          { property: "P4404", value: { type: "string", value: l.recording } },
+          {
+            property: "P813",
+            value: { type: "time", time: `+${l.retrieved}T00:00:00Z`, precision: 11 },
+          },
+        ],
+      ],
+    };
+  };
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
@@ -761,7 +789,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...(it.mb?.work ? [str("P435", it.mb.work)] : []),
+        ...(S.mbIds && it.mb?.work ? [str("P435", it.mb.work)] : []),
       ],
     });
   }
@@ -791,7 +819,12 @@ export function buildPlan(state: State): Plan {
         ...perf,
         claim("P2550", compOf(it)),
         ...(S.duration && it.r.seconds !== null
-          ? [claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT })]
+          ? [
+              {
+                ...claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT }),
+                ...durationRefs(it),
+              },
+            ]
           : []),
         ...trackIds(it.mb),
       ],

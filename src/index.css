@@ -629,7 +629,8 @@ details summary {
 .pv-claims {
   padding-left: 2.2em;
 }
-.pv-quals {
+.pv-quals,
+.pv-ref {
   padding-left: 1.4em;
 }
 .pv-prop {

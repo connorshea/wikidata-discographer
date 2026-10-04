@@ -4,6 +4,7 @@ import {
   editRequest,
   freshStatements,
   getEntities,
+  toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
 
@@ -211,5 +212,55 @@ describe("freshStatements", () => {
     const claim = { property: "P2635", value: { type: "quantity" as const, amount: 3 } };
     expect(freshStatements({ P2635: [count(3)] }, [claim], resolve)).toEqual([]);
     expect(freshStatements({ P2635: [count(12)] }, [claim], resolve)).toHaveLength(1);
+  });
+});
+
+describe("toStatement", () => {
+  it("writes references as Wikibase snak groups, with created items resolved", () => {
+    const statement = toStatement(
+      {
+        property: "P2047",
+        value: { type: "quantity", amount: 177, unit: "Q11574" },
+        references: [
+          [
+            { property: "P248", value: { type: "item", ref: "source" } },
+            { property: "P4404", value: { type: "string", value: "abc" } },
+            {
+              property: "P813",
+              value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
+            },
+          ],
+        ],
+      },
+      (ref) => (ref === "source" ? "Q14005" : ref),
+    );
+    expect(statement.references).toEqual([
+      {
+        "snaks-order": ["P248", "P4404", "P813"],
+        snaks: {
+          P248: [
+            {
+              snaktype: "value",
+              property: "P248",
+              datavalue: {
+                type: "wikibase-entityid",
+                value: { "entity-type": "item", id: "Q14005" },
+              },
+            },
+          ],
+          P4404: [
+            {
+              snaktype: "value",
+              property: "P4404",
+              datavalue: { type: "string", value: "abc" },
+            },
+          ],
+          P813: [expect.objectContaining({ property: "P813" })],
+        },
+      },
+    ]);
+    expect(
+      toStatement({ property: "P31", value: { type: "item", id: "Q5" } }, (r) => r),
+    ).not.toHaveProperty("references");
   });
 });

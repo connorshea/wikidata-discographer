@@ -97,6 +97,11 @@ describe("buildPlan", () => {
       work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
       isrcs: ["USUM72604367"],
       spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
+      length: {
+        seconds: 177,
+        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+        retrieved: "2026-10-04",
+      },
     };
     const withIds = () => {
       const state = structuredClone(EXAMPLE);
@@ -129,6 +134,34 @@ describe("buildPlan", () => {
       const off = withIds();
       off.settings.mbIds = false;
       expect(claimsOf(off, "track:0:2")).toEqual([]);
+    });
+
+    it("give the new track's duration a MusicBrainz reference", () => {
+      const durationOf = (state: typeof EXAMPLE) => {
+        const op = buildPlan(state).ops.find((o) => o.op === "create" && o.key === "track:0:2");
+        return op?.op === "create" ? op.claims.find((c) => c.property === "P2047") : undefined;
+      };
+      expect(durationOf(withIds())?.references).toEqual([
+        [
+          { property: "P248", value: { type: "item", id: "Q14005" } },
+          { property: "P4404", value: { type: "string", value: ids.recording } },
+          {
+            property: "P813",
+            value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
+          },
+        ],
+      ]);
+      // Even with identifiers off, but not once the length is edited or references are off.
+      const noIds = withIds();
+      noIds.settings.mbIds = false;
+      expect(durationOf(noIds)?.references).toHaveLength(1);
+      const edited = withIds();
+      edited.discs[0].text = edited.discs[0].text.replace("(02:57)", "(02:58)");
+      expect(durationOf(edited)).toMatchObject({ property: "P2047" });
+      expect(durationOf(edited)?.references).toBeUndefined();
+      const off = withIds();
+      off.settings.mbRefs = false;
+      expect(durationOf(off)?.references).toBeUndefined();
     });
 
     it("match the title ignoring case and curly quotes", () => {

@@ -188,15 +188,29 @@ describe("releaseToForm", () => {
   });
 
   it("keeps each track's identifiers with its title", () => {
-    const [first] = releaseToForm(RELEASE, NONE).discs;
+    const [first] = releaseToForm(RELEASE, NONE, "2026-10-04").discs;
     expect(first.mb["1"]).toEqual({
       title: "After All",
       recording: "263340e1-2f03-4b31-b404-a06a8acda193",
       work: "2bf1a377-686f-426a-ab5a-309466d201e9",
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
+      length: {
+        seconds: 252,
+        recording: "263340e1-2f03-4b31-b404-a06a8acda193",
+        retrieved: "2026-10-04",
+      },
     });
     expect(Object.keys(first.mb)).toEqual(["1", "2", "3"]);
+  });
+
+  it("keeps the length's source even when an item already has the recording ID", () => {
+    const t = RELEASE.media[0].tracks![0];
+    const form = releaseToForm(RELEASE, { ...NONE, taken: [t.recording.id] });
+    expect(form.discs[0].mb["1"].length?.recording).toBe(t.recording.id);
+    const noLength = structuredClone(RELEASE);
+    noLength.media[0].tracks![0].length = null;
+    expect(releaseToForm(noLength, NONE).discs[0].mb["1"].length).toBeNull();
   });
 
   it("leaves out identifiers an item already has", () => {

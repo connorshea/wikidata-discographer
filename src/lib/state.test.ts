@@ -43,8 +43,22 @@ describe("coerceState", () => {
               work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
               isrcs: ["USUM72604367", "bad", 5, "USUM72604367"],
               spotify: "6RSxVKsgvNIIN6IwYA8GsQ",
+              length: {
+                seconds: 177,
+                recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+                retrieved: "2026-10-04",
+              },
             },
             "2": "x",
+            "3": {
+              title: "Other",
+              length: {
+                seconds: 177,
+                recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+                retrieved: "2026-02-30",
+              },
+            },
+            "4": { title: "Third", length: { seconds: 1.5, recording: "x", retrieved: "" } },
           },
         },
       ],
@@ -56,7 +70,14 @@ describe("coerceState", () => {
         work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
         isrcs: ["USUM72604367"],
         spotify: [],
+        length: {
+          seconds: 177,
+          recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+          retrieved: "2026-10-04",
+        },
       },
+      "3": { title: "Other", recording: "", work: "", isrcs: [], spotify: [], length: null },
+      "4": { title: "Third", recording: "", work: "", isrcs: [], spotify: [], length: null },
     });
   });
 });
