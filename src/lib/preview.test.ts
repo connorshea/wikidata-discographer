@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { buildPlan, describeOp, QID } from "./plan.ts";
 import { formatDuration, formatTime, previewPlan } from "./preview.ts";
-import { EXAMPLE } from "./state.ts";
+import { EXAMPLE } from "./example.fixture.ts";
 
 describe("formatTime", () => {
   it("shows a date at its precision", () => {

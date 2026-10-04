@@ -4,7 +4,7 @@ import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
 import { PROPERTY_LABELS } from "./lib/preview.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
-import { coerceState, EMPTY, EXAMPLE } from "./lib/state.ts";
+import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
 import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
@@ -199,7 +199,7 @@ export default function App() {
 function Form() {
   const [state, setState] = useState<State>(loadState);
   const [formId, renewFormId] = useFormId();
-  // Clear, the example and a MusicBrainz import start a new form.
+  // Clear and a MusicBrainz import start a new form.
   const replace = (next: State) => {
     setState(next);
     renewFormId();
@@ -259,23 +259,6 @@ function Form() {
         </div>
       )}
       <ItemModel />
-      <div className="row example">
-        <ConfirmButton
-          className="ghost"
-          label="Load the example"
-          confirm={
-            isEmpty(state)
-              ? null
-              : {
-                  title: "Replace the form with the example?",
-                  body: "This replaces everything you've entered with the example album. It can't be undone.",
-                  action: "Replace",
-                }
-          }
-          onConfirm={() => replace(structuredClone(EXAMPLE))}
-        />
-        <span className="hint">A filled-in album, to see how the form works.</span>
-      </div>
       <MusicBrainzImport state={state} needsConfirm={!isEmpty(state)} onLoad={replace} />
       <AlbumSection {...props} albumTracklist={albumTracklist} />
       <SettingsSection {...props} />

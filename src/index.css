@@ -126,12 +126,6 @@ abbr.pid {
   text-underline-offset: 3px;
   cursor: help;
 }
-.row.example {
-  margin: 0 0 24px;
-}
-.row.example .hint {
-  margin: 0;
-}
 .mb-input {
   flex: 1 1 320px;
   min-width: 0;

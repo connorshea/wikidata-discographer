@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { checkPlanQids, forgetCheckedQids, planQids } from "./check-qids.ts";
 import { buildPlan, type Op } from "../src/lib/plan.ts";
-import { EXAMPLE } from "../src/lib/state.ts";
+import { EXAMPLE } from "../src/lib/example.fixture.ts";
 
 describe("planQids", () => {
   const ops: Op[] = [
