@@ -6,7 +6,9 @@ import {
   type MbArtistCredit,
   type MbLookups,
   type MbRelease,
-  parseReleaseInput,
+  type MbReleaseListing,
+  parseMbInput,
+  releaseChoices,
   releaseIds,
   releaseToForm,
   wikidataLink,
@@ -24,33 +26,107 @@ const CRJ = "09887aa7-226e-4ecc-9a0c-02d2ae5777e1";
 const credit = (...parts: [string, string][]): MbArtistCredit[] =>
   parts.map(([name, joinphrase], i) => ({ name, joinphrase, artist: { id: `a${i}`, name } }));
 
-describe("parseReleaseInput", () => {
+describe("parseMbInput", () => {
   const id = "6d42c8a3-69c3-458c-9f18-f8a503780607";
-  it("takes a release URL or a bare ID", () => {
-    expect(parseReleaseInput(`https://musicbrainz.org/release/${id}`)).toEqual({ ok: true, id });
-    expect(parseReleaseInput(` ${id.toUpperCase()} `)).toEqual({ ok: true, id });
-    expect(parseReleaseInput(`https://beta.musicbrainz.org/release/${id}/discids`)).toEqual({
+  const release = { ok: true, kind: "release", id };
+  it("takes a release URL, or a bare ID as a release", () => {
+    expect(parseMbInput(`https://musicbrainz.org/release/${id}`)).toEqual(release);
+    expect(parseMbInput(` ${id.toUpperCase()} `)).toEqual(release);
+    expect(parseMbInput(`https://beta.musicbrainz.org/release/${id}/discids`)).toEqual(release);
+    expect(
+      parseMbInput("https://beta.musicbrainz.org/release/cb9f38e5-1f35-4411-b41a-d1f7ccf3215d"),
+    ).toEqual({ ok: true, kind: "release", id: "cb9f38e5-1f35-4411-b41a-d1f7ccf3215d" });
+  });
+
+  it("takes a release group URL", () => {
+    expect(parseMbInput(`https://musicbrainz.org/release-group/${id}`)).toEqual({
       ok: true,
+      kind: "release-group",
       id,
     });
   });
 
-  it("takes beta.musicbrainz.org URLs", () => {
-    expect(
-      parseReleaseInput(
-        "https://beta.musicbrainz.org/release/cb9f38e5-1f35-4411-b41a-d1f7ccf3215d",
-      ),
-    ).toEqual({ ok: true, id: "cb9f38e5-1f35-4411-b41a-d1f7ccf3215d" });
+  it("explains anything else", () => {
+    expect(parseMbInput(`https://musicbrainz.org/artist/${id}`)).toEqual({
+      ok: false,
+      error: "That's a MusicBrainz artist, not a release or release group.",
+    });
+    expect(parseMbInput("Day and Night")).toMatchObject({ ok: false });
+  });
+});
+
+describe("releaseChoices", () => {
+  const listing = (
+    id: string,
+    date: string | undefined,
+    format: string,
+    tracks: number[],
+    more: Partial<MbReleaseListing> = {},
+  ): MbReleaseListing => ({
+    id,
+    title: "Day and Night",
+    status: "Official",
+    date,
+    country: "XW",
+    disambiguation: "",
+    media: tracks.map((n) => ({ format, "track-count": n })),
+    ...more,
   });
 
-  it("explains a release group or other entity", () => {
-    const rg = parseReleaseInput(`https://musicbrainz.org/release-group/${id}`);
-    expect(rg).toMatchObject({ ok: false, error: expect.stringMatching(/release group/) });
-    expect(parseReleaseInput(`https://musicbrainz.org/artist/${id}`)).toMatchObject({
-      ok: false,
-      error: "That's a MusicBrainz artist, not a release.",
-    });
-    expect(parseReleaseInput("Day and Night")).toMatchObject({ ok: false });
+  it("suggests the earliest official plain edition, digital or CD, with the usual tracks", () => {
+    const choices = releaseChoices([
+      listing("vinyl", "2026-09-18", '12" Vinyl', [12, 12]),
+      listing("withdrawn", "2026-09-01", "Digital Media", [12, 12], { status: "Withdrawn" }),
+      listing("atmos", "2026-09-18", "Digital Media", [12, 12], {
+        disambiguation: "Dolby Atmos mix",
+      }),
+      listing("bonus", "2026-09-18", "Digital Media", [12, 13]),
+      listing("later", "2026-10-01", "Digital Media", [12, 12]),
+      listing("cd", "2026-09-18", "CD", [12, 12], { country: null }),
+      listing("digital", "2026-09-18", "Digital Media", [12, 12]),
+      listing("undated", undefined, "Digital Media", [12, 12]),
+    ]);
+    // "later" is the same year, so only its date puts it after "digital".
+    expect(choices.map((c) => c.id)).toEqual([
+      "digital",
+      "later",
+      "cd",
+      "vinyl",
+      "bonus",
+      "atmos",
+      "undated",
+      "withdrawn",
+    ]);
+    expect(choices[0].label).toBe("2026-09-18 · XW · 2×Digital Media · 24 tracks (12 + 12)");
+    expect(choices.at(-1)!.label).toBe(
+      "2026-09-01 · XW · 2×Digital Media · 24 tracks (12 + 12) · Withdrawn",
+    );
+  });
+
+  it("goes by year first, then format, for an album older than CDs", () => {
+    const choices = releaseChoices([
+      listing("cassette", "1973", "Cassette", [10]),
+      listing("cd", "1984", "CD", [10]),
+      listing("vinyl", "1973-03-24", '12" Vinyl', [10]),
+    ]);
+    expect(choices.map((c) => c.id)).toEqual(["vinyl", "cassette", "cd"]);
+  });
+
+  it("puts a vague date after an exact one in the same year", () => {
+    const choices = releaseChoices([
+      listing("year", "1973", '12" Vinyl', [10]),
+      listing("exact", "1973-03-24", '12" Vinyl', [10]),
+    ]);
+    expect(choices.map((c) => c.id)).toEqual(["exact", "year"]);
+  });
+
+  it("names a release only when its title is unusual", () => {
+    const deluxe = releaseChoices([
+      listing("a", "2020", "CD", [10]),
+      listing("b", "2020", "CD", [10]),
+      listing("c", "2021", "CD", [14], { title: "Day and Night (Deluxe)" }),
+    ]).find((c) => c.id === "c")!;
+    expect(deluxe.label).toBe("Day and Night (Deluxe) · 2021 · XW · CD · 14 tracks");
   });
 });
 

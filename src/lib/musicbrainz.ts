@@ -2,8 +2,9 @@
 // (server/musicbrainz.ts), looks up its MusicBrainz IDs in the mirror, and
 // runs `releaseToForm` to turn both into form values the client loads.
 //
-// A release, not a release group: the tracklist belongs to a release, and a
-// release group can have many with different tracks.
+// The tracklist belongs to a release, not a release group, which can have
+// many releases with different tracks. A pasted release group lists its
+// releases (`releaseChoices`) for the user to pick one, best guess first.
 import { ALBUM_FORMS, ALBUM_TYPES, NO_LINGUISTIC_CONTENT, PARTS, splitArtists } from "./plan.ts";
 import type { AlbumState, Disc, State } from "./plan.ts";
 import { ALBUM_ID_FIELDS } from "./music.ts";
@@ -16,23 +17,109 @@ const URL_RE = new RegExp(
   "i",
 );
 
-export type ParsedMbid = { ok: true; id: string } | { ok: false; error: string };
+export type ParsedMbInput =
+  | { ok: true; kind: "release" | "release-group"; id: string }
+  | { ok: false; error: string };
 
-/** A pasted release URL or bare MBID → the release MBID. */
-export function parseReleaseInput(raw: string): ParsedMbid {
+/** A pasted release or release group URL, or a bare MBID (taken as a release). */
+export function parseMbInput(raw: string): ParsedMbInput {
   const s = raw.trim();
-  if (MBID_RE.test(s)) return { ok: true, id: s.toLowerCase() };
+  if (MBID_RE.test(s)) return { ok: true, kind: "release", id: s.toLowerCase() };
   const m = URL_RE.exec(s);
-  if (!m) return { ok: false, error: "Paste a MusicBrainz release URL or its ID." };
-  if (m[1].toLowerCase() !== "release")
-    return {
-      ok: false,
-      error:
-        m[1].toLowerCase() === "release-group"
-          ? "That's a release group. Open it on MusicBrainz, pick the release with the tracklist you want, and paste that URL."
-          : `That's a MusicBrainz ${m[1].toLowerCase()}, not a release.`,
-    };
-  return { ok: true, id: m[2].toLowerCase() };
+  if (!m) return { ok: false, error: "Paste a MusicBrainz release or release group URL." };
+  const kind = m[1].toLowerCase();
+  if (kind !== "release" && kind !== "release-group")
+    return { ok: false, error: `That's a MusicBrainz ${kind}, not a release or release group.` };
+  return { ok: true, kind, id: m[2].toLowerCase() };
+}
+
+// ---------------------------------------------------------------------------
+// A release group's releases, from
+//   /ws/2/release?release-group=<mbid>&inc=media
+// ---------------------------------------------------------------------------
+
+export interface MbReleaseListing {
+  id: string;
+  title: string;
+  status: string | null;
+  date?: string;
+  country?: string | null;
+  disambiguation?: string;
+  media: { format: string | null; "track-count": number }[];
+}
+
+/** A release to choose from, with a one-line description. */
+export interface ReleaseChoice {
+  id: string;
+  label: string;
+}
+
+// Formats to suggest, best first. Anything else comes after.
+const FORMAT_RANK = [/digital/i, /\bCD\b/, /vinyl/i];
+
+/** How many of each format, e.g. "2×CD" or "CD + DVD-Video". */
+function formats(media: MbReleaseListing["media"]): string {
+  const counts = new Map<string, number>();
+  for (const m of media)
+    counts.set(m.format ?? "Unknown format", (counts.get(m.format ?? "Unknown format") ?? 0) + 1);
+  return [...counts].map(([f, n]) => (n > 1 ? `${n}×${f}` : f)).join(" + ");
+}
+
+/**
+ * A release group's releases, best guess first: official ones, from the
+ * earliest year, a plain edition (no disambiguation such as "deluxe" or
+ * "Dolby Atmos mix"), with the most common track count, digital or CD or
+ * vinyl, then the earliest date. Ties keep MusicBrainz's order.
+ */
+export function releaseChoices(releases: MbReleaseListing[]): ReleaseChoice[] {
+  const tracks = (r: MbReleaseListing) => r.media.reduce((n, m) => n + m["track-count"], 0);
+  const counts = new Map<number, number>();
+  for (const r of releases) counts.set(tracks(r), (counts.get(tracks(r)) ?? 0) + 1);
+  const usual = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const titles = new Map<string, number>();
+  for (const r of releases) titles.set(r.title, (titles.get(r.title) ?? 0) + 1);
+  const usualTitle = [...titles].sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  const key = (r: MbReleaseListing): (number | string)[] => {
+    const format = Math.min(
+      ...r.media.map((m) => {
+        const i = FORMAT_RANK.findIndex((re) => re.test(m.format ?? ""));
+        return i < 0 ? FORMAT_RANK.length : i;
+      }),
+    );
+    return [
+      r.status === "Official" ? 0 : 1,
+      r.date ? 0 : 1,
+      r.date?.slice(0, 4) ?? "",
+      r.disambiguation ? 1 : 0,
+      tracks(r) === usual ? 0 : 1,
+      format,
+      // A date without a month or day sorts after the exact ones in its year.
+      (r.date ?? "").padEnd(10, "~"),
+    ];
+  };
+  const compare = (a: (number | string)[], b: (number | string)[]) => {
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    return 0;
+  };
+  return releases
+    .map((r, i) => ({ r, i, k: key(r) }))
+    .sort((a, b) => compare(a.k, b.k) || a.i - b.i)
+    .map(({ r }) => {
+      const n = tracks(r);
+      const perDisc =
+        r.media.length > 1 ? ` (${r.media.map((m) => m["track-count"]).join(" + ")})` : "";
+      const parts = [
+        r.title !== usualTitle && r.title,
+        r.date || "No date",
+        r.country,
+        formats(r.media),
+        `${plural(n, "track")}${perDisc}`,
+        r.disambiguation,
+        r.status !== "Official" && (r.status ?? "No status"),
+      ];
+      return { id: r.id, label: parts.filter(Boolean).join(" · ") };
+    });
 }
 
 // ---------------------------------------------------------------------------

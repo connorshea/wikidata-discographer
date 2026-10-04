@@ -1,6 +1,6 @@
 // Wire shapes shared by the server routes and the client.
 import type { MusicKind } from "./music.ts";
-import type { MbForm } from "./musicbrainz.ts";
+import type { MbForm, ReleaseChoice } from "./musicbrainz.ts";
 
 export interface AuthUserInfo {
   id: number;
@@ -176,4 +176,11 @@ export interface DescribeResponse {
 /** GET /api/musicbrainz/release/:mbid: the form values for a MusicBrainz release. */
 export interface MusicBrainzResponse {
   form: MbForm;
+}
+
+/** GET /api/musicbrainz/release-group/:mbid: its releases, best guess first. */
+export interface MusicBrainzReleaseGroupResponse {
+  releases: ReleaseChoice[];
+  /** How many releases the group has (official ones, if it has any). At most 300 are listed. */
+  total: number;
 }
