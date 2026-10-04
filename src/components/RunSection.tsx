@@ -21,21 +21,11 @@ const POLL_MS = 2000;
 
 type UnknownRun = UnknownRunConflict["unknownRun"];
 
-/**
- * Write the QIDs a run created back into the form, so a rerun reuses them
- * instead of duplicating. With `title` (the run's album title or QID), only
- * while the form still holds that album.
- */
-function applyCreated(
-  edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[],
-  update: Update,
-  title?: string,
-) {
+/** Write the QIDs a run created back into the form, so a rerun reuses them instead of duplicating. */
+function applyCreated(edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[], update: Update) {
   const created = edits.filter((e) => e.op === "create" && e.ok && e.key && e.qid);
   if (!created.length) return;
   update((s: State) => {
-    const album = s.album.mode === "create" ? s.album.title.trim() : s.album.qid.trim();
-    if (title !== undefined && album !== title) return;
     for (const { key, qid } of created) {
       const [kind, di, n] = key!.split(":");
       const disc = s.discs[Number(di)];
@@ -51,22 +41,33 @@ function applyCreated(
 }
 
 // The run started from this form, kept until it ends and its QIDs are written
-// back, so leaving the page or reloading during a run doesn't lose them.
+// back, so leaving the page or reloading during a run doesn't lose them. `form`
+// is the form's id when the run started: its QIDs only go back into that form,
+// not one cleared or loaded with another release since.
 const OWN_RUN_KEY = "discographer:ownRun";
 
-function loadOwnRun(): number | null {
+interface OwnRun {
+  run: number;
+  form: string;
+}
+
+function loadOwnRun(): OwnRun | null {
   try {
-    const id = Number(localStorage.getItem(OWN_RUN_KEY));
-    return Number.isInteger(id) && id > 0 ? id : null;
+    const o: unknown = JSON.parse(localStorage.getItem(OWN_RUN_KEY) ?? "null");
+    if (typeof o !== "object" || o === null) return null;
+    const { run, form } = o as Partial<OwnRun>;
+    return Number.isInteger(run) && run! > 0 && typeof form === "string"
+      ? { run: run!, form }
+      : null;
   } catch {
     return null;
   }
 }
 
-function saveOwnRun(id: number | null) {
+function saveOwnRun(o: OwnRun | null) {
   try {
-    if (id === null) localStorage.removeItem(OWN_RUN_KEY);
-    else localStorage.setItem(OWN_RUN_KEY, String(id));
+    if (o === null) localStorage.removeItem(OWN_RUN_KEY);
+    else localStorage.setItem(OWN_RUN_KEY, JSON.stringify(o));
   } catch {
     // storage blocked: the run is only followed while the form stays open
   }
@@ -107,12 +108,15 @@ export default function RunSection({
   albumTracklist,
   unreviewed,
   matchesPending,
+  formId,
 }: SectionProps & {
   albumTracklist: AlbumTracklist | null;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
   unreviewed: number;
   /** The lookup for possible matches is in flight, so there may be more to review. */
   matchesPending: boolean;
+  /** Identifies the form until it's cleared or replaced (see `useFormId`). */
+  formId: string;
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
@@ -121,9 +125,13 @@ export default function RunSection({
   // Only a run started from this form writes its QIDs back into it.
   const [ownRun, setOwnRun] = useState(loadOwnRun);
   const ownRunRef = useRef(ownRun);
+  const formIdRef = useRef(formId);
+  useEffect(() => {
+    formIdRef.current = formId;
+  }, [formId]);
   const [runId, setRunId] = useState<number | null>(() => {
     const id = Number(new URLSearchParams(search).get("run"));
-    return Number.isInteger(id) && id > 0 ? id : ownRun;
+    return Number.isInteger(id) && id > 0 ? id : (ownRun?.run ?? null);
   });
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -137,23 +145,25 @@ export default function RunSection({
   // The last run ended "unknown": what the server wants done before another.
   const [unknownRun, setUnknownRun] = useState<UnknownRun | null>(null);
 
-  const followOwnRun = useCallback((id: number | null) => {
-    ownRunRef.current = id;
-    setOwnRun(id);
-    saveOwnRun(id);
+  const followOwnRun = useCallback((o: OwnRun | null) => {
+    ownRunRef.current = o;
+    setOwnRun(o);
+    saveOwnRun(o);
   }, []);
-  // Write back the own run's QIDs once it ends, and stop following it.
+  // Once the own run ends, stop following it, and write its QIDs back if the
+  // form is still the one it started from.
   const settle = useCallback(
     (r: SubmissionInfo) => {
-      if (r.status === "running" || r.id !== ownRunRef.current) return;
+      const own = ownRunRef.current;
+      if (r.status === "running" || r.id !== own?.run) return;
       followOwnRun(null);
-      applyCreated(r.edits, update, r.title);
+      if (own.form === formIdRef.current) applyCreated(r.edits, update);
     },
     [followOwnRun, update],
   );
   const dropIfGone = useCallback(
     (id: number, e: unknown) => {
-      if (e instanceof FetchError && e.status === 404 && ownRunRef.current === id)
+      if (e instanceof FetchError && e.status === 404 && ownRunRef.current?.run === id)
         followOwnRun(null);
     },
     [followOwnRun],
@@ -179,10 +189,11 @@ export default function RunSection({
   }, [runId, loggedIn, settle, dropIfGone]);
 
   // The own run, while another is on show.
+  const ownRunId = ownRun?.run ?? null;
   useEffect(() => {
-    if (ownRun === null || ownRun === runId || !loggedIn) return;
-    return watchRun(ownRun, settle, (e) => dropIfGone(ownRun, e));
-  }, [ownRun, runId, loggedIn, settle, dropIfGone]);
+    if (ownRunId === null || ownRunId === runId || !loggedIn) return;
+    return watchRun(ownRunId, settle, (e) => dropIfGone(ownRunId, e));
+  }, [ownRunId, runId, loggedIn, settle, dropIfGone]);
 
   const running = run?.status === "running";
   const start = (confirmUnknown?: number) => {
@@ -192,7 +203,7 @@ export default function RunSection({
     const body: SubmissionRequest = { state, confirmUnknown };
     api<{ id: number }>("/api/submissions", { method: "POST", body })
       .then(({ id }) => {
-        followOwnRun(id);
+        followOwnRun({ run: id, form: formId });
         setRun(null);
         setRunId(id);
       })
