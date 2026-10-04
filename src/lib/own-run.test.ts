@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { EditLogEntry } from "./api-types.ts";
 import { FetchError } from "./client.ts";
 import {
+  adoptOwnRun,
   applyCreated,
   createdAny,
   initialRunId,
@@ -66,6 +67,18 @@ describe("saving the own run", () => {
     expect(loadOwnRun(blocked)).toBeNull();
     expect(() => saveOwnRun({ run: 1, form: "f" }, blocked)).not.toThrow();
     expect(() => saveOwnRun(null, blocked)).not.toThrow();
+  });
+});
+
+describe("adoptOwnRun", () => {
+  it("follows a run another tab starts, and keeps its own until it ends", () => {
+    const mine = { run: 7, form: "f1" };
+    expect(adoptOwnRun(null, '{"run":8,"form":"f1"}')).toEqual({ run: 8, form: "f1" });
+    expect(adoptOwnRun(mine, '{"run":8,"form":"f1"}')).toEqual({ run: 8, form: "f1" });
+    // The other tab settled it (or cleared storage): this tab settles it itself.
+    expect(adoptOwnRun(mine, null)).toBe(mine);
+    expect(adoptOwnRun(mine, "junk")).toBe(mine);
+    expect(adoptOwnRun(null, null)).toBeNull();
   });
 });
 

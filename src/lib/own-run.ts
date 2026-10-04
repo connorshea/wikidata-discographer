@@ -30,6 +30,14 @@ export function parseOwnRun(raw: string | null): OwnRun | null {
   }
 }
 
+/**
+ * The run this tab follows once another tab saves its own run (`saved`), or
+ * starts following none. A run this tab still follows is kept until it ends.
+ */
+export function adoptOwnRun(current: OwnRun | null, saved: string | null): OwnRun | null {
+  return parseOwnRun(saved) ?? current;
+}
+
 export function loadOwnRun(store: Store = localStorage): OwnRun | null {
   try {
     return parseOwnRun(store.getItem(OWN_RUN_KEY));

@@ -5,6 +5,7 @@ import { useAuth } from "./lib/auth-context.ts";
 import { PROPERTY_LABELS } from "./lib/preview.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY, EXAMPLE } from "./lib/state.ts";
+import { useStorageEvent } from "./components/use-storage-event.ts";
 import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
 import PerformersSection from "./components/PerformersSection.tsx";
@@ -213,13 +214,29 @@ function Form() {
       }),
     [],
   );
+  // The form another tab saved, while this tab's differs from it. Such a tab
+  // is stale: it may lack QIDs a run wrote back there, so it neither runs nor
+  // saves (which would undo the other tab's changes) until it's reloaded.
+  const [otherTab, setOtherTab] = useState<string | null>(null);
+  const json = useMemo(() => JSON.stringify(coerceState(state)), [state]);
+  if (otherTab !== null && otherTab === json) setOtherTab(null);
+  const stale = otherTab !== null;
+  useStorageEvent(STORAGE_KEY, (saved) => {
+    if (!saved) return;
+    try {
+      setOtherTab(JSON.stringify(coerceState(JSON.parse(saved))));
+    } catch {
+      // corrupt: nothing to compare with
+    }
+  });
   useEffect(() => {
+    if (stale) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // storage full or blocked; the form still works
     }
-  }, [state]);
+  }, [state, stale]);
 
   const albumTracklist = useAlbumTracklist(state);
   const { matches, status } = useMatches(state, plan);
@@ -230,6 +247,17 @@ function Form() {
   return (
     <main>
       <Header />
+      {stale && (
+        <div className="msg warn row">
+          <span>
+            The form was changed in another tab. Reload to get those changes. Until then this tab
+            can't run, and what you change here isn't saved.
+          </span>
+          <button type="button" onClick={() => location.reload()}>
+            Reload
+          </button>
+        </div>
+      )}
       <ItemModel />
       <div className="row example">
         <ConfirmButton
@@ -260,6 +288,7 @@ function Form() {
         unreviewed={reviews.filter((r) => !r.reviewed).length}
         matchesPending={status === "pending"}
         formId={formId}
+        stale={stale}
       />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton

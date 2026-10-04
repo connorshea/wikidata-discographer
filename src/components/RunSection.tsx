@@ -3,11 +3,13 @@ import { useLocation, useSearch } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
+  adoptOwnRun,
   applyCreated,
   createdAny,
   initialRunId,
   isGone,
   loadOwnRun,
+  OWN_RUN_KEY,
   type OwnRun,
   saveOwnRun,
   settleOwnRun,
@@ -25,6 +27,7 @@ import { UnreviewedNotice } from "./MatchesSection.tsx";
 import PlanPreview from "./PlanPreview.tsx";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
+import { useStorageEvent } from "./use-storage-event.ts";
 
 const POLL_MS = 2000;
 
@@ -65,6 +68,7 @@ export default function RunSection({
   unreviewed,
   matchesPending,
   formId,
+  stale,
 }: SectionProps & {
   albumTracklist: AlbumTracklist | null;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
@@ -73,6 +77,8 @@ export default function RunSection({
   matchesPending: boolean;
   /** Identifies the form until it's cleared or replaced (see `useFormId`). */
   formId: string;
+  /** Another tab changed the form since: this tab mustn't run it. */
+  stale: boolean;
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
@@ -114,6 +120,17 @@ export default function RunSection({
     },
     [followOwnRun, update],
   );
+  // A run started in another tab on the same form: follow it here too, so its
+  // QIDs are saved even if that tab is closed before the run ends.
+  useStorageEvent(OWN_RUN_KEY, (saved) => {
+    const cur = ownRunRef.current;
+    const next = adoptOwnRun(cur, saved);
+    if (next?.run === cur?.run && next?.form === cur?.form) return;
+    // Not saved again: it came from storage.
+    ownRunRef.current = next;
+    setOwnRun(next);
+    if (next) setRunId((id) => id ?? next.run);
+  });
   const dropIfGone = useCallback(
     (id: number, e: unknown) => {
       if (isGone(e) && ownRunRef.current?.run === id) followOwnRun(null);
@@ -195,6 +212,7 @@ export default function RunSection({
             !!albumTracklist ||
             unreviewed > 0 ||
             matchesPending ||
+            stale ||
             running ||
             starting
           }
@@ -204,6 +222,9 @@ export default function RunSection({
           onConfirm={() => start()}
         />
         {!user && <span className="hint">Log in to edit.</span>}
+        {user && stale && (
+          <span className="hint">The form was changed in another tab. Reload this page first.</span>
+        )}
         {user && albumTracklist && (
           <span className="hint">The album already has a tracklist. See the Album section.</span>
         )}
