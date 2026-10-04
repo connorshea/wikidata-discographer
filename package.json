@@ -24,7 +24,8 @@
     "hono": "^4.13.12",
     "mysql2": "^3.24.5",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "wouter": "^3.13.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

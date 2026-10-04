@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
+import { albumRoutes } from "./albums.ts";
 import { authRoutes } from "./auth/oauth.ts";
 import { sameOriginOnly } from "./auth/same-origin.ts";
 import { type AuthEnv, sessionMiddleware } from "./auth/session.ts";
@@ -40,6 +41,7 @@ app.use(
 
 app.use("/api/*", sameOriginOnly);
 app.use("/api/*", sessionMiddleware);
+app.route("/api/albums", albumRoutes);
 app.route("/api/auth", authRoutes); // /api/auth/{login,callback,logout,me}
 app.route("/api/items", items);
 app.route("/api/musicbrainz", musicbrainzRoutes);

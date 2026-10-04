@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
 import { PROPERTY_LABELS } from "./lib/preview.ts";
@@ -16,6 +17,7 @@ import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import { ConfirmButton } from "./components/ConfirmDialog.tsx";
 import MusicBrainzImport from "./components/MusicBrainzImport.tsx";
+import AlbumList from "./components/AlbumList.tsx";
 
 /**
  * The ID Wikidata gave the production OAuth consumer when it was registered,
@@ -92,7 +94,80 @@ function loadState(): State {
 /** Whether the form is as Clear leaves it, so replacing it loses nothing. */
 const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
 
+/** A header link, marked as the current page while it's open. */
+function NavLink({ href, children }: { href: string; children: string }) {
+  const [active] = useRoute(href);
+  return (
+    <Link href={href} aria-current={active ? "page" : undefined}>
+      {children}
+    </Link>
+  );
+}
+
+/** The page's title, with the links between pages and the login control. */
+function Header() {
+  return (
+    <header className="top">
+      <div>
+        <h1>Wikidata Discographer</h1>
+        <p className="lede">
+          Turn an album's tracklist into Wikidata items: the album, a composition and a track for
+          each song, and any singles, all linked together and made with your account.
+        </p>
+      </div>
+      <nav className="top-nav">
+        <NavLink href="/">Add an album</NavLink>
+        <NavLink href="/albums">Albums</NavLink>
+        <AuthBar />
+      </nav>
+    </header>
+  );
+}
+
+function Footer() {
+  return (
+    <footer>
+      <a href="https://github.com/connorshea/wikidata-discographer">Source</a> ·{" "}
+      <a href={RECENT_CHANGES_URL} title="Edits made with this tool in the last 30 days">
+        Recent changes
+      </a>{" "}
+      · MIT License
+    </footer>
+  );
+}
+
 export default function App() {
+  return (
+    <Switch>
+      <Route path="/">
+        <Form />
+      </Route>
+      <Route path="/albums">
+        <main>
+          <Header />
+          <AlbumList />
+          <Footer />
+        </main>
+      </Route>
+      <Route>
+        <main>
+          <Header />
+          <section className="block">
+            <h2>Page not found</h2>
+            <p className="hint">
+              There's nothing here. Go to the <Link href="/">form</Link> or the{" "}
+              <Link href="/albums">album list</Link>.
+            </p>
+          </section>
+          <Footer />
+        </main>
+      </Route>
+    </Switch>
+  );
+}
+
+/** The form for an album's tracklist, and the run that puts it on Wikidata. */
+function Form() {
   const [state, setState] = useState<State>(loadState);
   const plan = useMemo(() => buildPlan(state), [state]);
   const update = useCallback<Update>(
@@ -120,16 +195,7 @@ export default function App() {
   const props = { state, update, plan };
   return (
     <main>
-      <header className="top">
-        <div>
-          <h1>Wikidata Discographer</h1>
-          <p className="lede">
-            Turn an album's tracklist into Wikidata items: the album, a composition and a track for
-            each song, and any singles, all linked together and made with your account.
-          </p>
-        </div>
-        <AuthBar />
-      </header>
+      <Header />
       <ItemModel />
       <div className="row example">
         <ConfirmButton
@@ -180,13 +246,7 @@ export default function App() {
           onConfirm={() => setState(structuredClone(EMPTY))}
         />
       </div>
-      <footer>
-        <a href="https://github.com/connorshea/wikidata-discographer">Source</a> ·{" "}
-        <a href={RECENT_CHANGES_URL} title="Edits made with this tool in the last 30 days">
-          Recent changes
-        </a>{" "}
-        · MIT License
-      </footer>
+      <Footer />
     </main>
   );
 }
