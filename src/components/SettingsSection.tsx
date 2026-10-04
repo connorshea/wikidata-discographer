@@ -13,7 +13,13 @@ import { FieldErr, InfoTip, Pids } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc" | "singleDesc";
-type FlagKey = "compPerformer" | "duration" | "straight" | "splitArtists" | "extendExisting";
+type FlagKey =
+  | "compPerformer"
+  | "duration"
+  | "straight"
+  | "splitArtists"
+  | "extendExisting"
+  | "mbIds";
 
 const FLAGS: [FlagKey, string][] = [
   ["compPerformer", "Add performer (P175) to compositions as well as tracks"],
@@ -21,6 +27,10 @@ const FLAGS: [FlagKey, string][] = [
   ["straight", "Convert curly apostrophes and quotes to straight ones"],
   ["splitArtists", "Split artists on “,” “&” “feat.” “ft.”"],
   ["extendExisting", "Add missing links to existing items you reuse (P2550, P175)"],
+  [
+    "mbIds",
+    "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify) and compositions (P435)",
+  ],
 ];
 
 export default function SettingsSection({ state, update, plan }: SectionProps) {

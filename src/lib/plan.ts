@@ -33,6 +33,8 @@ export interface Settings {
   straight: boolean;
   splitArtists: boolean;
   extendExisting: boolean;
+  /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
+  mbIds: boolean;
 }
 
 export interface AlbumState {
@@ -50,6 +52,23 @@ export interface SingleState {
   qid: string;
 }
 
+/**
+ * A track's identifiers from a MusicBrainz import, kept with the title it was
+ * imported with: they're only used while the row still has that title, so
+ * editing the tracklist can't move them onto another song.
+ */
+export interface MbRowIds {
+  title: string;
+  /** P4404 MusicBrainz recording ID, for the track. Empty if an item already has it. */
+  recording: string;
+  /** P435 MusicBrainz work ID, for the composition. Empty if an item already has it. */
+  work: string;
+  /** P1243 ISRCs, for the track. */
+  isrcs: string[];
+  /** P2207 Spotify track IDs, for the track. */
+  spotify: string[];
+}
+
 export interface Disc {
   part: string;
   partCustom?: boolean;
@@ -57,6 +76,8 @@ export interface Disc {
   comp: Record<string, string>;
   track: Record<string, string>;
   single: Record<string, SingleState>;
+  /** Imported identifiers by track number. */
+  mb: Record<string, MbRowIds>;
 }
 
 export interface State {
@@ -440,6 +461,24 @@ interface PlanItem {
   existComp: string | null;
   existTrack: string | null;
   single: { date: ParsedDate; qid: string | null } | null;
+  mb: MbRowIds | null;
+}
+
+const sameTitle = (a: string, b: string) => {
+  const norm = (s: string) =>
+    s
+      .replace(/[’‘]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  return norm(a) === norm(b);
+};
+
+/** The row's imported identifiers, if it still has the title they were imported with. */
+export function mbIdsFor(disc: Disc, row: ParsedRow): MbRowIds | null {
+  const ids = disc.mb[row.n];
+  return ids && sameTitle(ids.title, row.title) ? ids : null;
 }
 
 /** Wikidata's limit on a label or description. */
@@ -589,6 +628,7 @@ export function buildPlan(state: State): Plan {
         existComp: QID.test(ec) ? ec : null,
         existTrack: QID.test(et) ? et : null,
         single,
+        mb: S.mbIds ? mbIdsFor(d, r) : null,
       });
     }
   });
@@ -651,6 +691,15 @@ export function buildPlan(state: State): Plan {
     labels: { [lang]: t },
     descriptions: desc ? { [lang]: desc } : {},
   });
+  const str = (property: string, value: string) => claim(property, { type: "string", value });
+  const trackIds = (mb: MbRowIds | null) =>
+    mb
+      ? [
+          ...(mb.recording ? [str("P4404", mb.recording)] : []),
+          ...mb.isrcs.map((v) => str("P1243", v)),
+          ...mb.spotify.map((v) => str("P2207", v)),
+        ]
+      : [];
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
@@ -712,6 +761,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
+        ...(it.mb?.work ? [str("P435", it.mb.work)] : []),
       ],
     });
   }
@@ -743,6 +793,7 @@ export function buildPlan(state: State): Plan {
         ...(S.duration && it.r.seconds !== null
           ? [claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT })]
           : []),
+        ...trackIds(it.mb),
       ],
     });
   }

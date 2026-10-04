@@ -31,4 +31,32 @@ describe("coerceState", () => {
     expect(s.artists).toEqual({ A: "Q1" });
     expect(s.discs[0].single).toEqual({ "1": { date: "2020", qid: "" } });
   });
+
+  it("keeps only well-formed imported identifiers", () => {
+    const s = coerceState({
+      discs: [
+        {
+          mb: {
+            "1": {
+              title: "Song",
+              recording: "not an mbid",
+              work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+              isrcs: ["USUM72604367", "bad", 5, "USUM72604367"],
+              spotify: "6RSxVKsgvNIIN6IwYA8GsQ",
+            },
+            "2": "x",
+          },
+        },
+      ],
+    });
+    expect(s.discs[0].mb).toEqual({
+      "1": {
+        title: "Song",
+        recording: "",
+        work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+        isrcs: ["USUM72604367"],
+        spotify: [],
+      },
+    });
+  });
 });

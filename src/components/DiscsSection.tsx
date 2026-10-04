@@ -4,6 +4,8 @@ import { emptyDisc } from "../lib/state.ts";
 import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
   isCustomPart,
+  type MbRowIds,
+  mbIdsFor,
   normalizeDate,
   normalizeQid,
   PARTS,
@@ -56,7 +58,8 @@ export default function DiscsSection({
         One tracklist per disc or side, a line per track: <code>1. Title - Artist (3:45)</code>. The
         length is optional. Fill in a composition or track QID to reuse an existing item instead of
         creating one. Items already on Wikidata with a track's title are listed under Possible
-        matches.
+        matches. A row marked MB has identifiers from a MusicBrainz import, kept while its title
+        stays the same.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
@@ -199,6 +202,7 @@ function DiscBlock({
                         <span className="title-cell">
                           {r.title}
                           {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
+                          {state.settings.mbIds && <MbChip ids={mbIdsFor(d, r)} />}
                         </span>
                       </td>
                       <td>
@@ -390,6 +394,23 @@ function SingleRow({
 }
 
 /** A warning icon on a track with possible matches to review, linked to them. */
+/** Marks a row with identifiers from a MusicBrainz import, listing them on hover. */
+function MbChip({ ids }: { ids: MbRowIds | null }) {
+  if (!ids) return null;
+  const lines = [
+    ids.recording && `Recording ID (P4404) ${ids.recording}`,
+    ids.work && `Work ID (P435), for the composition, ${ids.work}`,
+    ...ids.isrcs.map((v) => `ISRC (P1243) ${v}`),
+    ...ids.spotify.map((v) => `Spotify track ID (P2207) ${v}`),
+  ].filter(Boolean);
+  const text = `From MusicBrainz, added if this row creates the item:\n${lines.join("\n")}`;
+  return (
+    <span className="chip" title={text} aria-label={text.replace(/\n/g, ". ")}>
+      MB
+    </span>
+  );
+}
+
 function MatchFlag({ review }: { review: TrackReview }) {
   const n = review.candidates.length;
   const what = `${n} possible match${n === 1 ? "" : "es"}`;

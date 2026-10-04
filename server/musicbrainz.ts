@@ -37,7 +37,7 @@ import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../sr
 const API_URL = () =>
   (process.env.MUSICBRAINZ_API_URL ?? "https://musicbrainz.org/ws/2").replace(/\/+$/, "");
 const RELEASE_INC =
-  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+url-rels+release-group-level-rels";
+  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs";
 /** MusicBrainz's largest page, and how many pages of a release group's releases to read. */
 const PAGE_SIZE = 100;
 const MAX_PAGES = 3;
@@ -162,45 +162,54 @@ export function createMusicBrainzClient(overrides: Partial<ClientDeps> = {}) {
 const client = createMusicBrainzClient();
 
 /**
- * Items in the mirror holding these values of `property`, value → QID, kept
- * only when the value points at exactly one item of the given kinds.
+ * Items in the mirror holding these values of `property`: `unique` maps a
+ * value to its item when exactly one item of the given kinds has it, and
+ * `taken` lists every value any item has.
  */
 async function lookup(property: string, values: string[], kinds: MusicKind[]) {
-  const out: Record<string, string> = {};
-  if (!values.length) return out;
+  const unique: Record<string, string> = {};
+  if (!values.length) return { unique, taken: [] };
   const rows = await db
-    .select({ qid: musicExternalIds.qid, value: musicExternalIds.value })
+    .select({ qid: musicExternalIds.qid, value: musicExternalIds.value, kind: musicItems.kind })
     .from(musicExternalIds)
     .innerJoin(musicItems, eq(musicItems.qid, musicExternalIds.qid))
     .where(
       and(
         eq(musicExternalIds.property, propertyNumber(property)),
         inArray(musicExternalIds.value, values),
-        inArray(musicItems.kind, kinds),
       ),
     );
   const seen = new Map<string, Set<number>>();
-  for (const r of rows) seen.set(r.value, (seen.get(r.value) ?? new Set()).add(r.qid));
-  for (const [value, qids] of seen) if (qids.size === 1) out[value] = toQid([...qids][0]);
-  return out;
+  for (const r of rows)
+    if (kinds.includes(r.kind as MusicKind))
+      seen.set(r.value, (seen.get(r.value) ?? new Set()).add(r.qid));
+  for (const [value, qids] of seen) if (qids.size === 1) unique[value] = toQid([...qids][0]);
+  return { unique, taken: [...new Set(rows.map((r) => r.value))] };
 }
 
 /** The release's MusicBrainz IDs, looked up in the mirror. */
 export async function lookupRelease(release: MbRelease): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works] = await Promise.all([
+  const [albums, artists, recordings, works, spotify] = await Promise.all([
     lookup("P436", [ids.releaseGroup], ["album", "ep"]),
     lookup("P434", ids.artists, ["artist"]),
     lookup("P4404", ids.recordings, ["track"]),
     lookup("P435", ids.works, ["work"]),
+    lookup("P2207", ids.spotifyTracks, ["track"]),
   ]);
   // MusicBrainz's own Wikidata link names a wikidata.org item, which is
   // only right when that's where the edits go.
   const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
   const albumQid =
-    albums[ids.releaseGroup] ??
+    albums.unique[ids.releaseGroup] ??
     (onWikidata ? wikidataLink(release["release-group"].relations) : undefined);
-  return { albumQid, artists, recordings, works };
+  return {
+    albumQid,
+    artists: artists.unique,
+    recordings: recordings.unique,
+    works: works.unique,
+    taken: [...recordings.taken, ...works.taken, ...spotify.taken],
+  };
 }
 
 export const musicbrainzRoutes = new Hono<AuthEnv>();
