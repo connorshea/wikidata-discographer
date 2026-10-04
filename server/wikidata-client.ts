@@ -302,21 +302,24 @@ export type ItemCheck =
 /** The most ids `wbgetentities` takes in one request without the apihighlimits right. */
 const ENTITY_BATCH = 50;
 
+type BatchEntity = Entity & { redirects?: { to?: string } };
+
 /**
- * Whether each QID is an item that exists, or redirects to another. Only page
- * info is fetched, 50 ids per request, one request at a time. `retries` is
- * as for `getEntities`.
+ * `wbgetentities` for each QID, 50 per request, one request at a time, with
+ * `found` called on each one that exists and isn't a redirect.
  */
-export async function checkItems(
+async function entityBatches<T>(
   qids: readonly string[],
-  { retries }: { retries?: number } = {},
-): Promise<Map<string, ItemCheck>> {
-  const out = new Map<string, ItemCheck>();
+  params: Record<string, string>,
+  found: (entity: Entity) => T,
+  { retries }: { retries?: number },
+): Promise<Map<string, T | Exclude<ItemCheck, { status: "ok" }>>> {
+  const out = new Map<string, T | Exclude<ItemCheck, { status: "ok" }>>();
   let todo = [...new Set(qids)];
   while (todo.length > 0) {
     const batch = todo.slice(0, ENTITY_BATCH);
     const res = await read(
-      { action: "wbgetentities", ids: batch.join("|"), props: "info" },
+      { action: "wbgetentities", ids: batch.join("|"), ...params },
       { retries },
     );
     const err = apiError(res);
@@ -330,26 +333,61 @@ export async function checkItems(
       }
       throw new WikidataEditError(err.code, err.text);
     }
-    const entities =
-      (res.body.entities as
-        | Record<string, { id?: string; missing?: unknown; redirects?: { to?: string } }>
-        | undefined) ?? {};
+    const entities = (res.body.entities as Record<string, BatchEntity> | undefined) ?? {};
     for (const q of batch) {
       const e = entities[q];
       // A redirect comes back under the id asked for, as its target.
       const to = e?.redirects?.to ?? (e?.id && e.id !== q ? e.id : undefined);
       out.set(
         q,
-        !e || "missing" in e
-          ? { status: "missing" }
-          : to
-            ? { status: "redirect", to }
-            : { status: "ok" },
+        !e || "missing" in e ? { status: "missing" } : to ? { status: "redirect", to } : found(e),
       );
     }
     todo = todo.slice(ENTITY_BATCH);
   }
   return out;
+}
+
+/**
+ * Whether each QID is an item that exists, or redirects to another. Only page
+ * info is fetched, 50 ids per request, one request at a time. `retries` is
+ * as for `getEntities`.
+ */
+export function checkItems(
+  qids: readonly string[],
+  { retries }: { retries?: number } = {},
+): Promise<Map<string, ItemCheck>> {
+  return entityBatches(qids, { props: "info" }, () => ({ status: "ok" as const }), { retries });
+}
+
+/** What an item is called and what it's an instance of, or why it can't be shown. */
+export type ItemSummary =
+  | { status: "ok"; label: string | null; description: string | null; classes: string[] }
+  | Exclude<ItemCheck, { status: "ok" }>;
+
+/**
+ * Each QID's label and description in `lang` (or a fallback language), and
+ * its instance of (P31) classes. Batched as for `checkItems`.
+ */
+export function describeItems(
+  qids: readonly string[],
+  lang: string,
+  { retries }: { retries?: number } = {},
+): Promise<Map<string, ItemSummary>> {
+  return entityBatches(
+    qids,
+    { props: "labels|descriptions|claims", languages: lang, languagefallback: "1" },
+    (e): ItemSummary => ({
+      status: "ok",
+      label: e.labels?.[lang]?.value ?? null,
+      description: e.descriptions?.[lang]?.value ?? null,
+      classes: (e.claims?.P31 ?? [])
+        .filter((s) => s.rank !== "deprecated")
+        .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
+        .filter((id): id is string => id !== undefined),
+    }),
+    { retries },
+  );
 }
 
 /**
