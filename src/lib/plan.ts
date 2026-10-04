@@ -88,6 +88,8 @@ export interface Snak {
 
 export interface Claim extends Snak {
   qualifiers?: Snak[];
+  /** Skip it if the item already has any statement for this property, whatever its value. */
+  ifMissing?: true;
 }
 
 export type Op =
@@ -342,6 +344,49 @@ export function parseDate(raw: string): ParsedDate {
   if (mo !== undefined)
     return { ok: true, val: { time: `+${y}-${mo}-00T00:00:00Z`, precision: 10 }, year: y };
   return { ok: true, val: { time: `+${y}-00-00T00:00:00Z`, precision: 9 }, year: y };
+}
+
+const MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+const MONTH = String.raw`([a-z]{3,9})\.?`;
+const DAY = String.raw`(\d{1,2})(?:st|nd|rd|th)?`;
+const MDY = new RegExp(String.raw`^${MONTH}\s+${DAY},?\s+(\d{4})$`, "i");
+const DMY = new RegExp(String.raw`^${DAY}\s+(?:of\s+)?${MONTH},?\s+(\d{4})$`, "i");
+const MY = new RegExp(String.raw`^${MONTH},?\s+(\d{4})$`, "i");
+
+/** 1-based month number for an English month name or abbreviation ("Jun", "Sept"), or 0. */
+function monthNum(name: string): number {
+  const n = name.toLowerCase();
+  if (n.length < 3) return 0;
+  return MONTHS.findIndex((full) => full.startsWith(n)) + 1;
+}
+
+/**
+ * Rewrites a written-out English date such as "June 12, 2012", "12 June 2012" or "June 2012" as
+ * YYYY-MM-DD or YYYY-MM. Anything else comes back unchanged, so parseDate can report it.
+ */
+export function normalizeDate(raw: string): string {
+  const s = raw.trim().replace(/\s+/g, " ");
+  const pad = (n: string) => n.padStart(2, "0");
+  let m = MDY.exec(s);
+  if (m && monthNum(m[1])) return `${m[3]}-${pad(String(monthNum(m[1])))}-${pad(m[2])}`;
+  m = DMY.exec(s);
+  if (m && monthNum(m[2])) return `${m[3]}-${pad(String(monthNum(m[2])))}-${pad(m[1])}`;
+  m = MY.exec(s);
+  if (m && monthNum(m[1])) return `${m[2]}-${pad(String(monthNum(m[1])))}`;
+  return raw;
 }
 
 const EMPTY_TEMPLATE = "Empty, so no description will be added.";
@@ -610,19 +655,21 @@ export function buildPlan(state: State): Plan {
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
 
+  // Number of tracks: one statement per disc when every disc names its part, else one in all.
+  const perDisc = state.discs
+    .map((d, di) => ({ n: items.filter((it) => it.di === di).length, part: d.part.trim() }))
+    .filter((x) => x.n);
+  const counts =
+    perDisc.length > 1 && perDisc.every((x) => QID.test(x.part))
+      ? perDisc.map((x) =>
+          claim("P2635", { type: "quantity", amount: x.n, unit: TRACK_UNIT }, [
+            { property: "P518", value: item(x.part) },
+          ]),
+        )
+      : [claim("P2635", { type: "quantity", amount: items.length, unit: TRACK_UNIT })];
+
   // 1. The album, without its tracklist (the tracks don't exist yet).
   if (creatingAlbum) {
-    const perDisc = state.discs
-      .map((d, di) => ({ n: items.filter((it) => it.di === di).length, part: d.part.trim() }))
-      .filter((x) => x.n);
-    const counts =
-      perDisc.length > 1 && perDisc.every((x) => QID.test(x.part))
-        ? perDisc.map((x) =>
-            claim("P2635", { type: "quantity", amount: x.n, unit: TRACK_UNIT }, [
-              { property: "P518", value: item(x.part) },
-            ]),
-          )
-        : [claim("P2635", { type: "quantity", amount: items.length, unit: TRACK_UNIT })];
     ops.push({
       op: "create",
       key: "album",
@@ -704,19 +751,23 @@ export function buildPlan(state: State): Plan {
     });
   }
 
-  // 4. The album's tracklist, in one edit.
+  // 4. The album's tracklist, in one edit. An existing album also gets its number of tracks,
+  // which a tracklist needs, unless it already says how many it has.
   const trackOf = (it: PlanItem): Value =>
     it.existTrack ? item(it.existTrack) : ref(trackKey(it));
   ops.push({
     op: "addClaims",
     target: album,
     what: "album tracklist",
-    claims: items.map((it) =>
-      claim("P658", trackOf(it), [
-        { property: "P1545", value: { type: "string", value: String(it.r.n) } },
-        ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
-      ]),
-    ),
+    claims: [
+      ...items.map((it) =>
+        claim("P658", trackOf(it), [
+          { property: "P1545", value: { type: "string", value: String(it.r.n) } },
+          ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
+        ]),
+      ),
+      ...(creatingAlbum ? [] : counts.map((c): Claim => ({ ...c, ifMissing: true }))),
+    ],
   });
 
   // 5. Singles, each pointing at its track and the album; then track → single.

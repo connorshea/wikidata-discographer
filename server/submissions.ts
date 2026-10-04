@@ -32,9 +32,9 @@ import {
   editRequest,
   type EditUser,
   type Entity,
+  freshStatements,
   getEntities,
   toStatement,
-  valueKey,
   WikidataEditError,
 } from "./wikidata-client.ts";
 import { buildPlan, describeOp, type Op } from "../src/lib/plan.ts";
@@ -507,21 +507,13 @@ export async function runPlan(
           );
       } else {
         const qid = "id" in op.target ? op.target.id : resolve(op.target.ref);
-        // Skip statements the item already has (same property and value), so
-        // re-running a run, or reusing existing items, doesn't add duplicates.
+        // Skip statements the item already has, so re-running a run, or
+        // reusing existing items, doesn't add duplicates.
         const entity = (await getEntities([qid])).get(qid);
         if (!entity)
           throw new WikidataEditError("missing", `${qid} doesn't exist (or is a redirect)`);
-        const have = new Set(
-          Object.values(entity.claims ?? {})
-            .flat()
-            .map((s) => `${s.mainsnak.property}=${valueKey(s.mainsnak.datavalue)}`),
-        );
-        const statements = op.claims.map((cl) => toStatement(cl, resolve));
-        const fresh = statements.filter(
-          (s) => !have.has(`${s.mainsnak.property}=${valueKey(s.mainsnak.datavalue)}`),
-        );
-        const skipped = statements.length - fresh.length;
+        const fresh = freshStatements(entity.claims ?? {}, op.claims, resolve);
+        const skipped = op.claims.length - fresh.length;
         if (fresh.length === 0) {
           await log({ op: "addClaims", what, qid, ok: true, skipped });
           continue;

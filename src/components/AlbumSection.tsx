@@ -25,7 +25,8 @@ export default function AlbumSection({
       <p className="hint">
         <Pids>
           All discs belong to this one album. Its tracklist (P658) is added after the tracks are
-          created, and singles point to it with P13602.
+          created, along with P2635 number of tracks if an existing album has none, and singles
+          point to it with P13602.
         </Pids>
       </p>
       <div className="row" role="radiogroup" aria-label="Album">

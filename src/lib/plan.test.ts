@@ -4,6 +4,7 @@ import {
   MAX_TERM_LENGTH,
   MAX_TRACKS,
   MAX_TRACKS_PER_DISC,
+  normalizeDate,
   normalizeQid,
   type Op,
   parseDisc,
@@ -13,6 +14,23 @@ import { EMPTY, emptyDisc, EXAMPLE } from "./state.ts";
 
 const keys = (ops: Op[]) => ops.map((o) => (o.op === "create" ? o.key : `+${o.what}`));
 const find = (ops: Op[], key: string) => ops.find((o) => o.op === "create" && o.key === key);
+
+describe("normalizeDate", () => {
+  it("converts written-out English dates to ISO", () => {
+    expect(normalizeDate("June 12, 2012")).toBe("2012-06-12");
+    expect(normalizeDate(" jun 2 2012 ")).toBe("2012-06-02");
+    expect(normalizeDate("Sept. 3rd, 1999")).toBe("1999-09-03");
+    expect(normalizeDate("12 June 2012")).toBe("2012-06-12");
+    expect(normalizeDate("1st of March, 2001")).toBe("2001-03-01");
+    expect(normalizeDate("June 2012")).toBe("2012-06");
+  });
+
+  it("leaves anything else for parseDate to judge", () => {
+    for (const s of ["", "2012-06-12", "2012", "Junk 12, 2012", "Ju 12, 2012", "June 12"])
+      expect(normalizeDate(s)).toBe(s);
+    expect(normalizeDate("February 30, 2012")).toBe("2012-02-30");
+  });
+});
 
 describe("normalizeQid", () => {
   it("turns URLs and lowercase q-numbers into bare QIDs", () => {
@@ -116,6 +134,29 @@ describe("buildPlan", () => {
     };
     expect(has577("comp:0:2")).toBe(true);
     expect(has577("track:0:2")).toBe(false);
+  });
+
+  it("adds the number of tracks to an existing album only if it has none", () => {
+    const tracklist = buildPlan(EXAMPLE).ops.find(
+      (o) => o.op === "addClaims" && o.what === "album tracklist",
+    );
+    const counts =
+      tracklist?.op === "addClaims" ? tracklist.claims.filter((c) => c.property === "P2635") : [];
+    expect(counts.length).toBeGreaterThan(0);
+    expect(counts.every((c) => c.ifMissing)).toBe(true);
+  });
+
+  it("doesn't add the number of tracks again to an album it creates", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    const { ops } = buildPlan(state);
+    const tracklist = ops.find((o) => o.op === "addClaims" && o.what === "album tracklist");
+    expect(
+      tracklist?.op === "addClaims" && tracklist.claims.some((c) => c.property === "P2635"),
+    ).toBe(false);
+    expect(find(ops, "album")?.op === "create" && find(ops, "album")).toMatchObject({
+      claims: expect.arrayContaining([expect.objectContaining({ property: "P2635" })]),
+    });
   });
 
   it("blocks on a bad performer QID", () => {

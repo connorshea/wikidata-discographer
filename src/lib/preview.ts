@@ -59,6 +59,8 @@ export interface PreviewStatement {
   property: PreviewProperty;
   value: PreviewValue;
   qualifiers: { property: PreviewProperty; value: PreviewValue }[];
+  /** Only added if the item has no statement for the property yet. */
+  ifMissing?: true;
 }
 
 export interface PreviewEdit {
@@ -201,6 +203,7 @@ export function previewPlan(plan: Pick<Plan, "ops" | "parsed">, state: State): P
   const statement = (c: Claim): PreviewStatement => ({
     ...snak(c),
     qualifiers: (c.qualifiers ?? []).map(snak),
+    ...(c.ifMissing ? { ifMissing: true as const } : {}),
   });
 
   const albumQid = state.album.mode === "existing" ? state.album.qid.trim() : null;
