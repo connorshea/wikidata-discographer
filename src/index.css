@@ -132,6 +132,10 @@ abbr.pid {
 .row.example .hint {
   margin: 0;
 }
+input.mb-input {
+  flex: 1 1 320px;
+  min-width: 0;
+}
 section.block {
   background: var(--panel);
   border: 1px solid var(--line);

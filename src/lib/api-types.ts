@@ -1,5 +1,6 @@
 // Wire shapes shared by the server routes and the client.
 import type { MusicKind } from "./music.ts";
+import type { MbForm } from "./musicbrainz.ts";
 
 export interface AuthUserInfo {
   id: number;
@@ -170,4 +171,9 @@ export interface DescribeRequest {
 export interface DescribeResponse {
   /** By QID, each one asked for. */
   items: Record<string, ItemSummary>;
+}
+
+/** GET /api/musicbrainz/release/:mbid: the form values for a MusicBrainz release. */
+export interface MusicBrainzResponse {
+  form: MbForm;
 }
