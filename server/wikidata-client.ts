@@ -3,7 +3,7 @@
 // fetches a CSRF token with `assert=user&assertuser=<name>`, and retries on
 // `badtoken` and `ratelimited`. Anything else becomes a `WikidataEditError`
 // carrying Wikidata's own message. Every write, retries included, first waits
-// its turn (server/edit-pace.ts), so a run's edits go out a few seconds apart. No `maxlag`: each run is started by hand by
+// its turn (server/edit-pace.ts), so a run's edits go out a second or two apart. No `maxlag`: each run is started by hand by
 // the user, like edits made in the Wikidata UI, not by an automated process.
 //
 // An edit is only retried when Wikidata refused it before saving (a bad token

@@ -31,8 +31,8 @@ function envMs(name: string, fallback: number): number {
 const defaultDeps = (): PaceDeps => ({
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
-  createGapMs: envMs("WIKIDATA_CREATE_GAP_MS", 5000),
-  editGapMs: envMs("WIKIDATA_EDIT_GAP_MS", 2000),
+  createGapMs: envMs("WIKIDATA_CREATE_GAP_MS", 2000),
+  editGapMs: envMs("WIKIDATA_EDIT_GAP_MS", 1000),
   serverGapMs: envMs("WIKIDATA_SERVER_GAP_MS", 1000),
 });
 

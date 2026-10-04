@@ -78,7 +78,7 @@ vp test                 # run the tests
 
 Edits carry `assert=user`, and retry on `badtoken` and rate limits. They go
 out at a steady pace rather than in a burst (`server/edit-pace.ts`): a user's
-writes are kept 5 seconds apart before a create and 2 seconds before any other
+writes are kept 2 seconds apart before a create and 1 second before any other
 edit, across runs too, and anyone's writes at least 1 second apart across the
 server. Reads aren't paced. Set `WIKIDATA_CREATE_GAP_MS`, `WIKIDATA_EDIT_GAP_MS`
 and `WIKIDATA_SERVER_GAP_MS` to change the gaps. Edits don't send `maxlag`: a
