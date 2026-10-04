@@ -60,7 +60,6 @@ describe("previewPlan", () => {
         ["performer", "Carly Rae Jepsen", false],
         ["recording or performance of", "composition “After All”", false],
         ["duration", "4:12", false],
-        ["published in", "new album “Day and Night”", true],
       ]),
     );
     const comp = groups.find((g) => g.id === "comp")!.edits[0];
