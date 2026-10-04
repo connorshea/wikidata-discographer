@@ -6,6 +6,7 @@ import {
   adoptOwnRun,
   applyCreated,
   createdAny,
+  formOfRun,
   initialRunId,
   isGone,
   loadOwnRun,
@@ -165,6 +166,18 @@ export default function RunSection({
   }, [ownRunId, runId, loggedIn, settle, dropIfGone]);
 
   const running = run?.status === "running";
+  // Whether the form is the one the run on show started from, once it's ended.
+  const fit = useMemo(
+    () => (run && run.status !== "running" ? formOfRun(state, run) : "other"),
+    [run, state],
+  );
+  // Any run of this form, not only the own run, writes its QIDs back, so
+  // starting it again reuses them instead of creating the items twice.
+  useEffect(() => {
+    if (fit === "behind" && run && !stale) update((s) => applyCreated(s, run.edits));
+  }, [fit, run, stale, update]);
+  // A finished run of this form has nothing left to make.
+  const finished = run?.status === "done" && fit === "same";
   const start = (confirmUnknown?: number) => {
     setStarting(true);
     setError(null);
@@ -213,6 +226,7 @@ export default function RunSection({
             unreviewed > 0 ||
             matchesPending ||
             stale ||
+            finished ||
             running ||
             starting
           }
@@ -225,13 +239,16 @@ export default function RunSection({
         {user && stale && (
           <span className="hint">The form was changed in another tab. Reload this page first.</span>
         )}
-        {user && albumTracklist && (
+        {user && !stale && finished && (
+          <span className="hint">This run is done. Start a new album to make more edits.</span>
+        )}
+        {user && !finished && albumTracklist && (
           <span className="hint">The album already has a tracklist. See the Album section.</span>
         )}
-        {user && !albumTracklist && unreviewed > 0 && (
+        {user && !finished && !albumTracklist && unreviewed > 0 && (
           <span className="hint">Use or dismiss each possible match first.</span>
         )}
-        {user && !albumTracklist && !unreviewed && matchesPending && (
+        {user && !finished && !albumTracklist && !unreviewed && matchesPending && (
           <span className="hint">Looking for possible matches…</span>
         )}
       </div>

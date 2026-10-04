@@ -6,6 +6,7 @@
 import type { EditLogEntry, SubmissionInfo } from "./api-types.ts";
 import { FetchError } from "./client.ts";
 import type { State } from "./plan.ts";
+import { coerceState } from "./state.ts";
 
 export const OWN_RUN_KEY = "discographer:ownRun";
 
@@ -101,4 +102,50 @@ export function applyCreated(s: State, edits: readonly Created[]): void {
     else if (kind === "track") disc.track[n] = qid!;
     else if (kind === "single") disc.single[n] = { date: "", qid: qid! };
   }
+}
+
+/** JSON with every object's keys sorted, since MySQL doesn't keep a stored form's key order. */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (typeof v === "object" && v !== null)
+    return `{${Object.keys(v)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+      .join(",")}}`;
+  return JSON.stringify(v) ?? "null";
+}
+
+/** `s` with a run's QIDs written in, as a string to compare forms by. */
+function withCreated(s: unknown, edits: readonly Created[]): string {
+  // coerceState makes a copy, so `s` isn't changed.
+  const copy = coerceState(s);
+  applyCreated(copy, edits);
+  return canonical(copy);
+}
+
+/** Whether the form's field for a plan key has no item in it yet. */
+function blank(s: State, key: string): boolean {
+  const [kind, di, n] = key.split(":");
+  if (kind === "album") return s.album.mode === "create" || !s.album.qid.trim();
+  const disc = s.discs[Number(di)];
+  if (!disc) return true;
+  if (kind === "comp") return !disc.comp[n]?.trim();
+  if (kind === "track") return !disc.track[n]?.trim();
+  return !disc.single[n]?.qid.trim();
+}
+
+/**
+ * How the form compares with an opened run's: "other" if it's another form,
+ * "behind" if it's the run's form but lacks QIDs the run created, or "same"
+ * if it's the run's form with them all. A QID put in by hand where the run
+ * created another makes it "other", so writing back never replaces one.
+ */
+export function formOfRun(
+  state: State,
+  run: Pick<SubmissionInfo, "input" | "edits">,
+): "other" | "behind" | "same" {
+  const target = withCreated(run.input, run.edits);
+  if (canonical(coerceState(state)) === target) return "same";
+  const missing = run.edits.filter((e) => isCreated(e) && blank(state, e.key!));
+  return withCreated(state, missing) === target ? "behind" : "other";
 }

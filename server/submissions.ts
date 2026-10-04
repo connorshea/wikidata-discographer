@@ -236,6 +236,7 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     .where(eq(wikidataEdits.submissionId, id))
     .orderBy(wikidataEdits.id);
   c.header("Cache-Control", "no-store");
+  const input = coerceState(row.input);
   return c.json({
     id: row.id,
     status: row.status as SubmissionStatus,
@@ -245,7 +246,7 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     error: row.error,
     createdAt: row.createdAt,
     finishedAt: row.finishedAt,
-    total: buildPlan(coerceState(row.input)).ops.length,
+    total: buildPlan(input).ops.length,
     waitingUntil: waitingUntil(row.status, row.userId),
     edits: edits
       // A create still waiting on Wikidata's answer isn't in the log yet.
@@ -262,6 +263,7 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
         skipped: e.skipped,
         error: e.errorText,
       })),
+    input,
   } satisfies SubmissionInfo);
 });
 
