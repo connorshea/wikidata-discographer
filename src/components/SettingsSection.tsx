@@ -30,7 +30,7 @@ const FLAGS: [FlagKey, string][] = [
   ["extendExisting", "Add missing links to existing items you reuse (P2550, P175)"],
   [
     "mbIds",
-    "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify) and compositions (P435)",
+    "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify, P10110 Apple Music) and compositions (P435)",
   ],
   [
     "mbRefs",

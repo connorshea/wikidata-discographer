@@ -94,6 +94,7 @@ export function kindOf(
 export const MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 export const SPOTIFY_TRACK_PATTERN = /^[0-9A-Za-z]{22}$/;
+export const APPLE_MUSIC_TRACK_PATTERN = /^\d+$/;
 
 /** The album identifiers the album form takes, with how to read a pasted URL. */
 export const ALBUM_ID_FIELDS = [
@@ -116,7 +117,8 @@ export const ALBUM_ID_FIELDS = [
     property: "P2281",
     label: "Apple Music album ID",
     pattern: /^\d+$/,
-    fromUrl: /music\.apple\.com\/.*\/album\/(?:[^/?#]*\/)?(\d+)/,
+    // MusicBrainz still has older iTunes links, like itunes.apple.com/us/album/id123.
+    fromUrl: /(?:music|itunes)\.apple\.com\/.*\/album\/(?:[^/?#]*\/)?(?:id)?(\d+)/,
   },
   {
     key: "discogs",

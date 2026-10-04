@@ -69,6 +69,8 @@ export interface MbRowIds {
   isrcs: string[];
   /** P2207 Spotify track IDs, for the track. */
   spotify: string[];
+  /** P10110 Apple Music track IDs, for the track. */
+  appleMusic: string[];
   /**
    * The length imported, in seconds, with the recording and day it came from,
    * for the duration's reference. Only used while the row has that length.
@@ -698,6 +700,7 @@ export function buildPlan(state: State): Plan {
           ...(mb.recording ? [str("P4404", mb.recording)] : []),
           ...mb.isrcs.map((v) => str("P1243", v)),
           ...mb.spotify.map((v) => str("P2207", v)),
+          ...mb.appleMusic.map((v) => str("P10110", v)),
         ]
       : [];
   // Stated in MusicBrainz, for a duration still as the import filled it in.

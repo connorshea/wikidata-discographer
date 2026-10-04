@@ -43,6 +43,7 @@ describe("coerceState", () => {
               work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
               isrcs: ["USUM72604367", "bad", 5, "USUM72604367"],
               spotify: "6RSxVKsgvNIIN6IwYA8GsQ",
+              appleMusic: ["1820000002", "apple", "1820000002"],
               length: {
                 seconds: 177,
                 recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
@@ -70,14 +71,31 @@ describe("coerceState", () => {
         work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
         isrcs: ["USUM72604367"],
         spotify: [],
+        appleMusic: ["1820000002"],
         length: {
           seconds: 177,
           recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
           retrieved: "2026-10-04",
         },
       },
-      "3": { title: "Other", recording: "", work: "", isrcs: [], spotify: [], length: null },
-      "4": { title: "Third", recording: "", work: "", isrcs: [], spotify: [], length: null },
+      "3": {
+        title: "Other",
+        recording: "",
+        work: "",
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        length: null,
+      },
+      "4": {
+        title: "Third",
+        recording: "",
+        work: "",
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        length: null,
+      },
     });
   });
 });

@@ -190,12 +190,13 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
 /** The release's MusicBrainz IDs, looked up in the mirror. */
 export async function lookupRelease(release: MbRelease): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works, spotify] = await Promise.all([
+  const [albums, artists, recordings, works, spotify, appleMusic] = await Promise.all([
     lookup("P436", [ids.releaseGroup], ["album", "ep"]),
     lookup("P434", ids.artists, ["artist"]),
     lookup("P4404", ids.recordings, ["track"]),
     lookup("P435", ids.works, ["work"]),
     lookup("P2207", ids.spotifyTracks, ["track"]),
+    lookup("P10110", ids.appleMusicTracks, ["track"]),
   ]);
   // MusicBrainz's own Wikidata link names a wikidata.org item, which is
   // only right when that's where the edits go.
@@ -208,7 +209,7 @@ export async function lookupRelease(release: MbRelease): Promise<MbLookups> {
     artists: artists.unique,
     recordings: recordings.unique,
     works: works.unique,
-    taken: [...recordings.taken, ...works.taken, ...spotify.taken],
+    taken: [...recordings.taken, ...works.taken, ...spotify.taken, ...appleMusic.taken],
   };
 }
 
