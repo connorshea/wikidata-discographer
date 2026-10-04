@@ -300,11 +300,19 @@ function SingleRow({
   if (!open)
     return (
       <div className="single-summary">
-        <span className="single-label">Single</span>
+        <span className="single-label">
+          <i />
+          Single
+        </span>
         {QID.test(qid) ? (
           <span>
             Reusing <WikiLink base={wikiBaseUrl} qid={qid} />
-            {found?.status === "ok" && found.label && <> {found.label}</>}
+            {found?.status === "ok" && found.label && (
+              <>
+                {" "}
+                <b>{found.label}</b>
+              </>
+            )}
             {found?.status === "ok" && found.description && (
               <span className="muted"> · {found.description}</span>
             )}
@@ -321,7 +329,7 @@ function SingleRow({
         <button
           ref={editRef}
           type="button"
-          className="ghost quiet small"
+          className="link"
           aria-label={`Edit single for track ${n}`}
           onClick={() => setEditing(true)}
         >

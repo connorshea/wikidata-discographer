@@ -474,8 +474,16 @@ button.ghost.quiet {
   align-items: center;
 }
 .single-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
-  color: var(--warn);
+}
+.single-label i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--rg-edge);
 }
 .single-summary a {
   font-family: var(--mono);
