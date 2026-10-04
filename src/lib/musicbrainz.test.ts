@@ -236,6 +236,23 @@ describe("releaseToForm", () => {
     });
   });
 
+  it("adds no Spotify track ID when a recording links more than one", () => {
+    const many = release();
+    const rels = many.media[0].tracks![0].recording.relations!;
+    const spotify = rels.find((r) => r.url?.resource.includes("open.spotify.com"))!;
+    rels.push(structuredClone(spotify), {
+      ...structuredClone(spotify),
+      url: { resource: "https://open.spotify.com/track/1strUR6J5Ozg7T5k84gn5w" },
+    });
+    expect(releaseIds(many).spotifyTracks).toEqual([]);
+    const form = releaseToForm(many, NONE);
+    expect(form.discs[0].mb["1"].spotify).toEqual([]);
+    expect(form.notes).toEqual([
+      "1 track links more than one Spotify track on MusicBrainz, so it gets no Spotify track ID.",
+    ]);
+    expect(form.summary).toContain("New tracks get 6 recording IDs and 6 ISRCs, and");
+  });
+
   it("doesn't count identifiers for rows that reuse an existing track", () => {
     const rec = RELEASE.media[0].tracks![0].recording.id;
     const form = releaseToForm(RELEASE, { ...NONE, recordings: { [rec]: "Q10" }, taken: [rec] });

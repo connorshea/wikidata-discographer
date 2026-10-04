@@ -185,8 +185,8 @@ export function releaseIds(release: MbRelease) {
   };
 }
 
-/** A recording's Spotify track IDs, from its links. */
-function spotifyOf(t: MbTrack): string[] {
+/** The distinct Spotify track IDs a recording links to. */
+function spotifyLinks(t: MbTrack): string[] {
   const ids = (t.recording.relations ?? []).flatMap(
     (r) =>
       /open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([0-9A-Za-z]{22})/.exec(
@@ -194,6 +194,16 @@ function spotifyOf(t: MbTrack): string[] {
       )?.[1] ?? [],
   );
   return [...new Set(ids)];
+}
+
+/**
+ * A recording's Spotify track ID, if it links exactly one. Several usually
+ * means one per Spotify release the recording is on, and there's no telling
+ * which is this album's.
+ */
+function spotifyOf(t: MbTrack): string[] {
+  const ids = spotifyLinks(t);
+  return ids.length === 1 ? ids : [];
 }
 
 /** Items in the mirror with these MusicBrainz IDs, MBID → QID. */
@@ -350,6 +360,7 @@ export function releaseToForm(
   let missingLength = 0;
   let comps = 0;
   let tracks = 0;
+  let manySpotify = 0;
   const taken = new Set(lookups.taken);
   const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, refs: 0 };
   const discs = media.map((m, i): Disc => {
@@ -387,6 +398,7 @@ export function releaseToForm(
             toAdd.recordings += ids.recording ? 1 : 0;
             toAdd.isrcs += ids.isrcs.length;
             toAdd.spotify += ids.spotify.length;
+            if (spotifyLinks(t).length > 1) manySpotify++;
             toAdd.refs += ids.length ? 1 : 0;
           }
           if (!disc.comp[t.position]) toAdd.works += ids.work ? 1 : 0;
@@ -401,6 +413,10 @@ export function releaseToForm(
   if (missingLength)
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,
+    );
+  if (manySpotify)
+    notes.push(
+      `${plural(manySpotify, "track links", "tracks link")} more than one Spotify track on MusicBrainz, so ${manySpotify === 1 ? "it gets" : "they get"} no Spotify track ID.`,
     );
   for (const name of nameTroubles)
     notes.push(
