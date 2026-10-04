@@ -3,12 +3,15 @@
 import type { Disc, MbRowIds, Settings, SingleState, State } from "./plan.ts";
 import { ISRC_PATTERN, MBID_PATTERN, SPOTIFY_TRACK_PATTERN } from "./music.ts";
 
+/** Earlier defaults, replaced by the current one when a saved form still has them. */
+const OLD_TRACK_DESCS = new Set(["vocal track by {artists}, {year} studio recording"]);
+
 const DEFAULT_SETTINGS: Settings = {
   lang: "en",
   date: "",
   p407: "",
   compDesc: "{year} song by {artists}",
-  trackDesc: "vocal track by {artists}, {year} studio recording",
+  trackDesc: "vocal track by {artists}",
   trackType: "Q55850593",
   singleDesc: "{year} single by {artists}",
   albumDesc: "{year} {type} by {artists}",
@@ -149,7 +152,7 @@ export function coerceState(raw: unknown): State {
     p407: str(s.p407),
     p407Custom: bool(s.p407Custom, false),
     compDesc: str(s.compDesc, d.compDesc),
-    trackDesc: str(s.trackDesc, d.trackDesc),
+    trackDesc: OLD_TRACK_DESCS.has(str(s.trackDesc)) ? d.trackDesc : str(s.trackDesc, d.trackDesc),
     trackType: ["Q55850593", "Q55850643", "Q7302866"].includes(str(s.trackType))
       ? str(s.trackType)
       : d.trackType,

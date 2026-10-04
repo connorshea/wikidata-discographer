@@ -80,4 +80,13 @@ describe("coerceState", () => {
       "4": { title: "Third", recording: "", work: "", isrcs: [], spotify: [], length: null },
     });
   });
+
+  it("moves a saved form on the old track description default to the new one", () => {
+    const old = "vocal track by {artists}, {year} studio recording";
+    expect(coerceState({ settings: { trackDesc: old } }).settings.trackDesc).toBe(
+      "vocal track by {artists}",
+    );
+    const own = "{year} track by {artists}";
+    expect(coerceState({ settings: { trackDesc: own } }).settings.trackDesc).toBe(own);
+  });
 });
