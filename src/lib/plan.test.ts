@@ -126,6 +126,29 @@ describe("buildPlan", () => {
     });
   });
 
+  it("adds the number of tracks to an existing album only if it has none", () => {
+    const tracklist = buildPlan(EXAMPLE).ops.find(
+      (o) => o.op === "addClaims" && o.what === "album tracklist",
+    );
+    const counts =
+      tracklist?.op === "addClaims" ? tracklist.claims.filter((c) => c.property === "P2635") : [];
+    expect(counts.length).toBeGreaterThan(0);
+    expect(counts.every((c) => c.ifMissing)).toBe(true);
+  });
+
+  it("doesn't add the number of tracks again to an album it creates", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    const { ops } = buildPlan(state);
+    const tracklist = ops.find((o) => o.op === "addClaims" && o.what === "album tracklist");
+    expect(
+      tracklist?.op === "addClaims" && tracklist.claims.some((c) => c.property === "P2635"),
+    ).toBe(false);
+    expect(find(ops, "album")?.op === "create" && find(ops, "album")).toMatchObject({
+      claims: expect.arrayContaining([expect.objectContaining({ property: "P2635" })]),
+    });
+  });
+
   it("blocks on a bad performer QID", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";

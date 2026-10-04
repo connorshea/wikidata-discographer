@@ -529,3 +529,23 @@ export function valueKey(dv: { type: string; value: unknown } | undefined): stri
       return JSON.stringify(v);
   }
 }
+
+/**
+ * The statements to add for `claims` to an item that has `have`: those it doesn't already have
+ * (same property and value), and no ifMissing claim for a property it has at all.
+ */
+export function freshStatements(
+  have: Record<string, WikibaseStatement[]>,
+  claims: Claim[],
+  resolve: Resolve,
+) {
+  const keys = new Set(
+    Object.values(have)
+      .flat()
+      .map((s) => `${s.mainsnak.property}=${valueKey(s.mainsnak.datavalue)}`),
+  );
+  return claims
+    .filter((cl) => !(cl.ifMissing && have[cl.property]?.length))
+    .map((cl) => toStatement(cl, resolve))
+    .filter((s) => !keys.has(`${s.mainsnak.property}=${valueKey(s.mainsnak.datavalue)}`));
+}

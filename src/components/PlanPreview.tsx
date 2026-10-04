@@ -68,6 +68,7 @@ function Edit({ edit }: { edit: PreviewEdit }) {
         {edit.statements.map((s, i) => (
           <li key={i}>
             <Prop p={s.property} /> <Val v={s.value} />
+            {s.ifMissing && <span className="muted"> (unless it already has one)</span>}
             {s.qualifiers.length > 0 && (
               <ul className="pv-quals">
                 {s.qualifiers.map((q, j) => (
