@@ -102,7 +102,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
             onBlur={(e) => set("date", normalizeDate(e.target.value))}
           />
           <span className="sub">
-            Album release date, also used for compositions (not tracks). YYYY, YYYY-MM or YYYY-MM-DD
+            Album release date, not added to compositions or tracks. YYYY, YYYY-MM or YYYY-MM-DD
             (“June 12, 2012” is converted), blank to skip
           </span>
           <FieldErr id="date" msg={errs.date} />
@@ -145,7 +145,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
               onChange={(e) => set("p407", normalizeQid(e.target.value))}
             />
           )}
-          <span className="sub">Added to a new album, compositions and singles (not tracks)</span>
+          <span className="sub">Added to a new album and compositions (not tracks or singles)</span>
           <FieldErr id="p407" msg={errs.p407} />
         </div>
       </div>
@@ -190,8 +190,8 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
       <p className="hint">
         <Pids>
           Tick "Single" on a track in the disc tables. Each single gets P31 single (Q134556), P1476,
-          P175, its own P577 release date, P407, a P658 tracklist pointing at the track, and P13602
-          single taken from the album.
+          P175, its own P577 release date, a P658 tracklist pointing at the track, and P13602 single
+          taken from the album.
         </Pids>
       </p>
       <div className="grid">

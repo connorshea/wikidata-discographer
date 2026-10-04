@@ -103,6 +103,7 @@ describe("buildPlan", () => {
         expect.objectContaining({ property: "P658", value: { type: "item", ref: "track:0:2" } }),
       ]),
     );
+    expect(single?.op === "create" && single.claims.some((c) => c.property === "P407")).toBe(false);
     // Nothing adds P1433 to the track afterwards.
     expect(ops.at(-1)).toBe(single);
   });
@@ -120,16 +121,16 @@ describe("buildPlan", () => {
     });
   });
 
-  it("gives compositions a publication date and language but not tracks", () => {
+  it("gives compositions a language but not tracks, and neither a publication date", () => {
     const { ops } = buildPlan(EXAMPLE);
     const has = (key: string, property: string) => {
       const o = find(ops, key);
       return o?.op === "create" && o.claims.some((c) => c.property === property);
     };
-    for (const p of ["P577", "P407"]) {
-      expect(has("comp:0:2", p)).toBe(true);
-      expect(has("track:0:2", p)).toBe(false);
-    }
+    expect(has("comp:0:2", "P407")).toBe(true);
+    expect(has("track:0:2", "P407")).toBe(false);
+    expect(has("comp:0:2", "P577")).toBe(false);
+    expect(has("track:0:2", "P577")).toBe(false);
   });
 
   it("adds the number of tracks to an existing album only if it has none", () => {

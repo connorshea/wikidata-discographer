@@ -63,7 +63,7 @@ describe("previewPlan", () => {
       ]),
     );
     const comp = groups.find((g) => g.id === "comp")!.edits[0];
-    expect(show(comp)).toContainEqual(["publication date", "18 September 2026", false]);
+    expect(show(comp).map(([label]) => label)).not.toContain("publication date");
 
     // Disc 2, track 2.
     const tracklist = groups[0].edits[1].statements[13];

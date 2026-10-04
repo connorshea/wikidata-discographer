@@ -711,7 +711,6 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...pubDate,
       ],
     });
   }
@@ -802,7 +801,6 @@ export function buildPlan(state: State): Plan {
           title(it.r.title),
           ...it.perf.map((p) => claim("P175", item(p))),
           ...(sd?.val ? [claim("P577", { type: "time", ...sd.val })] : []),
-          ...workLang,
           tracklist,
           takenFrom,
         ],
