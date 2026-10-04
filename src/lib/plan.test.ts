@@ -53,6 +53,12 @@ describe("parseDisc", () => {
     expect(rows[0]).toMatchObject({ n: 1, title: "Song", artists: ["Artist"], seconds: 185 });
     expect(rows[1]).toMatchObject({ error: expect.any(String), raw: "nonsense" });
   });
+
+  it("reads a line without a length", () => {
+    const rows = parseDisc("1. Song (Live) - A & B\n2. Two - C (1:02:03)", EMPTY.settings);
+    expect(rows[0]).toMatchObject({ title: "Song (Live)", artists: ["A", "B"], seconds: null });
+    expect(rows[1]).toMatchObject({ title: "Two", artists: ["C"], seconds: 3723 });
+  });
 });
 
 describe("buildPlan", () => {
@@ -71,6 +77,17 @@ describe("buildPlan", () => {
     expect(k.indexOf("comp:1:12")).toBeLessThan(k.indexOf("track:0:1"));
     expect(k.at(-1)).toBe("+album tracklist");
     expect(plan.ops).toHaveLength(1 + 23 + 24 + 1);
+  });
+
+  it("adds no duration to a track without a length", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].text = state.discs[0].text.replace(" (02:57)", "");
+    const create = (key: string) =>
+      buildPlan(state).ops.find((o) => o.op === "create" && o.key === key);
+    const props = (key: string) =>
+      (create(key) as { claims: { property: string }[] }).claims.map((c) => c.property);
+    expect(props("track:0:2")).not.toContain("P2047");
+    expect(props("track:0:3")).toContain("P2047");
   });
 
   it("needs a single's own release date or an existing single, not both", () => {

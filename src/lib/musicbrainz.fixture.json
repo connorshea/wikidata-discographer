@@ -1,0 +1,246 @@
+{
+  "id": "6d42c8a3-69c3-458c-9f18-f8a503780607",
+  "title": "Day and Night",
+  "date": "2026-09-18",
+  "text-representation": {
+    "language": "eng",
+    "script": "Latn"
+  },
+  "artist-credit": [
+    {
+      "name": "Carly Rae Jepsen",
+      "joinphrase": "",
+      "artist": {
+        "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+        "name": "Carly Rae Jepsen"
+      }
+    }
+  ],
+  "release-group": {
+    "id": "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+    "primary-type": "Album",
+    "secondary-types": [],
+    "first-release-date": "2026-09-18",
+    "relations": [
+      {
+        "type": "discogs",
+        "target-type": "url",
+        "url": {
+          "resource": "https://www.discogs.com/master/4348311"
+        }
+      },
+      {
+        "type": "wikidata",
+        "target-type": "url",
+        "url": {
+          "resource": "https://www.wikidata.org/wiki/Q140316456"
+        }
+      }
+    ]
+  },
+  "relations": [
+    {
+      "type": "free streaming",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.deezer.com/album/1076048342"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.qobuz.com/gb-en/album/day-and-night-carly-rae-jepsen/c922xpvs3zefp"
+      }
+    },
+    {
+      "type": "streaming",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.qobuz.com/gb-en/album/day-and-night-carly-rae-jepsen/c922xpvs3zefp"
+      }
+    }
+  ],
+  "media": [
+    {
+      "position": 1,
+      "format": "Digital Media",
+      "tracks": [
+        {
+          "position": 1,
+          "title": "After All",
+          "length": 252000,
+          "artist-credit": [
+            {
+              "name": "Carly Rae Jepsen",
+              "joinphrase": "",
+              "artist": {
+                "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+                "name": "Carly Rae Jepsen"
+              }
+            }
+          ],
+          "recording": {
+            "id": "263340e1-2f03-4b31-b404-a06a8acda193",
+            "relations": [
+              {
+                "type": "performance",
+                "target-type": "work",
+                "work": {
+                  "id": "2bf1a377-686f-426a-ab5a-309466d201e9",
+                  "title": "After All"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "position": 2,
+          "title": "Habits of Creatures",
+          "length": 177000,
+          "artist-credit": [
+            {
+              "name": "Carly Rae Jepsen",
+              "joinphrase": "",
+              "artist": {
+                "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+                "name": "Carly Rae Jepsen"
+              }
+            }
+          ],
+          "recording": {
+            "id": "519d8f15-518b-479c-af8d-664fb3ae455a",
+            "relations": [
+              {
+                "type": "performance",
+                "target-type": "work",
+                "work": {
+                  "id": "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+                  "title": "Habits of Creatures"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "position": 3,
+          "title": "Versailles",
+          "length": 194000,
+          "artist-credit": [
+            {
+              "name": "Carly Rae Jepsen",
+              "joinphrase": "",
+              "artist": {
+                "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+                "name": "Carly Rae Jepsen"
+              }
+            }
+          ],
+          "recording": {
+            "id": "9fc1ea52-6832-464a-80cc-7550183da252",
+            "relations": [
+              {
+                "type": "performance",
+                "target-type": "work",
+                "work": {
+                  "id": "f736bedf-8593-4827-b86c-3c31dc3d5b10",
+                  "title": "Versailles"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "position": 2,
+      "format": "Digital Media",
+      "tracks": [
+        {
+          "position": 1,
+          "title": "Never Let a Good Thing Die",
+          "length": 319000,
+          "artist-credit": [
+            {
+              "name": "Carly Rae Jepsen",
+              "joinphrase": "",
+              "artist": {
+                "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+                "name": "Carly Rae Jepsen"
+              }
+            }
+          ],
+          "recording": {
+            "id": "8f5c970d-9bc8-426e-baa6-7ffa842b21b1",
+            "relations": [
+              {
+                "type": "performance",
+                "target-type": "work",
+                "work": {
+                  "id": "b1a4fbd5-2a1d-48fb-8ba6-6e90c4032f9f",
+                  "title": "Never Let a Good Thing Die"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "position": 2,
+          "title": "Amalfi Coast",
+          "length": 179000,
+          "artist-credit": [
+            {
+              "name": "Carly Rae Jepsen",
+              "joinphrase": "",
+              "artist": {
+                "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+                "name": "Carly Rae Jepsen"
+              }
+            }
+          ],
+          "recording": {
+            "id": "34785ff4-5ae7-4323-8a69-2b16597d5b33",
+            "relations": [
+              {
+                "type": "performance",
+                "target-type": "work",
+                "work": {
+                  "id": "753e4590-7019-40d6-af6b-2315fed70cd4",
+                  "title": "Amalfi Coast"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "position": 3,
+          "title": "Patience Power Passion",
+          "length": 210000,
+          "artist-credit": [
+            {
+              "name": "Carly Rae Jepsen",
+              "joinphrase": "",
+              "artist": {
+                "id": "09887aa7-226e-4ecc-9a0c-02d2ae5777e1",
+                "name": "Carly Rae Jepsen"
+              }
+            }
+          ],
+          "recording": {
+            "id": "41368e86-b6bc-465e-804b-739afa222423",
+            "relations": [
+              {
+                "type": "performance",
+                "target-type": "work",
+                "work": {
+                  "id": "9f7350f2-58a1-45e0-bb8d-11badf4bcf74",
+                  "title": "Patience Power Passion"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

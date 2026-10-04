@@ -23,7 +23,8 @@ import type { SectionProps } from "./types.ts";
 const cls = (...names: (string | false | null | undefined)[]) =>
   names.filter(Boolean).join(" ") || undefined;
 
-const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+const fmt = (sec: number | null) =>
+  sec === null ? "–" : `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
 /**
  * The album's artists, to dim on each row so features stand out: as entered
@@ -52,9 +53,10 @@ export default function DiscsSection({
     <section className="block">
       <h2>Discs</h2>
       <p className="hint">
-        One tracklist per disc or side, a line per track: <code>1. Title - Artist (3:45)</code>.
-        Fill in a composition or track QID to reuse an existing item instead of creating one. Items
-        already on Wikidata with a track's title are listed under Possible matches.
+        One tracklist per disc or side, a line per track: <code>1. Title - Artist (3:45)</code>. The
+        length is optional. Fill in a composition or track QID to reuse an existing item instead of
+        creating one. Items already on Wikidata with a track's title are listed under Possible
+        matches.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock

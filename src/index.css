@@ -132,6 +132,23 @@ abbr.pid {
 .row.example .hint {
   margin: 0;
 }
+.mb-input {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.mb-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.mb-pick .row {
+  margin-top: 0;
+}
+.mb-pick .sub {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
 section.block {
   background: var(--panel);
   border: 1px solid var(--line);

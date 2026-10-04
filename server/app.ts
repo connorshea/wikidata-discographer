@@ -10,6 +10,7 @@ import { authRoutes } from "./auth/oauth.ts";
 import { sameOriginOnly } from "./auth/same-origin.ts";
 import { type AuthEnv, sessionMiddleware } from "./auth/session.ts";
 import { items } from "./items.ts";
+import { musicbrainzRoutes } from "./musicbrainz.ts";
 import { submissionRoutes } from "./submissions.ts";
 
 const CLIENT_DIR = process.env.CLIENT_DIR ?? "./dist/client";
@@ -41,6 +42,7 @@ app.use("/api/*", sameOriginOnly);
 app.use("/api/*", sessionMiddleware);
 app.route("/api/auth", authRoutes); // /api/auth/{login,callback,logout,me}
 app.route("/api/items", items);
+app.route("/api/musicbrainz", musicbrainzRoutes);
 app.route("/api/submissions", submissionRoutes);
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

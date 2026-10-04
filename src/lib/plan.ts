@@ -115,7 +115,8 @@ export interface ParsedRow {
   n: number;
   title: string;
   artists: string[];
-  seconds: number;
+  /** Null when the line has no length. */
+  seconds: number | null;
   raw: string;
   error?: undefined;
 }
@@ -297,7 +298,7 @@ export function splitArtists(s: string, split: boolean): string[] {
 }
 
 const LINE =
-  /^\s*(\d+)\s*[.)]?\s+(.+)\s+[-–—]\s+(.+?)\s*\(\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*\)\s*$/;
+  /^\s*(\d+)\s*[.)]?\s+(.+)\s+[-–—]\s+(.+?)\s*(?:\(\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*\))?\s*$/;
 
 export function parseDisc(text: string, settings: Settings): Row[] {
   const straighten = (s: string) =>
@@ -314,7 +315,7 @@ export function parseDisc(text: string, settings: Settings): Row[] {
       n: +m[1],
       title: straighten(m[2].trim()),
       artists: splitArtists(m[3], settings.splitArtists),
-      seconds: (m[4] ? +m[4] : 0) * 3600 + +m[5] * 60 + +m[6],
+      seconds: m[5] ? (m[4] ? +m[4] : 0) * 3600 + +m[5] * 60 + +m[6] : null,
       raw: line,
     });
   }
@@ -739,7 +740,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         claim("P2550", compOf(it)),
-        ...(S.duration
+        ...(S.duration && it.r.seconds !== null
           ? [claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT })]
           : []),
       ],
