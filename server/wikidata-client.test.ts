@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { editRequest, getEntities, WikidataEditError } from "./wikidata-client.ts";
+import { describeItems, editRequest, getEntities, WikidataEditError } from "./wikidata-client.ts";
 
 vi.mock("./auth/tokens.ts", () => ({
   getAccessToken: async () => "access",
@@ -108,5 +108,66 @@ describe("editRequest", () => {
     await vi.advanceTimersByTimeAsync(5_000 + 15_000 + 45_000);
     expect(await err).toMatchObject({ ambiguous: false });
     vi.useRealTimers();
+  });
+});
+
+describe("describeItems", () => {
+  let fetch: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const p31 = (id: string, rank = "normal") => ({
+    rank,
+    mainsnak: {
+      snaktype: "value",
+      property: "P31",
+      datavalue: { type: "wikibase-entityid", value: { id } },
+    },
+  });
+
+  it("reads labels, descriptions and classes in one request", async () => {
+    fetch.mockResolvedValueOnce(
+      Response.json({
+        entities: {
+          Q1: {
+            id: "Q1",
+            labels: { en: { language: "en", value: "Anna Sun" } },
+            descriptions: { en: { language: "en", value: "single by Walk the Moon" } },
+            claims: { P31: [p31("Q134556"), p31("Q5", "deprecated")] },
+          },
+          Q2: { id: "Q3", redirects: { from: "Q2", to: "Q3" }, claims: {} },
+          Q4: { id: "Q4", missing: "" },
+        },
+      }),
+    );
+    const got = await describeItems(["Q1", "Q2", "Q4", "Q1"], "en");
+    expect(Object.fromEntries(got)).toEqual({
+      Q1: {
+        status: "ok",
+        label: "Anna Sun",
+        description: "single by Walk the Moon",
+        classes: ["Q134556"],
+      },
+      Q2: { status: "redirect", to: "Q3" },
+      Q4: { status: "missing" },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const url = new URL(fetch.mock.calls[0][0] as string);
+    expect(url.searchParams.get("ids")).toBe("Q1|Q2|Q4");
+    expect(url.searchParams.get("languages")).toBe("en");
+  });
+
+  it("marks an id past the newest item missing and asks again for the rest", async () => {
+    fetch
+      .mockResolvedValueOnce(
+        Response.json({ errors: [{ code: "no-such-entity", data: { id: "Q999999999" } }] }),
+      )
+      .mockResolvedValueOnce(Response.json({ entities: { Q1: { id: "Q1", claims: {} } } }));
+    const got = await describeItems(["Q1", "Q999999999"], "en");
+    expect(got.get("Q999999999")).toEqual({ status: "missing" });
+    expect(got.get("Q1")).toEqual({ status: "ok", label: null, description: null, classes: [] });
   });
 });

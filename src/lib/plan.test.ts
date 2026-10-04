@@ -55,6 +55,16 @@ describe("buildPlan", () => {
     expect(plan.ops).toHaveLength(1 + 23 + 24 + 1);
   });
 
+  it("needs a single's own release date or an existing single, not both", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].single["2"] = { date: "", qid: "" };
+    expect(buildPlan(state).singleErrs["0:2"]).toMatch(/Enter the new single's release date/);
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "Q30" };
+    expect(buildPlan(state).singleErrs["0:2"]).toMatch(/not both/);
+    state.discs[0].single["2"] = { date: "", qid: "Q30" };
+    expect(buildPlan(state).singleErrs).toEqual({});
+  });
+
   it("links created items by reference", () => {
     const state = structuredClone(EXAMPLE);
     state.album.mode = "create";
