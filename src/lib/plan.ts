@@ -438,13 +438,12 @@ export function buildPlan(state: State): Plan {
     : "";
   fieldErrs.compDesc = checkTemplate(S.compDesc, date).join(" ");
   fieldErrs.trackDesc = checkTemplate(S.trackDesc, date).join(" ");
-  // {year} comes from each single's own date, checked per row below.
+  // {year} comes from each single's own date, which a new single must have.
   fieldErrs.singleDesc = checkTemplate(S.singleDesc, {
     ok: true,
     val: { time: "", precision: 9 },
     year: "0",
   }).join(" ");
-  const singleUsesYear = /\{year\}/.test(S.singleDesc);
 
   const parsed = state.discs.map((d) => parseDisc(d.text, S));
   const unmapped = new Set<string>();
@@ -531,8 +530,8 @@ export function buildPlan(state: State): Plan {
         if ((sg.date ?? "").trim() && sq)
           errs.push("Give a release date for a new single or an existing single's QID, not both.");
         else if (!sd.ok) errs.push(sd.error);
-        else if (!sd.val && singleUsesYear && !sq)
-          errs.push("Enter a release date, since the description uses {year}.");
+        else if (!sd.val && !sq)
+          errs.push("Enter the new single's release date, or an existing single's QID to reuse.");
         if (sq && !QID.test(sq)) errs.push(`"${sq}" isn't a QID.`);
         if (errs.length) singleErrs[`${di}:${r.n}`] = errs.join(" ");
         single = { date: sd, qid: QID.test(sq) ? sq : null };

@@ -173,9 +173,9 @@ function DiscBlock({
                   <InfoTip id={`disc${di}-single`} label="About singles" end>
                     Tick a track that was also released as a single. The single becomes its own
                     item, an instance of single (Q134556) with the track’s title and artists, that
-                    lists the track and is taken from the album. Its Edit button sets a release date
-                    (the album’s if blank), or an existing single’s QID to link that one instead of
-                    creating a new one. Untick it to remove the single.
+                    lists the track and is taken from the album. Its Edit button sets the new
+                    single’s release date, or an existing single’s QID to link that one instead.
+                    Untick it to remove the single.
                   </InfoTip>
                 </th>
               </tr>
@@ -315,8 +315,7 @@ function SingleRow({
           </span>
         ) : (
           <span>
-            New single{" "}
-            <span className="muted">· {date ? `released ${date}` : "released with the album"}</span>
+            New single <span className="muted">· released {date}</span>
           </span>
         )}
         <button
@@ -338,7 +337,7 @@ function SingleRow({
           type="text"
           className="date"
           spellCheck={false}
-          placeholder="YYYY-MM-DD, blank = album"
+          placeholder="YYYY-MM-DD"
           aria-invalid={date !== "" && !parseDate(date).ok}
           disabled={qid !== "" && date === ""}
           value={sg.date}
@@ -363,13 +362,20 @@ function SingleRow({
       >
         Done
       </button>
-      {(qid === "") !== (date === "") && (
+      {qid === "" && date === "" ? (
+        // Just ticked: say what to fill in rather than show an error.
         <p className="single-hint muted">
-          A single takes a release date if it's new, or its QID if it already exists. Clear one to
-          fill in the other.
+          Enter the new single's release date, or an existing single's QID to reuse it.
         </p>
+      ) : (
+        (qid === "") !== (date === "") && (
+          <p className="single-hint muted">
+            A single takes a release date if it's new, or its QID if it already exists. Clear one to
+            fill in the other.
+          </p>
+        )
       )}
-      {problem && (
+      {problem && (qid !== "" || date !== "") && (
         <p className="field-err" aria-live="polite">
           {problem}
         </p>
