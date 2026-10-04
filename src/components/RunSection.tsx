@@ -2,10 +2,19 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useLocation, useSearch } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
+import {
+  applyCreated,
+  createdAny,
+  initialRunId,
+  isGone,
+  loadOwnRun,
+  type OwnRun,
+  saveOwnRun,
+  settleOwnRun,
+} from "../lib/own-run.ts";
 import type { Plan, State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type {
-  EditLogEntry,
   SubmissionInfo,
   SubmissionListResponse,
   SubmissionRequest,
@@ -14,64 +23,12 @@ import type {
 import { WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import PlanPreview from "./PlanPreview.tsx";
-import type { SectionProps, Update } from "./types.ts";
+import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
 const POLL_MS = 2000;
 
 type UnknownRun = UnknownRunConflict["unknownRun"];
-
-/** Write the QIDs a run created back into the form, so a rerun reuses them instead of duplicating. */
-function applyCreated(edits: Pick<EditLogEntry, "op" | "ok" | "key" | "qid">[], update: Update) {
-  const created = edits.filter((e) => e.op === "create" && e.ok && e.key && e.qid);
-  if (!created.length) return;
-  update((s: State) => {
-    for (const { key, qid } of created) {
-      const [kind, di, n] = key!.split(":");
-      const disc = s.discs[Number(di)];
-      if (kind === "album") {
-        s.album.mode = "existing";
-        s.album.qid = qid!;
-      } else if (!disc) continue;
-      else if (kind === "comp") disc.comp[n] = qid!;
-      else if (kind === "track") disc.track[n] = qid!;
-      else if (kind === "single") disc.single[n] = { date: "", qid: qid! };
-    }
-  });
-}
-
-// The run started from this form, kept until it ends and its QIDs are written
-// back, so leaving the page or reloading during a run doesn't lose them. `form`
-// is the form's id when the run started: its QIDs only go back into that form,
-// not one cleared or loaded with another release since.
-const OWN_RUN_KEY = "discographer:ownRun";
-
-interface OwnRun {
-  run: number;
-  form: string;
-}
-
-function loadOwnRun(): OwnRun | null {
-  try {
-    const o: unknown = JSON.parse(localStorage.getItem(OWN_RUN_KEY) ?? "null");
-    if (typeof o !== "object" || o === null) return null;
-    const { run, form } = o as Partial<OwnRun>;
-    return Number.isInteger(run) && run! > 0 && typeof form === "string"
-      ? { run: run!, form }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveOwnRun(o: OwnRun | null) {
-  try {
-    if (o === null) localStorage.removeItem(OWN_RUN_KEY);
-    else localStorage.setItem(OWN_RUN_KEY, JSON.stringify(o));
-  } catch {
-    // storage blocked: the run is only followed while the form stays open
-  }
-}
 
 /** Poll a run until it ends, calling `onRun` with each answer. Returns a cleanup. */
 function watchRun(
@@ -91,8 +48,7 @@ function watchRun(
       .catch((e: unknown) => {
         if (cancelled) return;
         onError(e);
-        // A missing run (or someone else's) won't turn up by asking again.
-        if (!(e instanceof FetchError && e.status === 404)) timer = setTimeout(poll, POLL_MS * 3);
+        if (!isGone(e)) timer = setTimeout(poll, POLL_MS * 3);
       });
   void poll();
   return () => {
@@ -129,10 +85,7 @@ export default function RunSection({
   useEffect(() => {
     formIdRef.current = formId;
   }, [formId]);
-  const [runId, setRunId] = useState<number | null>(() => {
-    const id = Number(new URLSearchParams(search).get("run"));
-    return Number.isInteger(id) && id > 0 ? id : (ownRun?.run ?? null);
-  });
+  const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!new URLSearchParams(search).has("run")) return;
@@ -154,17 +107,16 @@ export default function RunSection({
   // form is still the one it started from.
   const settle = useCallback(
     (r: SubmissionInfo) => {
-      const own = ownRunRef.current;
-      if (r.status === "running" || r.id !== own?.run) return;
+      const action = settleOwnRun(r, ownRunRef.current, formIdRef.current);
+      if (action === "keep") return;
       followOwnRun(null);
-      if (own.form === formIdRef.current) applyCreated(r.edits, update);
+      if (action === "apply" && createdAny(r.edits)) update((s) => applyCreated(s, r.edits));
     },
     [followOwnRun, update],
   );
   const dropIfGone = useCallback(
     (id: number, e: unknown) => {
-      if (e instanceof FetchError && e.status === 404 && ownRunRef.current?.run === id)
-        followOwnRun(null);
+      if (isGone(e) && ownRunRef.current?.run === id) followOwnRun(null);
     },
     [followOwnRun],
   );
@@ -273,10 +225,13 @@ export default function RunSection({
           run={unknownRun}
           disabled={starting}
           onUse={() => {
-            applyCreated(
-              [{ op: "create", ok: true, key: unknownRun.key, qid: unknownRun.qid }],
-              update,
-            );
+            const found = {
+              op: "create" as const,
+              ok: true,
+              key: unknownRun.key,
+              qid: unknownRun.qid,
+            };
+            update((s) => applyCreated(s, [found]));
             setUnknownRun(null);
           }}
           onConfirm={() => start(unknownRun.id)}
