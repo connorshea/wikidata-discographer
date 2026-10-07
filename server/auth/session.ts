@@ -23,6 +23,10 @@ export interface AuthUser {
   id: number;
   username: string;
   blocked: boolean;
+  /** Wikidata edit count at last login; null if not captured yet. */
+  editCount: number | null;
+  /** Wikidata registration (SQL DATETIME, UTC); null if the account has none. */
+  registeredAt: string | null;
 }
 
 export type AuthVariables = { user: AuthUser | null; sessionId: string | null };
@@ -119,6 +123,8 @@ export const sessionMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => 
         userId: users.id,
         username: users.username,
         blocked: users.blocked,
+        editCount: users.editCount,
+        registeredAt: users.registeredAt,
       })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
@@ -150,6 +156,8 @@ export const sessionMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => 
         id: row.userId,
         username: row.username,
         blocked: row.blocked,
+        editCount: row.editCount,
+        registeredAt: row.registeredAt,
       });
       c.set("sessionId", id);
     }

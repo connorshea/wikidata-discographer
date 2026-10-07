@@ -102,6 +102,12 @@ export const users = mysqlTable("users", {
   id: int("id").primaryKey(), // Wikimedia central user id (OAuth profile `sub`)
   username: varchar("username", { length: 255 }).notNull(),
   blocked: boolean("blocked").notNull().default(false),
+  // Both are the user's Wikidata-local values from the OAuth profile, as of
+  // their last login. A null edit count means they haven't logged in since
+  // these were added; a null registration means the account has none on
+  // record (very old accounts).
+  editCount: int("edit_count", { unsigned: true }),
+  registeredAt: datetime("registered_at", { mode: "string" }),
   createdAt: datetime("created_at", { mode: "string" })
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),

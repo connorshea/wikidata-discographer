@@ -221,6 +221,7 @@ export default function RunSection({
           disabled={
             !user ||
             user.blocked ||
+            !user.eligibility.ok ||
             !plan.ready ||
             !!albumTracklist ||
             unreviewed > 0 ||
@@ -236,6 +237,7 @@ export default function RunSection({
           onConfirm={() => start()}
         />
         {!user && <span className="hint">Log in to edit.</span>}
+        {user && !user.eligibility.ok && <span className="hint">{user.eligibility.reason}</span>}
         {user && stale && (
           <span className="hint">The form was changed in another tab. Reload this page first.</span>
         )}

@@ -147,6 +147,14 @@ client).
 2. Set the authentication variables from `.env.example`: in `.env` locally, or
    with `toolforge envvars create` on Toolforge.
 
+Runs are refused for accounts that are blocked on Wikidata, under 48 hours old,
+or that have no Wikidata edits (`EDIT_MIN_ACCOUNT_AGE_HOURS`,
+`EDIT_MIN_EDIT_COUNT`). Both values are Wikidata's own, so an experienced
+editor elsewhere still needs an edit on Wikidata, and the account's age counts
+from when it was first used on Wikidata. They're read from the OAuth profile
+at login: the age is measured from the stored registration date, so it isn't
+stale, but a new edit only counts once the user logs out and back in.
+
 Session cookies are `HttpOnly; SameSite=Lax`, and the database stores only
 their hash. OAuth tokens are encrypted with `TOKEN_ENC_KEY`. Requests that
 change state must be same-origin.

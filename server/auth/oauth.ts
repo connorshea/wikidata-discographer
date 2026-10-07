@@ -18,8 +18,9 @@ import { sessions, users } from "../../db/schema.ts";
 import type { AuthMeResponse, LogoutResponse } from "../../src/lib/api-types.ts";
 import { authConfig, authConfigured, callbackUrl, cookiesSecure, wikiOrigin } from "./config.ts";
 import { pkceChallenge, randomToken, safeEqual } from "./crypto.ts";
+import { editEligibility } from "./eligibility.ts";
 import { type AuthEnv, createSession, deleteTokensIfLoggedOut, destroySession } from "./session.ts";
-import { toSqlDatetime } from "./time.ts";
+import { registrationToSql, toSqlDatetime } from "./time.ts";
 import { FETCH_TIMEOUT_MS, storeTokens, tokenRequest, type TokenResponse } from "./tokens.ts";
 import { userAgent } from "./user-agent.ts";
 
@@ -38,10 +39,12 @@ interface PendingLogin {
 export interface WikimediaProfile {
   sub: number;
   username: string;
+  /** Edits on Wikidata (the wiki serving the endpoint), not across all wikis. */
   editcount?: number;
   confirmed_email?: boolean;
   blocked?: boolean;
-  registered?: string;
+  /** Wikidata-local, as `YYYYMMDDHHMMSS`; null or false for very old accounts. */
+  registered?: string | null | false;
   groups?: string[];
   rights?: string[];
   grants?: string[];
@@ -154,6 +157,8 @@ authRoutes.get("/callback", async (c) => {
   const userValues = {
     username: profile.username,
     blocked: Boolean(profile.blocked),
+    editCount: typeof profile.editcount === "number" ? profile.editcount : null,
+    registeredAt: registrationToSql(profile.registered),
     lastLoginAt: toSqlDatetime(now),
   };
   await db
@@ -183,8 +188,14 @@ authRoutes.post("/logout", async (c) => {
 
 authRoutes.get("/me", (c) => {
   c.header("Cache-Control", "no-store");
+  const user = c.get("user");
   const payload: AuthMeResponse = {
-    user: c.get("user"),
+    user: user && {
+      id: user.id,
+      username: user.username,
+      blocked: user.blocked,
+      eligibility: editEligibility(user),
+    },
     configured: authConfigured(),
     wikiBaseUrl: wikiOrigin(),
   };
