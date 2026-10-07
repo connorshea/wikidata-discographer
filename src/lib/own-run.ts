@@ -123,15 +123,20 @@ function withCreated(s: unknown, edits: readonly Created[]): string {
   return canonical(copy);
 }
 
-/** Whether the form's field for a plan key has no item in it yet. */
-function blank(s: State, key: string): boolean {
+/**
+ * Whether the form's field for a plan key has no item in it yet. A single
+ * counts only while it's still there with the run's date (`input`), since
+ * writing its QID in drops the date and would hide a removed or redated one.
+ */
+function blank(s: State, input: State, key: string): boolean {
   const [kind, di, n] = key.split(":");
   if (kind === "album") return s.album.mode === "create" || !s.album.qid.trim();
   const disc = s.discs[Number(di)];
   if (!disc) return true;
   if (kind === "comp") return !disc.comp[n]?.trim();
   if (kind === "track") return !disc.track[n]?.trim();
-  return !disc.single[n]?.qid.trim();
+  const sg = disc.single[n];
+  return !!sg && !sg.qid.trim() && sg.date === input.discs[Number(di)]?.single[n]?.date;
 }
 
 /**
@@ -146,6 +151,7 @@ export function formOfRun(
 ): "other" | "behind" | "same" {
   const target = withCreated(run.input, run.edits);
   if (canonical(coerceState(state)) === target) return "same";
-  const missing = run.edits.filter((e) => isCreated(e) && blank(state, e.key!));
+  const input = coerceState(run.input);
+  const missing = run.edits.filter((e) => isCreated(e) && blank(state, input, e.key!));
   return withCreated(state, missing) === target ? "behind" : "other";
 }

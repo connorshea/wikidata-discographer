@@ -210,6 +210,22 @@ describe("formOfRun", () => {
     expect(formOfRun(s, run)).toBe("other");
   });
 
+  it("is another form when a single the run created is removed or redated", () => {
+    const withSingle = structuredClone(input);
+    withSingle.discs[0].single[1] = { date: "2020-01-01", qid: "" };
+    const singleRun = {
+      input: withSingle,
+      edits: [...edits, edit({ key: "single:0:1", qid: "Q4" })],
+    };
+    expect(formOfRun(structuredClone(withSingle), singleRun)).toBe("behind");
+    const removed = structuredClone(withSingle);
+    delete removed.discs[0].single[1];
+    expect(formOfRun(removed, singleRun)).toBe("other");
+    const redated = structuredClone(withSingle);
+    redated.discs[0].single[1].date = "2021-01-01";
+    expect(formOfRun(redated, singleRun)).toBe("other");
+  });
+
   it("doesn't change the form", () => {
     const s = structuredClone(input);
     formOfRun(s, run);
