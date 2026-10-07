@@ -1,6 +1,7 @@
 // Wire shapes shared by the server routes and the client.
 import type { MusicKind } from "./music.ts";
 import type { MbForm, ReleaseChoice } from "./musicbrainz.ts";
+import type { State } from "./plan.ts";
 
 export interface AuthUserInfo {
   id: number;
@@ -90,6 +91,8 @@ export interface SubmissionInfo {
   /** While the run waits before its next edit (they go out a second or two apart): when it goes. */
   waitingUntil: string | null;
   edits: EditLogEntry[];
+  /** The form the run was started from, so the client can tell whether it's still the one open. */
+  input: State;
 }
 
 /** Body of POST /api/submissions. */
@@ -118,7 +121,7 @@ export interface UnknownRunConflict {
 }
 
 export interface SubmissionListResponse {
-  submissions: Omit<SubmissionInfo, "edits" | "total" | "waitingUntil">[];
+  submissions: Omit<SubmissionInfo, "edits" | "total" | "waitingUntil" | "input">[];
 }
 
 /** One run in the album list. */

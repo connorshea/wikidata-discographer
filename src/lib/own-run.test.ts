@@ -5,6 +5,7 @@ import {
   adoptOwnRun,
   applyCreated,
   createdAny,
+  formOfRun,
   initialRunId,
   isGone,
   loadOwnRun,
@@ -119,21 +120,21 @@ describe("isGone", () => {
   });
 });
 
-describe("applyCreated", () => {
-  const edit = (e: Partial<EditLogEntry>): EditLogEntry => ({
-    op: "create",
-    key: null,
-    kind: null,
-    what: "",
-    qid: null,
-    revid: 1,
-    ok: true,
-    unknown: false,
-    skipped: 0,
-    error: null,
-    ...e,
-  });
+const edit = (e: Partial<EditLogEntry>): EditLogEntry => ({
+  op: "create",
+  key: null,
+  kind: null,
+  what: "",
+  qid: null,
+  revid: 1,
+  ok: true,
+  unknown: false,
+  skipped: 0,
+  error: null,
+  ...e,
+});
 
+describe("applyCreated", () => {
   it("puts each created item in its field, by plan key", () => {
     const s = structuredClone(EMPTY);
     s.album = { ...s.album, mode: "create", title: "New" };
@@ -164,5 +165,70 @@ describe("applyCreated", () => {
     expect(createdAny(edits.slice(0, 3))).toBe(false);
     applyCreated(s, edits);
     expect(s).toEqual(EMPTY);
+  });
+});
+
+describe("formOfRun", () => {
+  const input = structuredClone(EMPTY);
+  input.album = { ...input.album, mode: "create", title: "New" };
+  input.discs[0].text = "1. Intro";
+  input.artists = { a: "Q10", b: "Q11" };
+  const edits = [edit({ key: "album", qid: "Q1" }), edit({ key: "track:0:1", qid: "Q3" })];
+  const run = { input, edits };
+
+  it("is behind when the form is the run's without its QIDs", () => {
+    expect(formOfRun(structuredClone(input), run)).toBe("behind");
+  });
+
+  it("is behind when the form has only some of them", () => {
+    const s = structuredClone(input);
+    applyCreated(s, edits.slice(1));
+    expect(formOfRun(s, run)).toBe("behind");
+  });
+
+  it("is the same once they're all written in, whatever the key order", () => {
+    const s = structuredClone(input);
+    applyCreated(s, edits);
+    s.artists = { b: "Q11", a: "Q10" };
+    expect(formOfRun(s, run)).toBe("same");
+  });
+
+  it("is the same for a run that created nothing", () => {
+    expect(formOfRun(structuredClone(input), { input, edits: [] })).toBe("same");
+  });
+
+  it("is another form once anything else differs", () => {
+    const s = structuredClone(input);
+    s.discs[0].text = "1. Outro";
+    expect(formOfRun(s, run)).toBe("other");
+    expect(formOfRun(structuredClone(EMPTY), run)).toBe("other");
+  });
+
+  it("is another form when it has a different QID where the run created one", () => {
+    const s = structuredClone(input);
+    s.discs[0].track[1] = "Q99";
+    expect(formOfRun(s, run)).toBe("other");
+  });
+
+  it("is another form when a single the run created is removed or redated", () => {
+    const withSingle = structuredClone(input);
+    withSingle.discs[0].single[1] = { date: "2020-01-01", qid: "" };
+    const singleRun = {
+      input: withSingle,
+      edits: [...edits, edit({ key: "single:0:1", qid: "Q4" })],
+    };
+    expect(formOfRun(structuredClone(withSingle), singleRun)).toBe("behind");
+    const removed = structuredClone(withSingle);
+    delete removed.discs[0].single[1];
+    expect(formOfRun(removed, singleRun)).toBe("other");
+    const redated = structuredClone(withSingle);
+    redated.discs[0].single[1].date = "2021-01-01";
+    expect(formOfRun(redated, singleRun)).toBe("other");
+  });
+
+  it("doesn't change the form", () => {
+    const s = structuredClone(input);
+    formOfRun(s, run);
+    expect(s).toEqual(input);
   });
 });
