@@ -53,6 +53,21 @@ describe("editEligibility", () => {
     });
   });
 
+  it("skips the age check when it's off, even for a registration date in the future", () => {
+    const skewed = { editCount: 1, registeredAt: "2026-10-04 12:05:00" };
+    expect(editEligibility(skewed, now, { minAccountAgeHours: 0, minEditCount: 1 })).toEqual({
+      ok: true,
+    });
+  });
+
+  it("asks a pre-migration user to log in again while only the age check is on", () => {
+    // Their registration date is missing too, which would read as an old account.
+    const result = editEligibility({ editCount: null, registeredAt: null }, now, {
+      minAccountAgeHours: 48,
+      minEditCount: 0,
+    });
+    expect(result.ok).toBe(false);
+  });
   it("follows the configured limits", () => {
     const young = { editCount: 0, registeredAt: "2026-10-04 11:00:00" };
     expect(editEligibility(young, now, { minAccountAgeHours: 0, minEditCount: 0 })).toEqual({

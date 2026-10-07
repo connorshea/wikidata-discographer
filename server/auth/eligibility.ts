@@ -42,6 +42,9 @@ export function editEligibility(
 ): EditEligibility {
   const { minAccountAgeHours, minEditCount } = limits;
   if (minAccountAgeHours === 0 && minEditCount === 0) return { ok: true };
+  // A null edit count means the profile was never captured, so the
+  // registration date is missing too and would pass the age check as an old
+  // account's. Either check needs the user to log in again.
   if (user.editCount === null)
     return {
       ok: false,
@@ -51,7 +54,7 @@ export function editEligibility(
   // An account with no registration date on record predates MediaWiki
   // keeping them, so it is old enough.
   const eligibleAt =
-    user.registeredAt === null
+    minAccountAgeHours === 0 || user.registeredAt === null
       ? null
       : new Date(fromSqlDatetime(user.registeredAt).getTime() + minAccountAgeHours * 3_600_000);
   const tooNew = eligibleAt !== null && eligibleAt > now;
