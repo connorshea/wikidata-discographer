@@ -24,6 +24,7 @@ describe("editEligibility", () => {
       ok: false,
       reason:
         "Your account must be at least 48 hours old and have at least 1 edit on Wikidata to create items with this tool. You can try again after 2026-10-05 09:31 UTC.",
+      retryAt: "2026-10-05T09:30:15.000Z",
     });
   });
 
@@ -51,6 +52,10 @@ describe("editEligibility", () => {
       ok: false,
       reason: "Log out and back in first, so this tool can check your Wikidata account.",
     });
+  });
+
+  it("leaves out the retry time when the edit count is all that's missing", () => {
+    expect(check(0, "2020-01-01 00:00:00")).not.toHaveProperty("retryAt");
   });
 
   it("skips the age check when it's off, even for a registration date in the future", () => {

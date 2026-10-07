@@ -11,7 +11,14 @@ export interface AuthUserInfo {
 }
 
 /** Whether the user's account may create items with this tool (see server/auth/eligibility.ts). */
-export type EditEligibility = { ok: true } | { ok: false; reason: string };
+export type EditEligibility =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: string;
+      /** ISO time the account becomes old enough, while that is what refuses it. */
+      retryAt?: string;
+    };
 
 export interface AuthMeResponse {
   user: AuthUserInfo | null;

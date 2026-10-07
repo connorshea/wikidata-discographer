@@ -72,6 +72,7 @@ export function editEligibility(
     parts.push(
       `It had ${plural(user.editCount, "edit")} when you logged in. Once you've made more, log out and back in.`,
     );
-  if (tooNew) parts.push(`You can try again after ${formatUtc(eligibleAt)}.`);
-  return { ok: false, reason: parts.join(" ") };
+  if (!tooNew) return { ok: false, reason: parts.join(" ") };
+  parts.push(`You can try again after ${formatUtc(eligibleAt)}.`);
+  return { ok: false, reason: parts.join(" "), retryAt: eligibleAt.toISOString() };
 }
