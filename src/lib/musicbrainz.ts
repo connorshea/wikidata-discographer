@@ -132,7 +132,7 @@ export function releaseChoices(releases: MbReleaseListing[]): ReleaseChoice[] {
 // ---------------------------------------------------------------------------
 // The parts of MusicBrainz's release JSON the import reads. The lookup is
 //   /ws/2/release/<mbid>?inc=recordings+artist-credits+release-groups+
-//     work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs
+//     work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs+labels
 // ---------------------------------------------------------------------------
 
 export interface MbArtistCredit {
@@ -176,7 +176,20 @@ export interface MbRelease {
     relations?: MbRelation[];
   };
   relations?: MbRelation[];
+  /** The labels it came out on, with catalog numbers. A label can be null, or listed twice. */
+  "label-info"?: { label: { id: string; name: string } | null }[];
   media: MbMedium[];
+}
+
+/** MusicBrainz's special label for a release on no label, like a self-release. */
+const NO_LABEL = "157afde4-4bf5-4039-8ad2-5a15acc85176";
+
+/** The release's record labels, MBID → name, in MusicBrainz's order. */
+function releaseLabels(release: MbRelease): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const { label } of release["label-info"] ?? [])
+    if (label && label.id !== NO_LABEL && !labels.has(label.id)) labels.set(label.id, label.name);
+  return labels;
 }
 
 /** The MusicBrainz IDs on a release that the mirror might know, to look up before `releaseToForm`. */
@@ -185,6 +198,7 @@ export function releaseIds(release: MbRelease) {
   const credits = [release["artist-credit"], ...tracks.map((t) => t["artist-credit"])].flat();
   return {
     releaseGroup: release["release-group"].id,
+    labels: [...releaseLabels(release).keys()],
     artists: [...new Set(credits.map((c) => c.artist.id))],
     recordings: [...new Set(tracks.map((t) => t.recording.id))],
     works: [...new Set(tracks.flatMap((t) => workOf(t) ?? []))],
@@ -237,6 +251,11 @@ export interface MbLookups {
   recordings: Record<string, string>;
   /** P435 work ID → composition. */
   works: Record<string, string>;
+  /**
+   * P966 label ID → record label, looked up on Wikidata itself since labels aren't in the
+   * mirror. Null when that lookup failed, and left out when there was none.
+   */
+  labels?: Record<string, string> | null;
   /**
    * Recording, work and Spotify track IDs some item in the mirror already
    * has, however many. They aren't added to new items, which would duplicate them.
@@ -509,6 +528,20 @@ export function releaseToForm(
       : null,
     ids: citedIds,
   };
+  // Record labels: those an item on Wikidata has the MusicBrainz label ID of.
+  const mbLabels = releaseLabels(release);
+  const labels: string[] = [];
+  if (lookups.labels === null && mbLabels.size)
+    notes.push("Couldn't look up the release's record labels on Wikidata. Add them under Album.");
+  else if (lookups.labels)
+    for (const [id, name] of mbLabels) {
+      const qid = lookups.labels[id];
+      if (!qid)
+        notes.push(
+          `MusicBrainz lists “${name}” as a label, but no Wikidata item has its MusicBrainz label ID (P966). Add its QID under Album if it's on Wikidata.`,
+        );
+      else if (!labels.includes(qid)) labels.push(qid);
+    }
   const linkedIds = ALBUM_ID_FIELDS.filter((f) => f.key !== "musicbrainz" && ids[f.key]).map(
     (f) => f.label,
   );
@@ -524,6 +557,7 @@ export function releaseToForm(
     Object.keys(artists).length && plural(Object.keys(artists).length, "artist"),
     comps && plural(comps, "composition"),
     tracks && plural(tracks, "track"),
+    labels.length && plural(labels.length, "record label"),
   ].filter(Boolean);
   const summary =
     `Loaded ${plural(discs.length, "disc")} and ${plural(songs, "track")}. ` +
@@ -540,6 +574,7 @@ export function releaseToForm(
       // Only a new album gets the date and identifiers.
       date: !albumQid && citesDate,
       albumIds: albumQid ? 0 : linkedIds.length,
+      labels: labels.length,
     });
 
   return {
@@ -554,6 +589,9 @@ export function releaseToForm(
       // Only a new album gets references, so an album already on Wikidata keeps
       // none, even if it's switched to a new one, as the summary says.
       mb: albumQid ? null : albumMb,
+      // Unlike the album's other details, an existing album gets the labels, with references.
+      labels: labels.join(" "),
+      labelsMb: labels.length ? { release: release.id, retrieved, qids: labels } : null,
     },
     artists,
     discs: discs.length ? discs : [emptyDisc()],
@@ -564,10 +602,11 @@ export function releaseToForm(
   };
 }
 
-/** Which of the new album's and tracks' statements get a MusicBrainz reference, as a sentence. */
+/** Which of the album's and new tracks' statements get a MusicBrainz reference, as a sentence. */
 function refsSummary(n: {
   date: boolean;
   albumIds: number;
+  labels: number;
   isrcs: number;
   spotify: number;
   appleMusic: number;
@@ -576,6 +615,7 @@ function refsSummary(n: {
   const what = [
     n.date && "publication date",
     n.albumIds && "album IDs",
+    n.labels && "record labels",
     n.durationRefs && "durations",
     n.isrcs && "ISRCs",
     n.spotify + n.appleMusic && "track IDs",

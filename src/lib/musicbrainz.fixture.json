@@ -61,6 +61,22 @@
       }
     }
   ],
+  "label-info": [
+    {
+      "catalog-number": null,
+      "label": {
+        "id": "2182a316-c4bd-4605-936a-5e2fac52bdd2",
+        "name": "Interscope Records"
+      }
+    },
+    {
+      "catalog-number": null,
+      "label": {
+        "id": "f126df5d-76b0-4f64-a2f1-049cd7096572",
+        "name": "School Boy Records"
+      }
+    }
+  ],
   "media": [
     {
       "position": 1,

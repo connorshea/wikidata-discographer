@@ -15,7 +15,7 @@
 // links it to, or it would end up with two (P2550).
 import { checkItems, getEntities, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
 import { CLASS_KINDS } from "../src/lib/music.ts";
-import { ALBUM_FORMS, type Op, type State, type Value } from "../src/lib/plan.ts";
+import { ALBUM_FORMS, type Op, splitQids, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -56,6 +56,7 @@ function formSources(state: State): Map<string, string[]> {
     add(state.album.type, "The album type");
     add(state.album.form, "The album form");
   }
+  for (const qid of splitQids(state.album.labels)) add(qid, "A record label");
   add(state.settings.p407, "The language of work");
   add(state.settings.trackType, "The track type");
   for (const [name, qid] of Object.entries(state.artists)) add(qid, `Performer “${name}”`);

@@ -7,7 +7,8 @@
 //
 // The browser can't ask MusicBrainz itself (the CSP and the Toolforge terms
 // keep the SPA to same-origin requests), so the server fetches the release,
-// finds the items the mirror already has for its MusicBrainz IDs, and returns
+// finds the items the mirror already has for its MusicBrainz IDs, asks Wikidata
+// for its record labels (which the mirror doesn't keep), and returns
 // the form values (src/lib/musicbrainz.ts). A release group only lists its
 // releases: the tracklist belongs to a release.
 //
@@ -22,6 +23,7 @@ import { propertyNumber, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems } from "../db/schema.ts";
 import { wikidataApiUrl } from "./auth/config.ts";
 import { userAgent } from "./auth/user-agent.ts";
+import { itemsWithValues, WikidataEditError } from "./wikidata-client.ts";
 import type { AuthEnv } from "./auth/session.ts";
 import {
   type MbLookups,
@@ -39,7 +41,7 @@ import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../sr
 const API_URL = () =>
   (process.env.MUSICBRAINZ_API_URL ?? "https://musicbrainz.org/ws/2").replace(/\/+$/, "");
 const RELEASE_INC =
-  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs";
+  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs+labels";
 /** MusicBrainz's largest page, and how many pages of a release group's releases to read. */
 const PAGE_SIZE = 100;
 const MAX_PAGES = 3;
@@ -190,27 +192,48 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
 }
 
 /**
+ * Record labels by their MusicBrainz label IDs (P966), label ID → QID when exactly one
+ * item has it. Labels aren't in the mirror, so this asks Wikidata, and gives null if
+ * that fails: the rest of the import doesn't need it.
+ */
+async function lookupLabels(ids: string[]): Promise<Record<string, string> | null> {
+  if (!ids.length) return {};
+  try {
+    const found = await itemsWithValues("P966", ids, { retries: 1 });
+    return Object.fromEntries(
+      [...found].filter(([, qids]) => qids.length === 1).map(([id, [qid]]) => [id, qid]),
+    );
+  } catch (err) {
+    if (err instanceof WikidataEditError) return null;
+    throw err;
+  }
+}
+
+/**
  * The release's MusicBrainz IDs, looked up in the mirror. `album` is the
  * existing album the user is loading a release group's release for, which
  * wins over the mirror's when the release is in that group: it was found
- * live, so it counts even if it's newer than the last dump.
+ * live, so it counts even if it's newer than the last dump. The record labels
+ * are looked up on Wikidata itself.
  */
 export async function lookupRelease(
   release: MbRelease,
   album?: { qid: string; releaseGroup: string },
 ): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works, spotify, appleMusic] = await Promise.all([
+  // MusicBrainz's own Wikidata link names a wikidata.org item, which is
+  // only right when that's where the edits go. The same goes for P966,
+  // which is another property on another wiki.
+  const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
+  const [albums, artists, recordings, works, spotify, appleMusic, labels] = await Promise.all([
     lookup("P436", [ids.releaseGroup], ["album", "ep"]),
     lookup("P434", ids.artists, ["artist"]),
     lookup("P4404", ids.recordings, ["track"]),
     lookup("P435", ids.works, ["work"]),
     lookup("P2207", ids.spotifyTracks, ["track"]),
     lookup("P10110", ids.appleMusicTracks, ["track"]),
+    onWikidata ? lookupLabels(ids.labels) : undefined,
   ]);
-  // MusicBrainz's own Wikidata link names a wikidata.org item, which is
-  // only right when that's where the edits go.
-  const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
   const albumQid =
     (album?.releaseGroup === ids.releaseGroup ? album.qid : undefined) ??
     albums.unique[ids.releaseGroup] ??
@@ -220,6 +243,7 @@ export async function lookupRelease(
     artists: artists.unique,
     recordings: recordings.unique,
     works: works.unique,
+    ...(labels !== undefined ? { labels } : {}),
     taken: [...recordings.taken, ...works.taken, ...spotify.taken, ...appleMusic.taken],
   };
 }

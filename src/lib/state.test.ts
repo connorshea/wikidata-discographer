@@ -33,6 +33,20 @@ describe("coerceState", () => {
     expect(s.discs[0].single).toEqual({ "1": { date: "2020", qid: "" } });
   });
 
+  it("keeps the record labels' import source only when it's well-formed", () => {
+    const labelsMb = {
+      release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+      retrieved: "2026-10-04",
+      qids: ["Q231694", "nope", "Q231694"],
+    };
+    expect(coerceState({ album: { labels: "Q231694", labelsMb } }).album).toMatchObject({
+      labels: "Q231694",
+      labelsMb: { ...labelsMb, qids: ["Q231694"] },
+    });
+    for (const bad of [{ ...labelsMb, release: "x" }, { ...labelsMb, qids: [] }, "Q1"])
+      expect(coerceState({ album: { labelsMb: bad } }).album.labelsMb).toBeNull();
+  });
+
   it("keeps an album's import source only when it's well-formed", () => {
     const mb = {
       releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",

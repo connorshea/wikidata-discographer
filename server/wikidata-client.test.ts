@@ -5,6 +5,7 @@ import {
   freshStatements,
   getEntities,
   getStatementValues,
+  itemsWithValues,
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
@@ -313,6 +314,50 @@ describe("getStatementValues", () => {
     expect(url.searchParams.get("action")).toBe("wbgetclaims");
     expect(url.searchParams.get("entity")).toBe("Q1");
     expect(url.searchParams.has("property")).toBe(false);
+  });
+});
+
+describe("itemsWithValues", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const label = (id: string, rank = "normal") => ({
+    rank,
+    mainsnak: { snaktype: "value", property: "P966", datavalue: { type: "string", value: id } },
+  });
+
+  it("searches for the values at once, then keeps the items that still have them", async () => {
+    const urls: URL[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const u = new URL(url);
+        urls.push(u);
+        if (u.searchParams.get("list") === "search")
+          return Response.json({
+            query: { search: [{ title: "Q1" }, { title: "Q2" }, { title: "Q3" }, { title: "Q4" }] },
+          });
+        return Response.json({
+          entities: {
+            Q1: { id: "Q1", claims: { P966: [label("a")] } },
+            Q2: { id: "Q2", claims: { P966: [label("b"), label("a")] } },
+            // The index is behind: Q3 lost its ID, and Q4's is deprecated.
+            Q3: { id: "Q3", claims: {} },
+            Q4: { id: "Q4", claims: { P966: [label("c", "deprecated")] } },
+          },
+        });
+      }),
+    );
+    const found = await itemsWithValues("P966", ["a", "b", "c", "a", "not valid"]);
+    expect(Object.fromEntries(found)).toEqual({ a: ["Q1", "Q2"], b: ["Q2"] });
+    expect(urls[0].searchParams.get("srsearch")).toBe("haswbstatement:P966=a|P966=b|P966=c");
+    expect(urls[1].searchParams.get("ids")).toBe("Q1|Q2|Q3|Q4");
+    expect(urls[1].searchParams.get("props")).toBe("claims");
+  });
+
+  it("asks nothing for no values", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    expect((await itemsWithValues("P966", [])).size).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 

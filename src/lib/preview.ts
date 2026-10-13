@@ -40,6 +40,7 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   P2047: "duration",
   P1243: "ISRC",
   P13602: "single taken from",
+  P264: "record label",
   P248: "stated in",
   P813: "retrieved",
 };

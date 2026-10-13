@@ -53,6 +53,26 @@ export interface AlbumState {
   ids: Record<AlbumIdKey, string>;
   /** Where a MusicBrainz import's album details came from. Null without an import. */
   mb: AlbumMb | null;
+  /**
+   * P264 record labels, as QIDs separated by spaces or commas. A new album is
+   * created with them, and an existing one gets those it doesn't have yet.
+   */
+  labels: string;
+  /** The record labels a MusicBrainz import found, for their reference. Null without any. */
+  labelsMb: LabelsMb | null;
+}
+
+/**
+ * The release a MusicBrainz import read the record labels from. A label only gets a
+ * reference while it's one of these, for a new album or an existing one alike.
+ */
+export interface LabelsMb {
+  /** P5813 MusicBrainz release ID. */
+  release: string;
+  /** The day of the import, YYYY-MM-DD. */
+  retrieved: string;
+  /** The labels' QIDs. */
+  qids: string[];
 }
 
 /** A value a MusicBrainz import filled in, and the MusicBrainz entity it was read from. */
@@ -338,6 +358,18 @@ export function normalizeQid(v: string): string {
   return v;
 }
 
+/** A list of QIDs or Wikidata URLs separated by spaces or commas, normalized, repeats left out. */
+export function splitQids(s: string): string[] {
+  return [
+    ...new Set(
+      s
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .map(normalizeQid),
+    ),
+  ];
+}
+
 export const isCustomLang = (s: Settings) =>
   !!s.p407Custom || (s.p407.trim() !== "" && !KNOWN_LANGS.has(s.p407.trim()));
 export const isCustomLabelLang = (s: Settings) =>
@@ -544,6 +576,11 @@ function albumMbRef(state: State, cited: MbCited | null | undefined, value: stri
     : statedInMb("P5813", mb.release, mb.retrieved);
 }
 
+/** Whether a record label gets a MusicBrainz reference: the setting is on and the import found it. */
+export function citesMbLabel(state: State, qid: string) {
+  return state.settings.mbRefs && !!state.album.labelsMb?.qids.includes(qid);
+}
+
 // ---------------------------------------------------------------------------
 // The plan
 // ---------------------------------------------------------------------------
@@ -670,8 +707,21 @@ export function buildPlan(state: State): Plan {
         });
     }
   }
+  // Record labels, for a new album or an existing one.
+  const labels = splitQids(A.labels);
+  const badLabels = labels.filter((q) => !QID.test(q));
+  fieldErrs.albumLabels = badLabels.length
+    ? `Not a QID: ${badLabels.map((q) => `"${q}"`).join(", ")}.`
+    : "";
+  const labelClaims = labels.map((q): Claim => ({
+    ...claim("P264", item(q)),
+    ...(citesMbLabel(state, q) && state.album.labelsMb
+      ? statedInMb("P5813", state.album.labelsMb.release, state.album.labelsMb.retrieved)
+      : {}),
+  }));
   const albumErr =
     !!(fieldErrs.albumQid || fieldErrs.albumTitle || fieldErrs.albumArtists) ||
+    !!fieldErrs.albumLabels ||
     blocking(fieldErrs.albumDesc) ||
     ALBUM_ID_FIELDS.some((f) => !!fieldErrs[`albumId-${f.key}`]);
   const album: ItemRef = creatingAlbum ? { ref: "album" } : { id: A.qid.trim() };
@@ -835,6 +885,7 @@ export function buildPlan(state: State): Plan {
         ...(A.form ? [claim("P7937", item(A.form))] : []),
         title(albumTitle),
         ...albumPerf.map((p) => claim("P175", item(p))),
+        ...labelClaims,
         ...pubDate,
         ...workLang,
         ...counts,
@@ -910,7 +961,8 @@ export function buildPlan(state: State): Plan {
   }
 
   // 4. The album's tracklist, in one edit. An existing album also gets its number of tracks,
-  // which a tracklist needs, unless it already says how many it has.
+  // which a tracklist needs, unless it already says how many it has, and the record labels
+  // it doesn't have yet.
   const trackOf = (it: PlanItem): Value =>
     it.existTrack ? item(it.existTrack) : ref(trackKey(it));
   ops.push({
@@ -924,7 +976,9 @@ export function buildPlan(state: State): Plan {
           ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
         ]),
       ),
-      ...(creatingAlbum ? [] : counts.map((c): Claim => ({ ...c, ifMissing: true }))),
+      ...(creatingAlbum
+        ? []
+        : [...counts.map((c): Claim => ({ ...c, ifMissing: true })), ...labelClaims]),
     ],
   });
 

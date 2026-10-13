@@ -6,8 +6,10 @@ import {
   ALBUM_TYPES,
   QID,
   citesMb,
+  citesMbLabel,
   loadedReleaseGroup,
   splitArtists,
+  splitQids,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
@@ -16,6 +18,7 @@ import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
+import { useItemSummaries } from "./use-item-summaries.ts";
 
 export default function AlbumSection({
   state,
@@ -39,8 +42,8 @@ export default function AlbumSection({
       <p className="hint">
         <Pids>
           All discs belong to this one album. Its tracklist (P658) is added after the tracks are
-          created, along with P2635 number of tracks if an existing album has none, and singles
-          point to it with P13602.
+          created, along with P2635 number of tracks if an existing album has none and the P264
+          record labels it doesn't have yet, and singles point to it with P13602.
         </Pids>
       </p>
       <div className="row" role="radiogroup" aria-label="Album">
@@ -71,6 +74,7 @@ export default function AlbumSection({
               <span className="sub">Q-number or Wikidata URL</span>
               <FieldErr id="albumQid" msg={errs.albumQid} />
             </label>
+            <LabelsField state={state} update={update} plan={plan} />
           </div>
           {albumTracklist && (
             <p className="msg err">
@@ -204,11 +208,12 @@ export default function AlbumSection({
                 <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
               </label>
             ))}
+            <LabelsField state={state} update={update} plan={plan} />
           </div>
           <p className="hint" style={{ marginTop: 10 }}>
             <Pids>
-              The album is created first with P31, P7937, P1476, P175, P577 (publication date),
-              P407, the identifiers above, and P2635 number of tracks: one statement per disc
+              The album is created first with P31, P7937, P1476, P175, P264, P577 (publication
+              date), P407, the identifiers above, and P2635 number of tracks: one statement per disc
               qualified with its part when every disc has a part, otherwise one total.
             </Pids>
           </p>
@@ -216,6 +221,58 @@ export default function AlbumSection({
         </div>
       )}
     </section>
+  );
+}
+
+/** The album's record labels (P264), for a new album or an existing one. */
+function LabelsField({ state, update, plan }: SectionProps) {
+  const { wikiBaseUrl } = useAuth();
+  const qids = splitQids(state.album.labels).filter((q) => QID.test(q));
+  const lookup = useItemSummaries(qids, state.settings.lang);
+  const cited = qids.length > 0 && qids.every((q) => citesMbLabel(state, q));
+  return (
+    <label className="f">
+      <Pids>Record labels (P264)</Pids>
+      <input
+        type="text"
+        spellCheck={false}
+        placeholder="Q…"
+        value={state.album.labels}
+        aria-invalid={!!plan.fieldErrs.albumLabels}
+        onChange={(e) => update((s) => void (s.album.labels = e.target.value))}
+      />
+      <span className="sub">
+        Optional. QIDs or Wikidata URLs, separated by spaces or commas.
+        {state.album.mode === "existing" && " The album gets the ones it doesn't have yet."}
+        {cited && " From MusicBrainz, so they get a MusicBrainz reference."}
+      </span>
+      {qids.length > 0 && (
+        <span className="sub">
+          {qids.map((q, i) => {
+            const found = lookup(q);
+            return (
+              <span key={q}>
+                {i > 0 && ", "}
+                {found?.status === "ok" ? (
+                  <a href={`${wikiBaseUrl}/wiki/${q}`} target="_blank" rel="noreferrer">
+                    {found.label ?? q}
+                  </a>
+                ) : found?.status === "missing" ? (
+                  <span className="field-err">{q} doesn't exist on Wikidata</span>
+                ) : found?.status === "redirect" ? (
+                  <span className="field-err">
+                    {q} redirects to {found.to}
+                  </span>
+                ) : (
+                  <WikiLink base={wikiBaseUrl} qid={q} />
+                )}
+              </span>
+            );
+          })}
+        </span>
+      )}
+      <FieldErr id="albumLabels" msg={plan.fieldErrs.albumLabels} />
+    </label>
   );
 }
 

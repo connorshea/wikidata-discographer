@@ -430,6 +430,61 @@ export async function getStatementValues<P extends string>(
   >;
 }
 
+/** How many values one search asks for, to keep the query short. */
+const SEARCH_VALUES = 10;
+
+/**
+ * The items holding each of `values` for the identifier `property`, value → QIDs,
+ * for identifiers the mirror doesn't keep. A `haswbstatement` search finds them, 10
+ * values a search, and `wbgetentities` reads their statements back: the search index
+ * can lag behind an edit. Deprecated statements don't count. Values with anything
+ * but letters, digits and dashes are left out, since the search would misread them.
+ */
+export async function itemsWithValues(
+  property: string,
+  values: readonly string[],
+  { retries }: { retries?: number } = {},
+): Promise<Map<string, string[]>> {
+  const wanted = [...new Set(values)].filter((v) => /^[\w-]+$/.test(v));
+  const found = new Set<string>();
+  for (let i = 0; i < wanted.length; i += SEARCH_VALUES) {
+    const terms = wanted.slice(i, i + SEARCH_VALUES).map((v) => `${property}=${v}`);
+    const res = await read(
+      {
+        action: "query",
+        list: "search",
+        srsearch: `haswbstatement:${terms.join("|")}`,
+        srnamespace: "0",
+        srprop: "",
+        srlimit: "50",
+      },
+      { retries },
+    );
+    const err = apiError(res);
+    if (err) throw new WikidataEditError(err.code, err.text);
+    const hits = (res.body.query as { search?: { title: string }[] } | undefined)?.search ?? [];
+    for (const h of hits) found.add(h.title);
+  }
+  const out = new Map<string, string[]>();
+  const qids = [...found];
+  for (let i = 0; i < qids.length; i += 50) {
+    const res = await read(
+      { action: "wbgetentities", ids: qids.slice(i, i + 50).join("|"), props: "claims" },
+      { retries },
+    );
+    const err = apiError(res);
+    if (err) throw new WikidataEditError(err.code, err.text);
+    const entities = (res.body.entities as Record<string, Entity> | undefined) ?? {};
+    for (const [qid, entity] of Object.entries(entities)) {
+      if (entity.missing) continue;
+      for (const v of statementValues(entity.claims?.[property]))
+        if (wanted.includes(v) && !out.get(v)?.includes(qid))
+          out.set(v, [...(out.get(v) ?? []), qid]);
+    }
+  }
+  return out;
+}
+
 /** Item values as their QIDs and strings (identifiers) as they are. Others are left out. */
 function statementValues(statements: WikibaseStatement[] = []): string[] {
   return statements

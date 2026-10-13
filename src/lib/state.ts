@@ -1,6 +1,15 @@
 // The default form state, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
-import type { AlbumMb, Disc, MbCited, MbRowIds, Settings, SingleState, State } from "./plan.ts";
+import type {
+  AlbumMb,
+  Disc,
+  LabelsMb,
+  MbCited,
+  MbRowIds,
+  Settings,
+  SingleState,
+  State,
+} from "./plan.ts";
 import {
   ALBUM_ID_FIELDS,
   APPLE_MUSIC_TRACK_PATTERN,
@@ -47,6 +56,8 @@ export const EMPTY: State = {
     form: "Q208569",
     ids: { spotify: "", musicbrainz: "", appleMusic: "", discogs: "" },
     mb: null,
+    labels: "",
+    labelsMb: null,
   },
   artists: {},
   discs: [emptyDisc()],
@@ -130,6 +141,15 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
   return { releaseGroup, release, retrieved, date: coerceCited(v.date), ids };
 }
 
+/** Where an import's record labels came from, or null unless its release, day and QIDs are well-formed. */
+function coerceLabelsMb(v: unknown): LabelsMb | null {
+  if (!isObj(v)) return null;
+  const release = matching(v.release, MBID_PATTERN);
+  const retrieved = day(v.retrieved);
+  const qids = strList(v.qids, /^Q\d+$/);
+  return release && retrieved && qids.length ? { release, retrieved, qids } : null;
+}
+
 /** A well-formed copy of `raw`, filling anything missing or mistyped with defaults. */
 export function coerceState(raw: unknown): State {
   const r = isObj(raw) ? raw : {};
@@ -172,6 +192,8 @@ export function coerceState(raw: unknown): State {
       discogs: str(ids.discogs),
     },
     mb: coerceAlbumMb(a.mb),
+    labels: str(a.labels),
+    labelsMb: coerceLabelsMb(a.labelsMb),
   };
   if (album.form && !/^Q\d+$/.test(album.form)) album.form = "";
   const discs = (Array.isArray(r.discs) ? r.discs : []).filter(isObj).map((disc): Disc => ({

@@ -183,6 +183,8 @@ describe("releaseToForm", () => {
         date: { value: "2026-09-18", from: "releaseGroup" },
         ids: { discogs: { value: "4348311", from: "releaseGroup" } },
       },
+      labels: "",
+      labelsMb: null,
     });
     expect(form.date).toBe("2026-09-18");
     expect(form.p407).toBe("Q1860");
@@ -530,6 +532,116 @@ describe("applyMbForm", () => {
     expect(album?.op === "create" && album.claims).toContainEqual(
       expect.objectContaining({ property: "P1954", value: { type: "string", value: "4348311" } }),
     );
+  });
+});
+
+describe("record labels", () => {
+  const INTERSCOPE = "2182a316-c4bd-4605-936a-5e2fac52bdd2";
+  const SCHOOL_BOY = "f126df5d-76b0-4f64-a2f1-049cd7096572";
+  const LABELS = { [INTERSCOPE]: "Q231694", [SCHOOL_BOY]: "Q7432151" };
+  const ref = [
+    [
+      { property: "P248", value: { type: "item", id: "Q14005" } },
+      { property: "P5813", value: { type: "string", value: RELEASE.id } },
+      { property: "P813", value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 } },
+    ],
+  ];
+  const labelClaims = (claims: { property: string }[]) =>
+    claims.filter((c) => c.property === "P264");
+
+  it("lists the release's labels to look up, without repeats or the special no-label label", () => {
+    const r = release();
+    r["label-info"]!.push(
+      { label: { id: INTERSCOPE, name: "Interscope Records" } },
+      { label: null },
+      { label: { id: "157afde4-4bf5-4039-8ad2-5a15acc85176", name: "[no label]" } },
+    );
+    expect(releaseIds(r).labels).toEqual([INTERSCOPE, SCHOOL_BOY]);
+  });
+
+  it("fills in the labels Wikidata has, cited to the release", () => {
+    const form = releaseToForm(RELEASE, { ...NONE, labels: LABELS }, "2026-10-04");
+    expect(form.album.labels).toBe("Q231694 Q7432151");
+    expect(form.album.labelsMb).toEqual({
+      release: RELEASE.id,
+      retrieved: "2026-10-04",
+      qids: ["Q231694", "Q7432151"],
+    });
+    expect(form.notes).toEqual([]);
+    expect(form.summary).toContain("Found 2 record labels already on Wikidata");
+    expect(form.summary).toContain("album IDs, record labels, durations");
+  });
+
+  it("notes a label no item has the ID of, and a lookup that failed", () => {
+    const one = releaseToForm(RELEASE, { ...NONE, labels: { [INTERSCOPE]: "Q231694" } });
+    expect(one.album.labels).toBe("Q231694");
+    expect(one.notes).toEqual([
+      "MusicBrainz lists “School Boy Records” as a label, but no Wikidata item has its MusicBrainz label ID (P966). Add its QID under Album if it's on Wikidata.",
+    ]);
+    const failed = releaseToForm(RELEASE, { ...NONE, labels: null });
+    expect(failed.album).toMatchObject({ labels: "", labelsMb: null });
+    expect(failed.notes).toEqual([
+      "Couldn't look up the release's record labels on Wikidata. Add them under Album.",
+    ]);
+    // Nothing looked up, nothing to note.
+    expect(releaseToForm(RELEASE, NONE).notes).toEqual([]);
+  });
+
+  it("creates a new album with them", () => {
+    const next = applyMbForm(
+      EMPTY,
+      releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" }, labels: LABELS }, "2026-10-04"),
+    );
+    const album = buildPlan(next).ops.find((o) => o.op === "create" && o.key === "album");
+    const claims = labelClaims(album?.op === "create" ? album.claims : []);
+    expect(claims).toEqual([
+      { property: "P264", value: { type: "item", id: "Q231694" }, references: ref },
+      { property: "P264", value: { type: "item", id: "Q7432151" }, references: ref },
+    ]);
+  });
+
+  it("adds them to an existing album with its tracklist", () => {
+    const next = applyMbForm(
+      EMPTY,
+      releaseToForm(
+        RELEASE,
+        { ...NONE, albumQid: "Q140316456", artists: { [CRJ]: "Q1" }, labels: LABELS },
+        "2026-10-04",
+      ),
+    );
+    const ops = buildPlan(next).ops;
+    expect(ops.some((o) => o.op === "create" && o.key === "album")).toBe(false);
+    const tracklist = ops.find((o) => o.op === "addClaims" && o.what === "album tracklist");
+    expect(tracklist?.op === "addClaims" && tracklist.target).toEqual({ id: "Q140316456" });
+    expect(labelClaims(tracklist?.claims ?? [])).toHaveLength(2);
+    expect(labelClaims(tracklist?.claims ?? [])[0]).toMatchObject({ references: ref });
+  });
+
+  it("cites only the labels the import found, and only with references on", () => {
+    const next = applyMbForm(
+      EMPTY,
+      releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" }, labels: LABELS }, "2026-10-04"),
+    );
+    next.album.labels = "Q231694, https://www.wikidata.org/wiki/Q5";
+    const album = buildPlan(next).ops.find((o) => o.op === "create" && o.key === "album");
+    const claims = labelClaims(album?.op === "create" ? album.claims : []);
+    expect(claims).toEqual([
+      { property: "P264", value: { type: "item", id: "Q231694" }, references: ref },
+      { property: "P264", value: { type: "item", id: "Q5" } },
+    ]);
+    next.settings.mbRefs = false;
+    const off = buildPlan(next).ops.find((o) => o.op === "create" && o.key === "album");
+    expect(
+      labelClaims(off?.op === "create" ? off.claims : []).every((c) => !("references" in c)),
+    ).toBe(true);
+  });
+
+  it("refuses a label that isn't a QID", () => {
+    const next = applyMbForm(EMPTY, releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" } }));
+    next.album.labels = "Q231694 Interscope";
+    const plan = buildPlan(next);
+    expect(plan.fieldErrs.albumLabels).toBe('Not a QID: "Interscope".');
+    expect(plan.ready).toBe(false);
   });
 });
 
