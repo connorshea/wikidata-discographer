@@ -5,6 +5,7 @@ import { normalizeQid, QID, splitArtists } from "../lib/plan.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
 import { Pids, QidInput, WikiLink } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
+import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
   const names = new Set<string>();
@@ -16,6 +17,15 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
       .forEach((a) => names.add(a));
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);
+  const lookup = useItemSummaries(
+    [...names].map((n) => (state.artists[n] ?? "").trim()),
+    state.settings.lang,
+  );
+  const mapped = [...names].filter((n) => {
+    const v = (state.artists[n] ?? "").trim();
+    const s = lookup(v)?.status;
+    return QID.test(v) && s !== "missing" && s !== "redirect";
+  }).length;
 
   return (
     <section className="block">
@@ -23,45 +33,49 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
       <p className="hint">
         <Pids>
           Every artist name found in the tracklists and album artists, mapped to a QID for P175.
-          Matching artists already on Wikidata are suggested.
+          Matching artists already on Wikidata are suggested. Each name needs a QID before the edits
+          can be made.
         </Pids>
       </p>
       <div className="tablewrap">
-        <table>
+        <table className="performers">
           <thead>
             <tr>
               <th>Name in tracklist</th>
-              <th>QID</th>
+              <th className="qid">QID</th>
+              <th>
+                Wikidata item
+                {names.size > 0 && (
+                  <span className="muted count">
+                    {" "}
+                    · {mapped} of {names.size} mapped
+                  </span>
+                )}
+              </th>
             </tr>
           </thead>
           <tbody>
             {names.size ? (
               [...names].map((n) => {
                 const v = (state.artists[n] ?? "").trim();
-                const bad = v !== "" && !QID.test(v);
+                const set = (q: string) => update((s) => void (s.artists[n] = q.trim()));
                 return (
                   <tr key={n}>
                     <td>{n}</td>
-                    <td>
+                    <td className="qid">
                       <QidInput
-                        placeholder="Q… or Wikidata URL"
+                        placeholder="Q… or URL"
                         aria-label={`QID for ${n}`}
-                        aria-invalid={bad}
+                        aria-invalid={v !== "" && !QID.test(v)}
                         value={state.artists[n] ?? ""}
-                        onChange={(q) => update((s) => void (s.artists[n] = q.trim()))}
+                        onChange={set}
                       />
-                      {bad && (
-                        <p className="field-err">
-                          "{v}" isn't a QID. Enter something like Q52583, or paste the item's
-                          Wikidata URL.
-                        </p>
-                      )}
-                      {!v && (
-                        <Suggestions
-                          name={n}
-                          version={mirrorVersion}
-                          onPick={(qid) => update((s) => void (s.artists[n] = qid))}
-                        />
+                    </td>
+                    <td>
+                      {v ? (
+                        <Chosen qid={v} found={lookup(v)} onUse={set} />
+                      ) : (
+                        <Suggestions name={n} version={mirrorVersion} onPick={set} />
                       )}
                     </td>
                   </tr>
@@ -69,7 +83,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
               })
             ) : (
               <tr>
-                <td colSpan={2} className="hint">
+                <td colSpan={3} className="hint">
                   Artists appear here once a disc has tracks.
                 </td>
               </tr>
@@ -82,6 +96,50 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
   );
 }
 
+/** What the QID entered for a name points at, or why it can't be used. */
+function Chosen({
+  qid,
+  found,
+  onUse,
+}: {
+  qid: string;
+  found: ItemLookup | undefined;
+  onUse: (qid: string) => void;
+}) {
+  const { wikiBaseUrl } = useAuth();
+  if (!QID.test(qid))
+    return (
+      <span className="field-err">
+        "{qid}" isn't a QID. Enter something like Q52583, or paste the item's Wikidata URL.
+      </span>
+    );
+  if (found?.status === "missing")
+    return <span className="field-err">{qid} doesn't exist on Wikidata.</span>;
+  if (found?.status === "redirect")
+    return (
+      <span className="field-err">
+        {qid} redirects to {found.to}.{" "}
+        <button type="button" className="ghost small" onClick={() => onUse(found.to)}>
+          Use {found.to}
+        </button>
+      </span>
+    );
+  if (found?.status === "ok")
+    return (
+      <span className="item">
+        <a href={`${wikiBaseUrl}/wiki/${qid}`} target="_blank" rel="noreferrer">
+          {found.label ?? qid}
+        </a>
+        {found.description && <span className="muted">{found.description}</span>}
+      </span>
+    );
+  return (
+    <span className="muted">
+      {found?.status === "failed" ? "Couldn’t look it up on Wikidata" : "Looking it up…"}
+    </span>
+  );
+}
+
 function Suggestions({
   name,
   version,
@@ -91,8 +149,8 @@ function Suggestions({
   version: number;
   onPick: (qid: string) => void;
 }) {
-  const { wikiBaseUrl } = useAuth();
-  const [items, setItems] = useState<MirrorItem[]>([]);
+  const { user, wikiBaseUrl } = useAuth();
+  const [items, setItems] = useState<MirrorItem[] | null>(null);
   useEffect(() => {
     let cancelled = false;
     const q = new URLSearchParams({ q: name, kind: "artist" });
@@ -107,17 +165,33 @@ function Suggestions({
       cancelled = true;
     };
   }, [name, version]);
-  if (!items.length) return null;
+  if (items === null) return <span className="muted">Looking for matches…</span>;
+  if (!items.length)
+    return (
+      <span className="muted">
+        No matching artist found.
+        {user && " If you just created one on Wikidata, add it below."}
+      </span>
+    );
   return (
     <ul className="matches">
       {items.slice(0, 5).map((i) => (
         <li key={i.qid}>
-          <button type="button" className="ghost small" onClick={() => onPick(i.qid)}>
-            Use this artist
+          <button
+            type="button"
+            className="ghost small"
+            aria-label={`Use ${i.qid} for ${name}`}
+            onClick={() => onPick(i.qid)}
+          >
+            Use
           </button>
-          <WikiLink base={wikiBaseUrl} qid={i.qid} />
-          <span>{i.label ?? "(no label)"}</span>
-          {i.description && <span className="muted">{i.description}</span>}
+          <span className="item">
+            <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
+              {i.label ?? i.qid}
+            </a>
+            <span className="muted">{i.qid}</span>
+            {i.description && <span className="muted">{i.description}</span>}
+          </span>
         </li>
       ))}
     </ul>
