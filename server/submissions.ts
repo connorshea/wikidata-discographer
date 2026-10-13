@@ -94,7 +94,6 @@ submissionRoutes.post(
   }),
   async (c) => {
     const user = c.get("user")!;
-    if (user.blocked) return c.json({ error: "Your account is blocked on Wikidata." }, 403);
     const eligibility = editEligibility(user);
     if (!eligibility.ok) return c.json({ error: eligibility.reason }, 403);
     if (running.has(user.id)) return c.json({ error: "You already have a run in progress." }, 409);

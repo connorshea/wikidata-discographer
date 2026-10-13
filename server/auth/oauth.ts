@@ -19,7 +19,15 @@ import type { AuthMeResponse, LogoutResponse } from "../../src/lib/api-types.ts"
 import { authConfig, authConfigured, callbackUrl, cookiesSecure, wikiOrigin } from "./config.ts";
 import { pkceChallenge, randomToken, safeEqual } from "./crypto.ts";
 import { editEligibility } from "./eligibility.ts";
-import { type AuthEnv, createSession, deleteTokensIfLoggedOut, destroySession } from "./session.ts";
+import {
+  type AuthEnv,
+  createSession,
+  deleteTokensIfLoggedOut,
+  destroySession,
+  endAllSessions,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+} from "./session.ts";
 import { registrationToSql, toSqlDatetime } from "./time.ts";
 import { FETCH_TIMEOUT_MS, storeTokens, tokenRequest, type TokenResponse } from "./tokens.ts";
 import { userAgent } from "./user-agent.ts";
@@ -165,6 +173,17 @@ authRoutes.get("/callback", async (c) => {
     .insert(users)
     .values({ id: profile.sub, createdAt: toSqlDatetime(now), ...userValues })
     .onDuplicateKeyUpdate({ set: userValues });
+
+  // A blocked account gets no session: it couldn't edit Wikidata through the
+  // app anyway. Any session it still holds from before the block ends now,
+  // and its tokens go with it. The user row stays, so its runs keep their
+  // attribution and the block is on record.
+  if (userValues.blocked) {
+    console.warn(`oauth: refused login for blocked account ${profile.sub} (${profile.username})`);
+    await endAllSessions(profile.sub);
+    deleteCookie(c, SESSION_COOKIE, sessionCookieOptions());
+    return c.redirect("/?auth=blocked", 303);
+  }
   await storeTokens(profile.sub, tokens, now);
 
   // Rotate: a session that was already active in this browser is replaced.
@@ -193,7 +212,6 @@ authRoutes.get("/me", (c) => {
     user: user && {
       id: user.id,
       username: user.username,
-      blocked: user.blocked,
       eligibility: editEligibility(user),
     },
     configured: authConfigured(),
@@ -235,7 +253,7 @@ async function exchangeCode(
   return result.tokens;
 }
 
-async function fetchProfile(
+export async function fetchProfile(
   cfg: ReturnType<typeof authConfig>,
   accessToken: string,
 ): Promise<WikimediaProfile> {

@@ -147,8 +147,14 @@ client).
 2. Set the authentication variables from `.env.example`: in `.env` locally, or
    with `toolforge envvars create` on Toolforge.
 
-Runs are refused for accounts that are blocked on Wikidata, under 48 hours old,
-or that have no Wikidata edits (`EDIT_MIN_ACCOUNT_AGE_HOURS`,
+Accounts blocked on Wikidata are locked out of the tool altogether: login
+refuses a blocked profile, an edit Wikidata rejects as `blocked` ends the
+account's sessions, and the nightly `prune-sessions` job re-checks every
+logged-in account's profile, so a block placed after login catches up within a
+day.
+
+Runs are refused for accounts under 48 hours old, or that have no Wikidata
+edits (`EDIT_MIN_ACCOUNT_AGE_HOURS`,
 `EDIT_MIN_EDIT_COUNT`). Both values are Wikidata's own, so an experienced
 editor elsewhere still needs an edit on Wikidata, and the account's age counts
 from when it was first used on Wikidata. They're read from the OAuth profile

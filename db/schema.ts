@@ -101,6 +101,9 @@ export const musicLinks = mysqlTable(
 export const users = mysqlTable("users", {
   id: int("id").primaryKey(), // Wikimedia central user id (OAuth profile `sub`)
   username: varchar("username", { length: 255 }).notNull(),
+  // Locks the account out: login refuses it and the session middleware ends
+  // any session it holds (server/auth/session.ts). Set from the OAuth profile
+  // at login or the nightly re-check, or by an edit Wikidata refused as blocked.
   blocked: boolean("blocked").notNull().default(false),
   // Both are the user's Wikidata-local values from the OAuth profile, as of
   // their last login. A null edit count means they haven't logged in since

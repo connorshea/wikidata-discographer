@@ -16,6 +16,9 @@ vi.mock("./auth/tokens.ts", () => ({
   TokenError: class extends Error {},
 }));
 
+const markBlocked = vi.hoisted(() => vi.fn(async (_userId: number) => {}));
+vi.mock("./auth/session.ts", () => ({ markBlocked }));
+
 const entity = { id: "Q1", claims: {} };
 const ok = () => Response.json({ entities: { Q1: entity } });
 const limited = () => new Response("", { status: 429, headers: { "Retry-After": "2" } });
@@ -190,6 +193,28 @@ describe("editRequest", () => {
     await vi.advanceTimersByTimeAsync(5_000 + 15_000 + 45_000);
     expect(await err).toMatchObject({ ambiguous: false });
     vi.useRealTimers();
+  });
+
+  it("locks the account out when Wikidata refuses the edit as blocked", async () => {
+    markBlocked.mockClear();
+    fetch.mockResolvedValueOnce(csrf()).mockResolvedValueOnce(
+      Response.json({
+        errors: [{ code: "blocked", text: "You have been blocked from editing" }],
+      }),
+    );
+    await expect(editRequest(user, { action: "wbeditentity" }, { pacer })).rejects.toMatchObject({
+      code: "blocked",
+    });
+    expect(markBlocked).toHaveBeenCalledWith(1);
+
+    markBlocked.mockClear();
+    fetch
+      .mockResolvedValueOnce(csrf())
+      .mockResolvedValueOnce(
+        Response.json({ errors: [{ code: "modification-failed", text: "Label taken" }] }),
+      );
+    await expect(editRequest(user, { action: "wbeditentity" }, { pacer })).rejects.toThrow();
+    expect(markBlocked).not.toHaveBeenCalled();
   });
 });
 

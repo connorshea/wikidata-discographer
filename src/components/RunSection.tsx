@@ -54,7 +54,10 @@ function watchRun(
       .catch((e: unknown) => {
         if (cancelled) return;
         onError(e);
-        if (!isGone(e)) timer = setTimeout(poll, POLL_MS * 3);
+        // A 401 means the session ended (logged out elsewhere, or the account
+        // was blocked mid-run): asking again won't bring it back.
+        const loggedOut = e instanceof FetchError && e.status === 401;
+        if (!isGone(e) && !loggedOut) timer = setTimeout(poll, POLL_MS * 3);
       });
   void poll();
   return () => {
@@ -234,7 +237,6 @@ export default function RunSection({
           }
           disabled={
             !user ||
-            user.blocked ||
             !user.eligibility.ok ||
             !plan.ready ||
             !!albumTracklist ||
