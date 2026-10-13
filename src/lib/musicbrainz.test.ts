@@ -162,7 +162,7 @@ describe("releaseIds", () => {
 
 describe("releaseToForm", () => {
   it("fills the album, discs and date for a new album", () => {
-    const form = releaseToForm(RELEASE, NONE);
+    const form = releaseToForm(RELEASE, NONE, "2026-10-04");
     expect(form.album).toEqual({
       mode: "create",
       qid: "",
@@ -175,6 +175,13 @@ describe("releaseToForm", () => {
         musicbrainz: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
         appleMusic: "",
         discogs: "4348311",
+      },
+      mb: {
+        releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+        release: RELEASE.id,
+        retrieved: "2026-10-04",
+        date: { value: "2026-09-18", from: "releaseGroup" },
+        ids: { discogs: { value: "4348311", from: "releaseGroup" } },
       },
     });
     expect(form.date).toBe("2026-09-18");
@@ -195,7 +202,7 @@ describe("releaseToForm", () => {
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
     );
     expect(form.summary).toMatch(
-      /The imported durations, ISRCs and track IDs get a MusicBrainz reference, if that's on in Item settings\.$/,
+      /The imported publication date, album IDs, durations, ISRCs and track IDs get a MusicBrainz reference, if that's on in Item settings\.$/,
     );
   });
 
@@ -354,6 +361,27 @@ describe("releaseToForm", () => {
       spotify: "4aawyAB9vmqN3uQ7FjRGTy",
       appleMusic: "1820000000",
     });
+    // Linked from the release, so they're cited to it.
+    expect(album.mb?.ids).toMatchObject({
+      spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
+      appleMusic: { value: "1820000000", from: "release" },
+    });
+  });
+
+  it("cites the release's own date when the release group has none", () => {
+    const r = release();
+    delete r["release-group"]["first-release-date"];
+    r.date = "2026-09-19";
+    const form = releaseToForm(r, NONE);
+    expect(form.date).toBe("2026-09-19");
+    expect(form.album.mb?.date).toEqual({ value: "2026-09-19", from: "release" });
+    delete r.date;
+    expect(releaseToForm(r, NONE).album.mb?.date).toBeNull();
+  });
+
+  it("doesn't mention album references for an album already on Wikidata", () => {
+    const form = releaseToForm(RELEASE, { ...NONE, albumQid: "Q140316456" });
+    expect(form.summary).toMatch(/The imported durations, ISRCs and track IDs get/);
   });
 
   it("reads the Discogs master ID from the release group, not the release", () => {
@@ -445,6 +473,32 @@ describe("applyMbForm", () => {
     expect(rows[0]).toMatchObject({ n: 1, title: "After All", seconds: 252 });
     expect(buildPlan(next).fieldErrs.albumQid).toBe("");
   });
+  it("gives a new album's date and Discogs master ID a MusicBrainz reference", () => {
+    const next = applyMbForm(
+      EMPTY,
+      releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" } }, "2026-10-04"),
+    );
+    const album = buildPlan(next).ops.find((o) => o.op === "create" && o.key === "album");
+    const claims = album?.op === "create" ? album.claims : [];
+    const rgRef = [
+      [
+        { property: "P248", value: { type: "item", id: "Q14005" } },
+        {
+          property: "P436",
+          value: { type: "string", value: "b012a117-afa3-4ea3-879f-eeb61b974b0a" },
+        },
+        {
+          property: "P813",
+          value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
+        },
+      ],
+    ];
+    expect(claims.find((c) => c.property === "P577")?.references).toEqual(rgRef);
+    expect(claims.find((c) => c.property === "P1954")?.references).toEqual(rgRef);
+    // The release group ID itself goes unreferenced.
+    expect(claims.find((c) => c.property === "P436")?.references).toBeUndefined();
+  });
+
   it("adds the Discogs master ID to a new album", () => {
     const next = applyMbForm(EMPTY, releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" } }));
     const album = buildPlan(next).ops.find((o) => o.op === "create" && o.key === "album");

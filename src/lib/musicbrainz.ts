@@ -6,7 +6,7 @@
 // many releases with different tracks. A pasted release group lists its
 // releases (`releaseChoices`) for the user to pick one, best guess first.
 import { ALBUM_FORMS, ALBUM_TYPES, NO_LINGUISTIC_CONTENT, PARTS, splitArtists } from "./plan.ts";
-import type { AlbumState, Disc, MbRowIds, State } from "./plan.ts";
+import type { AlbumMb, AlbumState, Disc, MbRowIds, State } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
@@ -458,11 +458,14 @@ export function releaseToForm(
 
   const albumQid = lookups.albumQid;
   const ids: AlbumState["ids"] = { spotify: "", musicbrainz: rg.id, appleMusic: "", discogs: "" };
+  // Each identifier is cited to the release or release group that links it.
+  const citedIds: AlbumMb["ids"] = {};
   for (const f of ALBUM_ID_FIELDS) {
     if (f.key === "musicbrainz") continue;
     // A Discogs master is the album as a whole, so MusicBrainz links it from
     // the release group. A /release/ link on the release is one edition and is skipped.
-    const relations = f.key === "discogs" ? rg.relations : release.relations;
+    const from = f.key === "discogs" ? "releaseGroup" : "release";
+    const relations = from === "releaseGroup" ? rg.relations : release.relations;
     const linked = [
       ...new Set(
         (relations ?? []).flatMap((r) => f.fromUrl.exec(r.url?.resource ?? "")?.[1] ?? []),
@@ -473,8 +476,21 @@ export function releaseToForm(
         notes.push(
           `The release group links ${linked.length} Discogs masters, so none was filled in. Add the right one under Album.`,
         );
-    } else ids[f.key] = linked[0] ?? "";
+    } else if (linked.length) {
+      ids[f.key] = linked[0];
+      citedIds[f.key] = { value: linked[0], from };
+    }
   }
+  const date = rg["first-release-date"] || release.date || "";
+  const albumMb: AlbumMb = {
+    releaseGroup: rg.id,
+    release: release.id,
+    retrieved,
+    date: date
+      ? { value: date, from: rg["first-release-date"] ? "releaseGroup" : "release" }
+      : null,
+    ids: citedIds,
+  };
   const linkedIds = ALBUM_ID_FIELDS.filter((f) => f.key !== "musicbrainz" && ids[f.key]).map(
     (f) => f.label,
   );
@@ -501,7 +517,12 @@ export function releaseToForm(
       ? `Found ${joinList(found as string[])} already on Wikidata by their MusicBrainz IDs.`
       : "Found nothing else already on Wikidata by its MusicBrainz ID.") +
     idsSummary(toAdd) +
-    refsSummary(toAdd);
+    refsSummary({
+      ...toAdd,
+      // Only a new album gets the date and identifiers.
+      date: !albumQid && !!date,
+      albumIds: albumQid ? 0 : linkedIds.length,
+    });
 
   return {
     album: {
@@ -512,24 +533,29 @@ export function releaseToForm(
       type: type ?? "Q482994",
       form,
       ids,
+      mb: albumMb,
     },
     artists,
     discs: discs.length ? discs : [emptyDisc()],
-    date: rg["first-release-date"] || release.date || "",
+    date,
     p407,
     notes,
     summary,
   };
 }
 
-/** Which of the new tracks' statements get a MusicBrainz reference, as a sentence. */
+/** Which of the new album's and tracks' statements get a MusicBrainz reference, as a sentence. */
 function refsSummary(n: {
+  date: boolean;
+  albumIds: number;
   isrcs: number;
   spotify: number;
   appleMusic: number;
   durationRefs: number;
 }) {
   const what = [
+    n.date && "publication date",
+    n.albumIds && "album IDs",
     n.durationRefs && "durations",
     n.isrcs && "ISRCs",
     n.spotify + n.appleMusic && "track IDs",

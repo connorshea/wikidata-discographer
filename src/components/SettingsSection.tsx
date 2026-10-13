@@ -34,7 +34,7 @@ const FLAGS: [FlagKey, string][] = [
   ],
   [
     "mbRefs",
-    "Add a reference to durations, ISRCs and track IDs from a MusicBrainz import (stated in MusicBrainz, its recording ID and the day it was imported)",
+    "Add a reference to what a MusicBrainz import filled in: a new album's publication date and identifiers, and new tracks' durations, ISRCs and track IDs (stated in MusicBrainz, the release group, release or recording it came from, and the day it was imported)",
   ],
 ];
 
@@ -120,6 +120,13 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
             Album release date, not added to compositions or tracks. YYYY, YYYY-MM or YYYY-MM-DD
             (“June 12, 2012” is converted), blank to skip
           </span>
+          {S.mbRefs &&
+            state.album.mode === "create" &&
+            state.album.mb?.date?.value === S.date.trim() && (
+              <span className="sub">
+                From MusicBrainz, so it gets a MusicBrainz reference while it stays the same
+              </span>
+            )}
           <FieldErr id="date" msg={errs.date} />
         </label>
         <div className="f">

@@ -158,7 +158,11 @@ export default function AlbumSection({
                     )
                   }
                 />
-                <span className="sub">Optional. ID or URL, checked for duplicates</span>
+                <span className="sub">
+                  {state.settings.mbRefs && A.mb?.ids[f.key]?.value === A.ids[f.key].trim()
+                    ? "From MusicBrainz, so it gets a MusicBrainz reference while it stays the same"
+                    : "Optional. ID or URL, checked for duplicates"}
+                </span>
                 <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
               </label>
             ))}

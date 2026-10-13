@@ -1,7 +1,8 @@
 // The default form state, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
-import type { Disc, MbRowIds, Settings, SingleState, State } from "./plan.ts";
+import type { AlbumMb, Disc, MbCited, MbRowIds, Settings, SingleState, State } from "./plan.ts";
 import {
+  ALBUM_ID_FIELDS,
   APPLE_MUSIC_TRACK_PATTERN,
   ISRC_PATTERN,
   MBID_PATTERN,
@@ -45,6 +46,7 @@ export const EMPTY: State = {
     type: "Q482994",
     form: "Q208569",
     ids: { spotify: "", musicbrainz: "", appleMusic: "", discogs: "" },
+    mb: null,
   },
   artists: {},
   discs: [emptyDisc()],
@@ -86,16 +88,44 @@ function coerceMbIds(ids: Obj): MbRowIds {
   };
 }
 
+/** A real day written YYYY-MM-DD, or "". */
+function day(v: unknown): string {
+  const m = typeof v === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
+  return m && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toISOString().startsWith(m[0])
+    ? m[0]
+    : "";
+}
+
 /** The recording and day an import came from, or null unless both are well-formed. */
 function coerceSource(v: unknown): MbRowIds["source"] {
   if (!isObj(v)) return null;
-  const { recording, retrieved } = v;
-  const day = typeof retrieved === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(retrieved) : null;
-  const real =
-    day && new Date(Date.UTC(+day[1], +day[2] - 1, +day[3])).toISOString().startsWith(day[0]);
-  return typeof recording === "string" && MBID_PATTERN.test(recording) && real
-    ? { recording, retrieved: day[0] }
+  const recording = matching(v.recording, MBID_PATTERN);
+  const retrieved = day(v.retrieved);
+  return recording && retrieved ? { recording, retrieved } : null;
+}
+
+function coerceCited(v: unknown): MbCited | null {
+  return isObj(v) &&
+    typeof v.value === "string" &&
+    v.value !== "" &&
+    (v.from === "releaseGroup" || v.from === "release")
+    ? { value: v.value, from: v.from }
     : null;
+}
+
+/** Where an import's album details came from, or null unless its IDs and day are well-formed. */
+function coerceAlbumMb(v: unknown): AlbumMb | null {
+  if (!isObj(v)) return null;
+  const releaseGroup = matching(v.releaseGroup, MBID_PATTERN);
+  const release = matching(v.release, MBID_PATTERN);
+  const retrieved = day(v.retrieved);
+  if (!releaseGroup || !release || !retrieved) return null;
+  const ids: AlbumMb["ids"] = {};
+  for (const f of ALBUM_ID_FIELDS) {
+    const cited = isObj(v.ids) ? coerceCited(v.ids[f.key]) : null;
+    if (cited) ids[f.key] = cited;
+  }
+  return { releaseGroup, release, retrieved, date: coerceCited(v.date), ids };
 }
 
 /** A well-formed copy of `raw`, filling anything missing or mistyped with defaults. */
@@ -139,6 +169,7 @@ export function coerceState(raw: unknown): State {
       appleMusic: str(ids.appleMusic),
       discogs: str(ids.discogs),
     },
+    mb: coerceAlbumMb(a.mb),
   };
   if (album.form && !/^Q\d+$/.test(album.form)) album.form = "";
   const discs = (Array.isArray(r.discs) ? r.discs : []).filter(isObj).map((disc): Disc => ({
