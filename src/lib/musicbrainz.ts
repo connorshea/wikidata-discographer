@@ -278,6 +278,13 @@ const LANGUAGES: Record<string, string> = {
   zxx: NO_LINGUISTIC_CONTENT,
 };
 
+/** What a release or release group links more than one of, for the note saying none was filled in. */
+const SEVERAL_ALBUM_LINKS = {
+  spotify: "Spotify albums",
+  appleMusic: "Apple Music albums",
+  discogs: "Discogs masters",
+} as const;
+
 const PRIMARY_TYPES: Record<string, (typeof ALBUM_TYPES)[number][0]> = {
   Album: "Q482994",
   EP: "Q169930",
@@ -471,10 +478,11 @@ export function releaseToForm(
         (relations ?? []).flatMap((r) => f.fromUrl.exec(r.url?.resource ?? "")?.[1] ?? []),
       ),
     ];
-    if (f.key === "discogs" && linked.length > 1) {
+    // Several links leave no way to tell which is the album, so none is filled in.
+    if (linked.length > 1) {
       if (!albumQid)
         notes.push(
-          `The release group links ${linked.length} Discogs masters, so none was filled in. Add the right one under Album.`,
+          `The ${from === "releaseGroup" ? "release group" : "release"} links ${linked.length} ${SEVERAL_ALBUM_LINKS[f.key]}, so none was filled in. Add the right one under Album.`,
         );
     } else if (linked.length) {
       ids[f.key] = linked[0];

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   buildPlan,
+  citesMbDate,
   MAX_TERM_LENGTH,
   MAX_TRACKS,
   MAX_TRACKS_PER_DISC,
@@ -294,6 +295,15 @@ describe("buildPlan", () => {
       const state = imported();
       state.album.ids.musicbrainz = "f5093c06-23e3-404f-aeaa-40f72885ee3a";
       expect(Object.values(refsOf(state)).every((r) => r === undefined)).toBe(true);
+    });
+
+    it("say the date gets a reference only when it does", () => {
+      const state = imported();
+      expect(citesMbDate(state)).toBe(true);
+      state.album.mb!.date = { value: "2026-02-30", from: "releaseGroup" };
+      state.settings.date = "2026-02-30";
+      expect(citesMbDate(state)).toBe(false);
+      expect(refsOf(state).P577).toBeUndefined();
     });
 
     it("keep the reference on a date with spaces around it", () => {

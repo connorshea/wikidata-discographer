@@ -422,6 +422,21 @@ describe("releaseToForm", () => {
     expect(releaseToForm(r, { ...NONE, albumQid: "Q140316456" }).notes).toEqual([]);
   });
 
+  it("fills in no Spotify album when the release links several", () => {
+    const r = release();
+    r.relations = ["4aawyAB9vmqN3uQ7FjRGTy", "4aawyAB9vmqN3uQ7FjRGTz"].map((id) => ({
+      type: "free streaming",
+      "target-type": "url",
+      url: { resource: `https://open.spotify.com/album/${id}` },
+    }));
+    const form = releaseToForm(r, NONE);
+    expect(form.album.ids.spotify).toBe("");
+    expect(form.album.mb?.ids.spotify).toBeUndefined();
+    expect(form.notes).toEqual([
+      expect.stringContaining("The release links 2 Spotify albums, so none was filled in."),
+    ]);
+  });
+
   it("notes what it can't fill in", () => {
     const r = release();
     r["release-group"]["primary-type"] = "Single";

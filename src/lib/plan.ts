@@ -499,22 +499,32 @@ const statedInMb = (
 });
 
 /**
- * Whether an album detail is still the value the import filled in, and the album
- * still has the imported release group, so a MusicBrainz reference can cite it.
+ * Whether a new album's detail gets a MusicBrainz reference: the setting is on, the
+ * detail is still the value the import filled in, and the album still has the
+ * imported release group.
  */
-export function citesMb(album: AlbumState, cited: MbCited | null | undefined, value: string) {
+export function citesMb(state: State, cited: MbCited | null | undefined, value: string) {
+  const A = state.album;
   return (
-    !!album.mb &&
+    state.settings.mbRefs &&
+    A.mode === "create" &&
+    !!A.mb &&
     !!cited &&
     cited.value === value &&
-    album.ids.musicbrainz.trim() === album.mb.releaseGroup
+    A.ids.musicbrainz.trim() === A.mb.releaseGroup
   );
 }
 
-/** A MusicBrainz reference for an album detail, while it's still the value the import filled in. */
-function albumMbRef(album: AlbumState, cited: MbCited | null | undefined, value: string) {
-  const mb = album.mb;
-  if (!mb || !cited || !citesMb(album, cited, value)) return {};
+/** Whether the new album's publication date gets a MusicBrainz reference. */
+export function citesMbDate(state: State) {
+  const date = parseDate(state.settings.date);
+  return date.ok && !!date.val && citesMb(state, state.album.mb?.date, state.settings.date.trim());
+}
+
+/** A MusicBrainz reference for a new album's detail, when `citesMb` allows one. */
+function albumMbRef(state: State, cited: MbCited | null | undefined, value: string) {
+  const mb = state.album.mb;
+  if (!mb || !cited || !citesMb(state, cited, value)) return {};
   return cited.from === "releaseGroup"
     ? statedInMb("P436", mb.releaseGroup, mb.retrieved)
     : statedInMb("P5813", mb.release, mb.retrieved);
@@ -653,7 +663,7 @@ export function buildPlan(state: State): Plan {
       else
         albumIds.push({
           ...claim(f.property, { type: "string", value: v }),
-          ...(S.mbRefs ? albumMbRef(A, A.mb?.ids[f.key], v) : {}),
+          ...albumMbRef(state, A.mb?.ids[f.key], v),
         });
     }
   }
@@ -764,7 +774,7 @@ export function buildPlan(state: State): Plan {
       ? [
           {
             ...claim("P577", { type: "time", ...date.val }),
-            ...(S.mbRefs ? albumMbRef(A, A.mb?.date, S.date.trim()) : {}),
+            ...albumMbRef(state, A.mb?.date, S.date.trim()),
           },
         ]
       : [];

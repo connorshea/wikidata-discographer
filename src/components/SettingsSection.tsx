@@ -1,5 +1,5 @@
 import {
-  citesMb,
+  citesMbDate,
   isCustomLabelLang,
   isCustomLang,
   LABEL_LANGS,
@@ -121,13 +121,11 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
             Album release date, not added to compositions or tracks. YYYY, YYYY-MM or YYYY-MM-DD
             (“June 12, 2012” is converted), blank to skip
           </span>
-          {S.mbRefs &&
-            state.album.mode === "create" &&
-            citesMb(state.album, state.album.mb?.date, S.date.trim()) && (
-              <span className="sub">
-                From MusicBrainz, so it gets a MusicBrainz reference while it stays the same
-              </span>
-            )}
+          {citesMbDate(state) && (
+            <span className="sub">
+              From MusicBrainz, so it gets a MusicBrainz reference while it stays the same
+            </span>
+          )}
           <FieldErr id="date" msg={errs.date} />
         </label>
         <div className="f">

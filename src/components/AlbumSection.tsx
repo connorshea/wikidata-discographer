@@ -159,7 +159,7 @@ export default function AlbumSection({
                   }
                 />
                 <span className="sub">
-                  {state.settings.mbRefs && citesMb(A, A.mb?.ids[f.key], A.ids[f.key].trim())
+                  {citesMb(state, A.mb?.ids[f.key], A.ids[f.key].trim())
                     ? "From MusicBrainz, so it gets a MusicBrainz reference while it stays the same"
                     : "Optional. ID or URL, checked for duplicates"}
                 </span>
