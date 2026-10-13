@@ -4,6 +4,7 @@ import {
   type Candidate,
   fillUnambiguous,
   groupId,
+  isSimilarOnly,
   pickSingle,
   pickTrack,
   type Slot,
@@ -108,8 +109,9 @@ export default function MatchesSection({
     <section className="block" id="matches">
       <h2>Possible matches</h2>
       <p className="hint">
-        Items already on Wikidata with a track's title. Use one to reuse it instead of creating a
-        duplicate, or dismiss it.
+        Items already on Wikidata with a track's title, or a similar one that differs only in
+        punctuation, accents or “&” and “and”. Use one to reuse it instead of creating a duplicate,
+        or dismiss it.
       </p>
       {!reviews.length ? (
         <p className="msg muted">
@@ -214,7 +216,13 @@ function CandidateItem({
         <span className="chip warn">Description names {c.others.join(", ")}</span>
       )}
       <span className="chip" title={`Matched by ${m.reasons.join(", ")}`}>
-        {c.strong ? "Title + performer" : "Title only"}
+        {isSimilarOnly(m)
+          ? c.strong
+            ? "Similar title + performer"
+            : "Similar title only"
+          : c.strong
+            ? "Title + performer"
+            : "Title only"}
       </span>
       {c.used ? (
         <span className="match-actions done">

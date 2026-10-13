@@ -15,7 +15,8 @@ import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { type AuthEnv, requireUser } from "./auth/session.ts";
 import { rankDuplicates, titleReasons } from "./duplicates.ts";
 import { findMatches } from "./matches.ts";
-import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
+import { entityToRow, upsertRows } from "./mirror.ts";
+import { foldTitle, labelSearchKey, SIMILAR_TITLE, titleKey } from "../src/lib/titles.ts";
 import {
   describeItems,
   getEntities,
@@ -60,9 +61,13 @@ const isKind = (k: unknown): k is MusicKind => MUSIC_KINDS.includes(k as MusicKi
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 items.get("/search", async (c) => {
-  const key = labelSearchKey(c.req.query("q")?.trim());
+  const q = c.req.query("q")?.trim() ?? "";
+  const key = labelSearchKey(q);
   const kind = c.req.query("kind");
   if (!key) return c.json({ items: [] } satisfies SearchResponse);
+  // A short query keeps its punctuation, but the longer titles it starts are
+  // keyed folded, so match their start folded too ("#1" finds "#1 Crush").
+  const start = foldTitle(q) || key;
   const kindFilter = isKind(kind) ? eq(musicItems.kind, kind) : undefined;
   const exact = await db
     .select(columns)
@@ -74,7 +79,7 @@ items.get("/search", async (c) => {
       ? await db
           .select(columns)
           .from(musicItems)
-          .where(and(like(musicItems.labelSearch, `${escapeLike(key)}%`), kindFilter))
+          .where(and(like(musicItems.labelSearch, `${escapeLike(start)}%`), kindFilter))
           .limit(10)
       : [];
   const seen = new Set<number>();
@@ -112,10 +117,11 @@ items.post("/duplicates", async (c) => {
       .limit(50);
     for (const h of hits) add(h.qid, `same ${ID_PROPERTIES[toProperty(h.property)]}`);
   }
-  const key = labelSearchKey(typeof body.title === "string" ? body.title.trim() : "");
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  const key = labelSearchKey(title);
   if (key && kinds.length) {
     const hits = await db
-      .select({ qid: musicItems.qid })
+      .select({ qid: musicItems.qid, label: musicItems.label })
       .from(musicItems)
       .where(and(eq(musicItems.labelSearch, key), inArray(musicItems.kind, kinds)))
       .limit(30);
@@ -136,7 +142,12 @@ items.post("/duplicates", async (c) => {
       for (const l of links) credited.set(l.qid, [...(credited.get(l.qid) ?? []), toQid(l.target)]);
     }
     for (const h of hits)
-      for (const r of titleReasons(credited.get(h.qid) ?? [], artists) ?? []) add(h.qid, r);
+      for (const r of titleReasons(
+        credited.get(h.qid) ?? [],
+        artists,
+        h.label !== null && titleKey(h.label) === titleKey(title) ? "same title" : SIMILAR_TITLE,
+      ) ?? [])
+        add(h.qid, r);
   }
   if (reasons.size === 0) return c.json({ matches: [] } satisfies DuplicatesResponse);
   const rows = await db

@@ -1,9 +1,12 @@
 // Boot-time schema check: refuse to serve against a database with pending
 // migrations, comparing the rows in Drizzle's `__drizzle_migrations` with the
-// entries in db/migrations/meta/_journal.json.
+// entries in db/migrations/meta/_journal.json, or whose mirror title keys are
+// older than TITLE_KEY_VERSION (both are fixed by scripts/migrate.ts).
 import { readFile } from "node:fs/promises";
 import type { RowDataPacket } from "mysql2/promise";
 import { pool } from "./db.ts";
+import { storedTitleKeyVersion } from "./mirror.ts";
+import { TITLE_KEY_VERSION } from "../src/lib/titles.ts";
 
 const JOURNAL_URL = new URL("../db/migrations/meta/_journal.json", import.meta.url);
 
@@ -33,6 +36,14 @@ export async function preflight(): Promise<void> {
     console.error(
       `DB schema is behind: ${expected} migrations in db/migrations, ${applied} applied. ` +
         "Run `node scripts/migrate.ts` first.",
+    );
+    process.exit(1);
+  }
+  const keys = await storedTitleKeyVersion();
+  if (keys < TITLE_KEY_VERSION) {
+    console.error(
+      `Mirror title keys are version ${keys}, the code expects ${TITLE_KEY_VERSION}. ` +
+        "Run `node scripts/migrate.ts` to rebuild them.",
     );
     process.exit(1);
   }

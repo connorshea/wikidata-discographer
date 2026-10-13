@@ -103,11 +103,14 @@ everything but artists: about a million rows. The lists are in
   already on Wikidata, and warn about albums with the same title
 - suggest QIDs for the performers
 - suggest existing compositions, tracks and singles for each tracklist row
-  (`server/matches.ts`): items with the row's title (ignoring case and curly
-  quotes) that share one of its performers, or that are on the existing album.
-  A suggested track brings the composition it records (P2550) and its singles,
-  so reusing it doesn't give it a second composition. "Fill in unambiguous
-  matches" fills every empty field that has exactly one suggestion.
+  (`server/matches.ts`): items with the row's title that share one of its
+  performers, or that are on the existing album. Titles that differ only in
+  case, quote style, Unicode hyphens or spacing are the same title. Ones that
+  also differ in punctuation, accents or "&" and "and" are a similar title
+  (`src/lib/titles.ts`). A suggested track brings the composition it records
+  (P2550) and its singles, so reusing it doesn't give it a second composition.
+  "Fill in unambiguous matches" fills every empty field that has exactly one
+  suggestion, leaving out similar titles.
 
 Items a run creates, and existing items it adds statements to, are written to
 the mirror straight away. Anything else created since the last dump can be
@@ -184,6 +187,9 @@ toolforge webservice buildservice start --mount none
 ```
 
 The server refuses to start while migrations are pending (`server/preflight.ts`).
+The migrate job also rebuilds the mirror's stored title keys when
+`TITLE_KEY_VERSION` (`src/lib/titles.ts`) has been bumped, and the server won't
+start until it has.
 
 Load the mirror once by hand. The dump is visible only with `--mount all`:
 

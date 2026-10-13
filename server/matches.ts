@@ -1,7 +1,7 @@
 // Existing compositions, tracks and singles for a tracklist, from the mirror.
 //
-// A row's direct matches are items with the same title (`labelSearchKey`)
-// that also share one of the row's performers (as P175, or P86/P676), or that
+// A row's direct matches are items with the same or a similar title
+// (`labelSearchKey`, src/lib/titles.ts) that also share one of the row's performers (as P175, or P86/P676), or that
 // are on the existing album being added to, or that have no performer,
 // composer or lyricist at all (often an item made in a hurry that is this
 // one). Titles alone, on items credited to someone else, are too common
@@ -18,9 +18,9 @@ import { and, eq, exists, inArray, lte, notExists, or, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
 import { musicItems, musicLinks } from "../db/schema.ts";
-import { labelSearchKey } from "./mirror.ts";
+import { labelSearchKey, SIMILAR_TITLE, titleKey } from "../src/lib/titles.ts";
 import type { MusicKind } from "../src/lib/music.ts";
-import { NO_ARTIST } from "../src/lib/matches.ts";
+import { isSimilarOnly, NO_ARTIST } from "../src/lib/matches.ts";
 import type {
   Match,
   MatchesRequest,
@@ -54,6 +54,7 @@ function score(m: Match): number {
   if (m.reasons.includes("on this album")) n += 4;
   if (m.reasons.includes("same performer")) n += 2;
   if (m.reasons.includes(NO_ARTIST)) n -= 1;
+  if (isSimilarOnly(m)) n -= 1;
   return n;
 }
 
@@ -86,6 +87,10 @@ export function assembleMatches(
   for (const row of rows) {
     const key = labelSearchKey(row.title.trim());
     if (!key) continue;
+    const exact = titleKey(row.title);
+    // "same title", or "similar title" when the titles only match once folded.
+    const titleReason = (it: ItemFacts) =>
+      it.label !== null && titleKey(it.label) === exact ? "same title" : SIMILAR_TITLE;
     const performers = new Set(row.performers);
     const found: Record<Slot, Map<string, Match>> = {
       comp: new Map(),
@@ -98,7 +103,10 @@ export function assembleMatches(
       if (!it || !slot) return;
       const m = found[slot].get(qid);
       if (m) {
+        // Similar only while every way of reaching it is.
+        const similar = isSimilarOnly(m) && reasons.includes(SIMILAR_TITLE);
         for (const r of reasons) if (!m.reasons.includes(r)) m.reasons.push(r);
+        if (!similar) m.reasons = m.reasons.filter((r) => r !== SIMILAR_TITLE);
         return;
       }
       const base: Match = {
@@ -119,7 +127,7 @@ export function assembleMatches(
 
     for (const it of byTitle.get(key) ?? []) {
       if (!SLOTS[it.kind]) continue;
-      const reasons = ["same title"];
+      const reasons = [titleReason(it)];
       if (albumTracks.has(it.qid)) reasons.push("on this album");
       if (it.links.some((l) => l.property === "P175" && performers.has(l.target)))
         reasons.push("same performer");
@@ -134,14 +142,24 @@ export function assembleMatches(
         reasons.push(NO_ARTIST);
       if (reasons.length > 1) add(it.qid, reasons);
     }
+    // Items reached through a similar-title match are only similar too, so
+    // "Fill in unambiguous matches" leaves them alone.
+    const similarIf = (similar: boolean) => (similar ? [SIMILAR_TITLE] : []);
     // A single's track, when it has the row's title.
-    for (const single of [...found.single.keys()])
-      for (const t of targets(items.get(single)!, "P658"))
-        if (items.get(t)?.labelSearch === key) add(t, [`on single ${single}`]);
+    for (const [single, sm] of [...found.single])
+      for (const t of targets(items.get(single)!, "P658")) {
+        const track = items.get(t);
+        if (track?.labelSearch === key)
+          add(t, [
+            `on single ${single}`,
+            ...similarIf(isSimilarOnly(sm) || titleReason(track) === SIMILAR_TITLE),
+          ]);
+      }
     // Each track's composition and singles.
     for (const m of [...found.track.values()] as TrackMatch[]) {
-      if (m.composition) add(m.composition, [`recorded as ${m.qid}`]);
-      for (const s of m.singles) add(s, [`has ${m.qid} on it`]);
+      const similar = similarIf(isSimilarOnly(m));
+      if (m.composition) add(m.composition, [`recorded as ${m.qid}`, ...similar]);
+      for (const s of m.singles) add(s, [`has ${m.qid} on it`, ...similar]);
     }
 
     const ranked = (slot: Slot) =>

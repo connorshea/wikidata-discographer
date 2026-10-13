@@ -129,6 +129,43 @@ describe("fillUnambiguous with guesses", () => {
   });
 });
 
+describe("fillUnambiguous with similar titles", () => {
+  it("doesn't fill a match whose title is only similar, or one reached through it", () => {
+    const similar = <M extends Match>(m: M, ...more: string[]): M => ({
+      ...m,
+      reasons: ["similar title", ...more],
+    });
+    const disc = emptyDisc();
+    disc.single[1] = { date: "", qid: "" };
+    const rows = {
+      "0:1": rm({
+        track: [similar(track("Q10", "Q20"), "same performer")],
+        comp: [{ ...match("Q20"), reasons: ["recorded as Q10", "similar title"] }],
+        single: [similar(match("Q30"), "same performer")],
+      }),
+      "0:2": rm({ comp: [{ ...match("Q21"), reasons: ["same title", "same performer"] }] }),
+    };
+    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
+    expect(disc.track).toEqual({});
+    expect(disc.comp).toEqual({ 2: "Q21" });
+    expect(disc.single[1].qid).toBe("");
+  });
+
+  it("fills a same-title match that a similar title sits beside", () => {
+    const disc = emptyDisc();
+    const rows = {
+      "0:1": rm({
+        track: [
+          { ...track("Q10", null), reasons: ["same title", "same performer"] },
+          { ...track("Q11", null), reasons: ["similar title", "same performer"] },
+        ],
+      }),
+    };
+    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
+    expect(disc.track).toEqual({ 1: "Q10" });
+  });
+});
+
 describe("stillValid", () => {
   const row = (key: string, title: string, performers = ["Q1"]) => ({ key, title, performers });
   const answered = {
@@ -158,6 +195,8 @@ describe("isStrong", () => {
     expect(isStrong({ ...match("Q1"), reasons: ["same title", NO_ARTIST] })).toBe(false);
     expect(isStrong({ ...match("Q1"), reasons: ["same title", "same performer"] })).toBe(true);
     expect(isStrong({ ...match("Q1"), reasons: ["recorded as Q2"] })).toBe(true);
+    expect(isStrong({ ...match("Q1"), reasons: ["similar title"] })).toBe(false);
+    expect(isStrong({ ...match("Q1"), reasons: ["similar title", "same performer"] })).toBe(true);
   });
 });
 

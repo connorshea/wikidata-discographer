@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { entityToRow, labelSearchKey } from "./mirror.ts";
+import { entityToRow } from "./mirror.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
 const item = (id: string, rank: WikibaseStatement["rank"] = "normal"): WikibaseStatement =>
@@ -87,16 +87,5 @@ describe("entityToRow", () => {
 
   it("skips non-items", () => {
     expect(entityToRow({ id: "P31", claims: { P31: [item("Q482994")] } } as Entity)).toBeNull();
-  });
-});
-
-describe("labelSearchKey", () => {
-  it("lowercases and clips to the index length", () => {
-    expect(labelSearchKey("ABC")).toBe("abc");
-    expect(labelSearchKey("x".repeat(300))).toHaveLength(191);
-    expect(labelSearchKey(null)).toBeNull();
-  });
-  it("makes curly quotes straight", () => {
-    expect(labelSearchKey("Don’t Say “Hi”")).toBe(`don't say "hi"`);
   });
 });

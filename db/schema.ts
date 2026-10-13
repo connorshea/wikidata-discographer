@@ -46,7 +46,8 @@ export const musicItems = mysqlTable(
     qid: itemId("qid").primaryKey(),
     kind: varchar("kind", { length: 16 }).notNull(), // MusicKind (src/lib/music.ts)
     label: varchar("label", { length: 400 }), // en, else mul, else any
-    // Lowercased label, truncated to fit the index, for case-insensitive search.
+    // The label folded for search and matching (labelSearchKey, src/lib/titles.ts),
+    // truncated to fit the index.
     labelSearch: varchar("label_search", { length: 191 }),
     description: varchar("description", { length: 400 }),
     instanceOf: json<number[]>("instance_of").notNull(), // Q-numbers
@@ -93,6 +94,14 @@ export const musicLinks = mysqlTable(
     index("idx_music_links_target").on(t.target, t.property),
   ],
 );
+
+// Versions of derived mirror data, by name. "title_keys" is the
+// TITLE_KEY_VERSION (src/lib/titles.ts) that `label_search` was last rebuilt
+// with; scripts/migrate.ts rebuilds it when that's behind. A missing row is 0.
+export const mirrorState = mysqlTable("mirror_state", {
+  name: varchar("name", { length: 32 }).primaryKey(),
+  version: int("version").notNull(),
+});
 
 // ---------------------------------------------------------------------------
 // Users and sessions — Wikimedia OAuth 2.0 (server/auth/).
