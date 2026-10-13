@@ -535,7 +535,7 @@ function refsSummary(n: {
     n.spotify + n.appleMusic && "track IDs",
   ].filter(Boolean) as string[];
   if (!what.length) return "";
-  return ` The new tracks' ${joinList(what)} get a MusicBrainz reference, if that's on in Item settings.`;
+  return ` The imported ${joinList(what)} get a MusicBrainz reference, if that's on in Item settings.`;
 }
 
 /** What the import adds to the items the run creates, as a sentence. */
