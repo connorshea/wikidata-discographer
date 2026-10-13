@@ -499,6 +499,19 @@ const statedInMb = (
 });
 
 /**
+ * Whether `releaseGroup` has already been loaded into the form by the
+ * MusicBrainz import. The import leaves the release group in the album's IDs,
+ * but so does typing it into the new album's ID field, so it must also have
+ * filled in some track's identifiers.
+ */
+export function loadedReleaseGroup(state: State, releaseGroup: string) {
+  return (
+    normalizeAlbumId("musicbrainz", state.album.ids.musicbrainz) === releaseGroup &&
+    state.discs.some((d) => Object.keys(d.mb).length > 0)
+  );
+}
+
+/**
  * Whether a new album's detail gets a MusicBrainz reference: the setting is on, the
  * detail is still the value the import filled in, and the album still has the
  * imported release group.

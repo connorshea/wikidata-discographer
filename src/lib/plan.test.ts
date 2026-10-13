@@ -3,6 +3,7 @@ import {
   buildPlan,
   citesMb,
   citesMbDate,
+  loadedReleaseGroup,
   MAX_TERM_LENGTH,
   MAX_TRACKS,
   MAX_TRACKS_PER_DISC,
@@ -61,6 +62,44 @@ describe("parseDisc", () => {
     const rows = parseDisc("1. Song (Live) - A & B\n2. Two - C (1:02:03)", EMPTY.settings);
     expect(rows[0]).toMatchObject({ title: "Song (Live)", artists: ["A", "B"], seconds: null });
     expect(rows[1]).toMatchObject({ title: "Two", artists: ["C"], seconds: 3723 });
+  });
+});
+
+describe("loadedReleaseGroup", () => {
+  const RG = "be0d5442-eccd-4114-8bf6-4ae4f5f2f2c1";
+  const withRg = (musicbrainz: string, loaded: boolean) => {
+    const state = structuredClone(EMPTY);
+    state.album.ids.musicbrainz = musicbrainz;
+    state.discs = [emptyDisc()];
+    if (loaded)
+      state.discs[0].mb["1"] = {
+        title: "Get Busy Living",
+        recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c",
+        work: "",
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        source: { recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c", retrieved: "2026-10-12" },
+        length: 200,
+      };
+    return state;
+  };
+
+  it("is true once the import has loaded that release group", () => {
+    expect(loadedReleaseGroup(withRg(RG, true), RG)).toBe(true);
+    expect(
+      loadedReleaseGroup(withRg(`https://musicbrainz.org/release-group/${RG}`, true), RG),
+    ).toBe(true);
+  });
+
+  it("is false when the release group was only typed in for a new album", () => {
+    expect(loadedReleaseGroup(withRg(RG, false), RG)).toBe(false);
+  });
+
+  it("is false when another release group was loaded", () => {
+    expect(loadedReleaseGroup(withRg("0a1b2c3d-0000-4000-8000-000000000000", true), RG)).toBe(
+      false,
+    );
   });
 });
 
