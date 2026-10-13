@@ -48,6 +48,32 @@ app.route("/api/musicbrainz", musicbrainzRoutes);
 app.route("/api/submissions", submissionRoutes);
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
+// serveStatic sets no Cache-Control itself, and browsers then cache off
+// Last-Modified heuristically: a returning visitor could keep a stale
+// index.html whose hashed chunks no longer exist after a deploy (blank page
+// until a hard reload). So the shell always revalidates, the content-hashed
+// files under /assets are immutable, and the few unhashed files (the favicon)
+// get a short lifetime. Set after the fact on the response, since
+// serveStatic's onFound runs once its Response is already built and headers
+// set there are lost. The API block above has already answered /api/*
+// requests, so this middleware never sees them.
+/** The Cache-Control for a 200 at `path` with the given Content-Type. */
+export function cacheControlFor(path: string, contentType: string | null): string {
+  if (contentType?.startsWith("text/html")) return "no-cache";
+  if (path.startsWith("/assets/")) return "public, max-age=31536000, immutable";
+  return "public, max-age=3600";
+}
+
+app.use("/*", async (c, next) => {
+  await next();
+  if (c.res.status === 200) {
+    c.res.headers.set(
+      "Cache-Control",
+      cacheControlFor(c.req.path, c.res.headers.get("Content-Type")),
+    );
+  }
+});
+
 app.use("/*", serveStatic({ root: CLIENT_DIR }));
 const indexHtml = existsSync(INDEX_HTML) ? readFileSync(INDEX_HTML, "utf8") : null;
 app.notFound((c) =>
