@@ -61,30 +61,38 @@ export default function MusicBrainzImport({
     setInput("");
   };
 
-  const run = async (what: string, fn: () => Promise<void>) => {
+  // The latest request. The album's suggestion can start one while another
+  // is loading, and only the latest may change the form.
+  const latest = useRef(0);
+
+  const run = async (what: string, fn: (current: () => boolean) => Promise<void>) => {
+    const id = ++latest.current;
+    const current = () => latest.current === id;
     setError("");
     setLoaded(null);
     setBusy(true);
     try {
-      await fn();
+      await fn(current);
     } catch (err) {
-      setError(message(err, what));
+      if (current()) setError(message(err, what));
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   };
 
   const loadRelease = (id: string, album?: string) =>
-    run("release", async () => {
+    run("release", async (current) => {
       const query = album ? `?${new URLSearchParams({ album })}` : "";
       const { form } = await api<MusicBrainzResponse>(`/api/musicbrainz/release/${id}${query}`);
+      if (!current()) return;
       if (needsConfirm) setPending(form);
       else apply(form);
     });
 
   const loadGroup = (id: string, album?: string) =>
-    run("release group", async () => {
+    run("release group", async (current) => {
       const r = await api<MusicBrainzReleaseGroupResponse>(`/api/musicbrainz/release-group/${id}`);
+      if (!current()) return;
       setGroup({ ...r, picked: r.releases[0].id, album });
     });
 
@@ -102,7 +110,7 @@ export default function MusicBrainzImport({
       setInput(`https://musicbrainz.org/release-group/${mbid}`);
       setGroup(null);
       focusPick.current = true;
-      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      sectionRef.current?.scrollIntoView({ block: "start" });
       void loadGroup(mbid, album);
     },
   }));
