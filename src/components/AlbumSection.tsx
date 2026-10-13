@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { ALBUM_FORMS, ALBUM_TYPES, QID, citesMb, splitArtists } from "../lib/plan.ts";
+import {
+  ALBUM_FORMS,
+  ALBUM_TYPES,
+  QID,
+  citesMb,
+  loadedReleaseGroup,
+  splitArtists,
+} from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
@@ -73,8 +80,8 @@ export default function AlbumSection({
               twice, so the run is disabled. Use an album without a tracklist.
             </p>
           )}
-          {/* Not once it's loaded: the import keeps its release group in the form. */}
-          {releaseGroup && A.ids.musicbrainz !== releaseGroup && (
+          {/* Not once it's loaded, but still if it was only typed in for a new album. */}
+          {releaseGroup && !loadedReleaseGroup(state, releaseGroup) && (
             <div className="msg summary row">
               <span>
                 This album is on{" "}
