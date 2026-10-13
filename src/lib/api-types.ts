@@ -70,6 +70,8 @@ export interface AddItemResponse {
 /** GET /api/items/:qid/tracklist: the item's tracks (P658) on Wikidata now. */
 export interface TracklistResponse {
   tracks: string[];
+  /** Its MusicBrainz release group IDs (P436), lowercased. */
+  releaseGroups: string[];
 }
 
 export interface EditLogEntry {

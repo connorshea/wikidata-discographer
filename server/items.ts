@@ -4,6 +4,7 @@
 //   POST /api/items/duplicates               possible duplicates of a new album
 //   POST /api/items/matches                  existing items for a tracklist (server/matches.ts)
 //   POST /api/items/describe                 labels, descriptions and classes, live from Wikidata
+//   GET  /api/items/:qid/tracklist           an album's tracklist and release groups, live from Wikidata
 //   POST /api/items/:qid                     fetch an item from Wikidata into the mirror
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -18,10 +19,11 @@ import { entityToRow, labelSearchKey, upsertRows } from "./mirror.ts";
 import {
   describeItems,
   getEntities,
-  getStatementItems,
+  getStatementValues,
   WikidataEditError,
 } from "./wikidata-client.ts";
 import { WD_LANG_CODES } from "../src/lib/languages.ts";
+import { MBID_RE } from "../src/lib/musicbrainz.ts";
 import { ID_PROPERTIES, MUSIC_KINDS, type MusicKind } from "../src/lib/music.ts";
 import type {
   AddItemResponse,
@@ -177,8 +179,11 @@ items.get("/:qid/tracklist", async (c) => {
   if (!/^Q\d+$/.test(qid)) return c.json({ error: "Not a QID" }, 400);
   try {
     // Asked live, not from the mirror: a tracklist added since the last dump counts.
-    const tracks = await getStatementItems(qid, "P658", { retries: 0 });
-    return c.json({ tracks } satisfies TracklistResponse);
+    const { P658, P436 } = await getStatementValues(qid, ["P658", "P436"], { retries: 0 });
+    return c.json({
+      tracks: P658,
+      releaseGroups: [...new Set(P436.filter((v) => MBID_RE.test(v)).map((v) => v.toLowerCase()))],
+    } satisfies TracklistResponse);
   } catch (err) {
     if (err instanceof WikidataEditError) return c.json({ error: err.message }, 502);
     throw err;

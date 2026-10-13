@@ -404,10 +404,37 @@ export async function getStatementItems(
   const err = apiError(res);
   if (err) throw new WikidataEditError(err.code, err.text);
   const claims = (res.body.claims as Record<string, WikibaseStatement[]> | undefined) ?? {};
-  return (claims[property] ?? [])
+  return statementValues(claims[property]);
+}
+
+/**
+ * The values of one item's statements for each of `properties`, from one
+ * `wbgetclaims` for all of its statements. Deprecated ones are left out.
+ */
+export async function getStatementValues<P extends string>(
+  qid: string,
+  properties: readonly P[],
+  { retries }: { retries?: number } = {},
+): Promise<Record<P, string[]>> {
+  const res = await read({ action: "wbgetclaims", entity: qid }, { retries });
+  const err = apiError(res);
+  if (err) throw new WikidataEditError(err.code, err.text);
+  const claims = (res.body.claims as Record<string, WikibaseStatement[]> | undefined) ?? {};
+  return Object.fromEntries(properties.map((p) => [p, statementValues(claims[p])])) as Record<
+    P,
+    string[]
+  >;
+}
+
+/** Item values as their QIDs and strings (identifiers) as they are. Others are left out. */
+function statementValues(statements: WikibaseStatement[] = []): string[] {
+  return statements
     .filter((s) => s.rank !== "deprecated")
-    .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
-    .filter((id): id is string => id !== undefined);
+    .map((s) => {
+      const v = s.mainsnak.datavalue?.value;
+      return typeof v === "string" ? v : (v as { id?: string } | undefined)?.id;
+    })
+    .filter((v): v is string => v !== undefined);
 }
 
 export interface Contribution {
