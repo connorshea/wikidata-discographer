@@ -290,6 +290,12 @@ describe("buildPlan", () => {
       expect(Object.values(refsOf(off)).every((r) => r === undefined)).toBe(true);
     });
 
+    it("lose the reference once the album's release group is changed", () => {
+      const state = imported();
+      state.album.ids.musicbrainz = "f5093c06-23e3-404f-aeaa-40f72885ee3a";
+      expect(Object.values(refsOf(state)).every((r) => r === undefined)).toBe(true);
+    });
+
     it("keep the reference on a date with spaces around it", () => {
       const state = imported();
       state.settings.date = " 2026-09-18 ";

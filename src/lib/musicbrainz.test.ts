@@ -382,6 +382,8 @@ describe("releaseToForm", () => {
   it("doesn't mention album references for an album already on Wikidata", () => {
     const form = releaseToForm(RELEASE, { ...NONE, albumQid: "Q140316456" });
     expect(form.summary).toMatch(/The imported durations, ISRCs and track IDs get/);
+    // So switching to a new album can't add the references the summary left out.
+    expect(form.album.mb).toBeNull();
   });
 
   it("reads the Discogs master ID from the release group, not the release", () => {

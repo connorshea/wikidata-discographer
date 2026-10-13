@@ -498,9 +498,23 @@ const statedInMb = (
   ],
 });
 
+/**
+ * Whether an album detail is still the value the import filled in, and the album
+ * still has the imported release group, so a MusicBrainz reference can cite it.
+ */
+export function citesMb(album: AlbumState, cited: MbCited | null | undefined, value: string) {
+  return (
+    !!album.mb &&
+    !!cited &&
+    cited.value === value &&
+    album.ids.musicbrainz.trim() === album.mb.releaseGroup
+  );
+}
+
 /** A MusicBrainz reference for an album detail, while it's still the value the import filled in. */
-function albumMbRef(mb: AlbumMb | null, cited: MbCited | null | undefined, value: string) {
-  if (!mb || !cited || cited.value !== value) return {};
+function albumMbRef(album: AlbumState, cited: MbCited | null | undefined, value: string) {
+  const mb = album.mb;
+  if (!mb || !cited || !citesMb(album, cited, value)) return {};
   return cited.from === "releaseGroup"
     ? statedInMb("P436", mb.releaseGroup, mb.retrieved)
     : statedInMb("P5813", mb.release, mb.retrieved);
@@ -639,7 +653,7 @@ export function buildPlan(state: State): Plan {
       else
         albumIds.push({
           ...claim(f.property, { type: "string", value: v }),
-          ...(S.mbRefs ? albumMbRef(A.mb, A.mb?.ids[f.key], v) : {}),
+          ...(S.mbRefs ? albumMbRef(A, A.mb?.ids[f.key], v) : {}),
         });
     }
   }
@@ -750,7 +764,7 @@ export function buildPlan(state: State): Plan {
       ? [
           {
             ...claim("P577", { type: "time", ...date.val }),
-            ...(S.mbRefs ? albumMbRef(A.mb, A.mb?.date, S.date.trim()) : {}),
+            ...(S.mbRefs ? albumMbRef(A, A.mb?.date, S.date.trim()) : {}),
           },
         ]
       : [];

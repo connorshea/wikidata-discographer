@@ -1,4 +1,5 @@
 import {
+  citesMb,
   isCustomLabelLang,
   isCustomLang,
   LABEL_LANGS,
@@ -122,7 +123,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
           </span>
           {S.mbRefs &&
             state.album.mode === "create" &&
-            state.album.mb?.date?.value === S.date.trim() && (
+            citesMb(state.album, state.album.mb?.date, S.date.trim()) && (
               <span className="sub">
                 From MusicBrainz, so it gets a MusicBrainz reference while it stays the same
               </span>
