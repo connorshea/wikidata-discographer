@@ -18,6 +18,7 @@ import {
 import type { Plan, State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type {
+  RecreateConflict,
   SubmissionInfo,
   SubmissionListResponse,
   SubmissionRequest,
@@ -33,6 +34,7 @@ import { useStorageEvent } from "./use-storage-event.ts";
 const POLL_MS = 2000;
 
 type UnknownRun = UnknownRunConflict["unknownRun"];
+type Recreate = RecreateConflict["recreate"];
 
 /** Poll a run until it ends, calling `onRun` with each answer. Returns a cleanup. */
 function watchRun(
@@ -104,6 +106,12 @@ export default function RunSection({
   const [starting, setStarting] = useState(false);
   // The last run ended "unknown": what the server wants done before another.
   const [unknownRun, setUnknownRun] = useState<UnknownRun | null>(null);
+  // The run would create items the last run already made, e.g. it was run
+  // from another browser: what the server wants done before it goes on.
+  const [recreate, setRecreate] = useState<Recreate | null>(null);
+  // What the user has confirmed so far for this start, so confirming one
+  // conflict doesn't take back another.
+  const confirmed = useRef<Omit<SubmissionRequest, "state">>({});
 
   const followOwnRun = useCallback((o: OwnRun | null) => {
     ownRunRef.current = o;
@@ -178,11 +186,13 @@ export default function RunSection({
   }, [fit, run, stale, update]);
   // A finished run of this form has nothing left to make.
   const finished = run?.status === "done" && fit === "same";
-  const start = (confirmUnknown?: number) => {
+  const start = (confirm?: Omit<SubmissionRequest, "state">) => {
     setStarting(true);
     setError(null);
     setUnknownRun(null);
-    const body: SubmissionRequest = { state, confirmUnknown };
+    setRecreate(null);
+    confirmed.current = confirm ? { ...confirmed.current, ...confirm } : {};
+    const body: SubmissionRequest = { state, ...confirmed.current };
     api<{ id: number }>("/api/submissions", { method: "POST", body })
       .then(({ id }) => {
         followOwnRun({ run: id, form: formId });
@@ -190,8 +200,12 @@ export default function RunSection({
         setRunId(id);
       })
       .catch((e: unknown) => {
-        const conflict = e instanceof FetchError ? (e.body as Partial<UnknownRunConflict>) : null;
+        const conflict =
+          e instanceof FetchError
+            ? (e.body as Partial<UnknownRunConflict & RecreateConflict>)
+            : null;
         if (conflict?.unknownRun) setUnknownRun(conflict.unknownRun);
+        else if (conflict?.recreate) setRecreate(conflict.recreate);
         else setError(e instanceof FetchError ? e.message : "Couldn't start the run.");
       })
       .finally(() => setStarting(false));
@@ -274,7 +288,24 @@ export default function RunSection({
             update((s) => applyCreated(s, [found]));
             setUnknownRun(null);
           }}
-          onConfirm={() => start(unknownRun.id)}
+          onConfirm={() => start({ confirmUnknown: unknownRun.id })}
+        />
+      )}
+      {recreate && (
+        <RecreateGuard
+          recreate={recreate}
+          disabled={starting}
+          onUse={() => {
+            const found = recreate.created.map((c) => ({
+              op: "create" as const,
+              ok: true,
+              key: c.key,
+              qid: c.qid,
+            }));
+            update((s) => applyCreated(s, found));
+            setRecreate(null);
+          }}
+          onConfirm={() => start({ confirmRecreate: recreate.id })}
         />
       )}
       {run && <RunProgress run={run} />}
@@ -441,6 +472,50 @@ function UnknownRunGuard({
       <div className="row">
         <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
           I checked and it wasn't created. Run anyway
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Shown when the run would create items the user's last run already created. */
+function RecreateGuard({
+  recreate,
+  disabled,
+  onUse,
+  onConfirm,
+}: {
+  recreate: Recreate;
+  disabled: boolean;
+  onUse: () => void;
+  onConfirm: () => void;
+}) {
+  const { wikiBaseUrl } = useAuth();
+  const n = recreate.created.length;
+  return (
+    <div className="msg warn">
+      <p>
+        Your{" "}
+        <a href={recreate.editGroupUrl} target="_blank" rel="noreferrer">
+          last run
+        </a>{" "}
+        already created {n === 1 ? "this item" : `these ${n} items`} for this album, maybe from
+        another browser or device. Use {n === 1 ? "it" : "them"} in the form so{" "}
+        {n === 1 ? "it isn't" : "they aren't"} created twice, then start the run again.
+      </p>
+      <ul>
+        {recreate.created.map((c) => (
+          <li key={c.key}>
+            {c.what} <WikiLink base={wikiBaseUrl} qid={c.qid} />
+          </li>
+        ))}
+      </ul>
+      <div className="row">
+        <button type="button" onClick={onUse}>
+          Use {n === 1 ? "it" : "them"} in the form
+        </button>
+        <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
+          Create {n === 1 ? "it" : "them"} again anyway
         </button>
       </div>
     </div>

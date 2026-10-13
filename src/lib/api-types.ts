@@ -112,6 +112,24 @@ export interface SubmissionRequest {
   state: unknown;
   /** The id of the user's "unknown" run, once they've checked its item wasn't created. */
   confirmUnknown?: number;
+  /** The id of the user's last run, once they've said to create its items again. */
+  confirmRecreate?: number;
+}
+
+/**
+ * The 409 from POST /api/submissions when the run would create items for the
+ * same album that the user's last run already created, e.g. a form run again
+ * from another browser, which never got that run's QIDs.
+ */
+export interface RecreateConflict {
+  error: string;
+  recreate: {
+    /** The last run. */
+    id: number;
+    editGroupUrl: string;
+    /** What it created that this run would create again, by plan key, to write back with `applyCreated`. */
+    created: { key: string; qid: string; what: string }[];
+  };
 }
 
 /**
