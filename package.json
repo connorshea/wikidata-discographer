@@ -14,6 +14,7 @@
     "prepare": "vp config",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.ts",
+    "wait-idle": "node scripts/wait-idle.ts",
     "job:import-dump": "node jobs/import-dump.ts",
     "job:prune-sessions": "node jobs/prune-sessions.ts"
   },
