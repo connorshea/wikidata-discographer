@@ -719,6 +719,29 @@ th .info {
   flex-wrap: wrap;
   padding: 3px 0;
 }
+/* Performers: a narrow QID column, the rest for what it points at. */
+table.performers th.qid,
+table.performers td.qid {
+  width: 16ch;
+}
+table.performers td.qid input {
+  width: 100%;
+}
+table.performers .matches {
+  margin: 0;
+}
+table.performers .matches li {
+  padding: 1px 0;
+}
+table.performers .item {
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+table.performers th .count {
+  font-weight: 400;
+}
 .matches .muted,
 .muted {
   color: var(--muted);
