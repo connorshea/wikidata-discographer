@@ -379,6 +379,14 @@ describe("releaseToForm", () => {
     expect(releaseToForm(r, NONE).album.mb?.date).toBeNull();
   });
 
+  it("doesn't promise a reference on a date the form can't read", () => {
+    const r = release();
+    r["release-group"]["first-release-date"] = "2026-02-30";
+    const form = releaseToForm(r, NONE);
+    expect(form.album.mb?.date).toBeNull();
+    expect(form.summary).toMatch(/The imported album IDs, durations, ISRCs and track IDs get/);
+  });
+
   it("doesn't mention album references for an album already on Wikidata", () => {
     const form = releaseToForm(RELEASE, { ...NONE, albumQid: "Q140316456" });
     expect(form.summary).toMatch(/The imported durations, ISRCs and track IDs get/);
@@ -526,6 +534,16 @@ describe("applyMbForm", () => {
 });
 
 describe("normalizeAlbumId", () => {
+  it("reads a MusicBrainz release group ID in lowercase", () => {
+    const id = "b012a117-afa3-4ea3-879f-eeb61b974b0a";
+    for (const raw of [
+      id.toUpperCase(),
+      ` ${id} `,
+      `https://musicbrainz.org/release-group/${id.toUpperCase()}`,
+    ])
+      expect(normalizeAlbumId("musicbrainz", raw)).toBe(id);
+  });
+
   it("reads a Discogs master ID from a pasted URL", () => {
     for (const url of [
       "https://www.discogs.com/master/4348311-Carly-Rae-Jepsen-Day-And-Night",

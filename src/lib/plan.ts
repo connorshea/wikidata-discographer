@@ -11,7 +11,7 @@
 // "comp:0:3", "track:0:3", "single:0:3" — disc index and track number), and
 // the server swaps in the new QIDs as it goes.
 import { WD_LANG_CODES } from "./languages.ts";
-import { ALBUM_ID_FIELDS, type AlbumIdKey, type MusicKind } from "./music.ts";
+import { ALBUM_ID_FIELDS, type AlbumIdKey, type MusicKind, normalizeAlbumId } from "./music.ts";
 
 // ---------------------------------------------------------------------------
 // Form state
@@ -511,7 +511,7 @@ export function citesMb(state: State, cited: MbCited | null | undefined, value: 
     !!A.mb &&
     !!cited &&
     cited.value === value &&
-    A.ids.musicbrainz.trim() === A.mb.releaseGroup
+    normalizeAlbumId("musicbrainz", A.ids.musicbrainz) === A.mb.releaseGroup
   );
 }
 

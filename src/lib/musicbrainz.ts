@@ -5,7 +5,14 @@
 // The tracklist belongs to a release, not a release group, which can have
 // many releases with different tracks. A pasted release group lists its
 // releases (`releaseChoices`) for the user to pick one, best guess first.
-import { ALBUM_FORMS, ALBUM_TYPES, NO_LINGUISTIC_CONTENT, PARTS, splitArtists } from "./plan.ts";
+import {
+  ALBUM_FORMS,
+  ALBUM_TYPES,
+  NO_LINGUISTIC_CONTENT,
+  PARTS,
+  parseDate,
+  splitArtists,
+} from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, State } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
@@ -490,11 +497,14 @@ export function releaseToForm(
     }
   }
   const date = rg["first-release-date"] || release.date || "";
+  // A date the form can't read gets no publication date, so no reference either.
+  const parsedDate = parseDate(date);
+  const citesDate = parsedDate.ok && !!parsedDate.val;
   const albumMb: AlbumMb = {
     releaseGroup: rg.id,
     release: release.id,
     retrieved,
-    date: date
+    date: citesDate
       ? { value: date, from: rg["first-release-date"] ? "releaseGroup" : "release" }
       : null,
     ids: citedIds,
@@ -528,7 +538,7 @@ export function releaseToForm(
     refsSummary({
       ...toAdd,
       // Only a new album gets the date and identifiers.
-      date: !albumQid && !!date,
+      date: !albumQid && citesDate,
       albumIds: albumQid ? 0 : linkedIds.length,
     });
 

@@ -110,7 +110,7 @@ export const ALBUM_ID_FIELDS = [
     property: "P436",
     label: "MusicBrainz release group ID",
     pattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    fromUrl: /musicbrainz\.org\/release-group\/([0-9a-f-]{36})/,
+    fromUrl: /musicbrainz\.org\/release-group\/([0-9a-f-]{36})/i,
   },
   {
     key: "appleMusic",
@@ -135,5 +135,7 @@ export type AlbumIdKey = (typeof ALBUM_ID_FIELDS)[number]["key"];
 export function normalizeAlbumId(key: AlbumIdKey, raw: string): string {
   const field = ALBUM_ID_FIELDS.find((f) => f.key === key)!;
   const m = field.fromUrl.exec(raw);
-  return m ? m[1] : raw.trim();
+  const id = m ? m[1] : raw.trim();
+  // MusicBrainz IDs are written in lowercase, so one typed in uppercase is the same ID.
+  return key === "musicbrainz" ? id.toLowerCase() : id;
 }

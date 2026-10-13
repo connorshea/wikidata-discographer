@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   buildPlan,
+  citesMb,
   citesMbDate,
   MAX_TERM_LENGTH,
   MAX_TRACKS,
@@ -295,6 +296,15 @@ describe("buildPlan", () => {
       const state = imported();
       state.album.ids.musicbrainz = "f5093c06-23e3-404f-aeaa-40f72885ee3a";
       expect(Object.values(refsOf(state)).every((r) => r === undefined)).toBe(true);
+    });
+
+    it("keep the reference with the same release group written another way", () => {
+      const state = imported();
+      const spotify = state.album.mb!.ids.spotify;
+      for (const rg of [RG.toUpperCase(), `https://musicbrainz.org/release-group/${RG}`]) {
+        state.album.ids.musicbrainz = rg;
+        expect(citesMb(state, spotify, "4aawyAB9vmqN3uQ7FjRGTy")).toBe(true);
+      }
     });
 
     it("say the date gets a reference only when it does", () => {

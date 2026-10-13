@@ -44,6 +44,8 @@ describe("coerceState", () => {
         appleMusic: { value: "1820000000", from: "elsewhere" },
         discogs: "4348311",
         nope: { value: "1", from: "release" },
+        // The release group ID never cites itself.
+        musicbrainz: { value: "b012a117-afa3-4ea3-879f-eeb61b974b0a", from: "releaseGroup" },
       },
     };
     expect(coerceState({ album: { mb } }).album.mb).toEqual({

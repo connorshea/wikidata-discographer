@@ -122,6 +122,8 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
   if (!releaseGroup || !release || !retrieved) return null;
   const ids: AlbumMb["ids"] = {};
   for (const f of ALBUM_ID_FIELDS) {
+    // The release group ID is what the others are cited to, so it never cites itself.
+    if (f.key === "musicbrainz") continue;
     const cited = isObj(v.ids) ? coerceCited(v.ids[f.key]) : null;
     if (cited) ids[f.key] = cited;
   }

@@ -159,9 +159,9 @@ export default function AlbumSection({
                   }
                 />
                 <span className="sub">
-                  {citesMb(state, A.mb?.ids[f.key], A.ids[f.key].trim())
-                    ? "From MusicBrainz, so it gets a MusicBrainz reference while it stays the same"
-                    : "Optional. ID or URL, checked for duplicates"}
+                  Optional. ID or URL, checked for duplicates.
+                  {citesMb(state, A.mb?.ids[f.key], A.ids[f.key].trim()) &&
+                    " From MusicBrainz, so it gets a MusicBrainz reference while it stays the same."}
                 </span>
                 <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
               </label>
