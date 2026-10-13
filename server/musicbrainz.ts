@@ -1,7 +1,8 @@
 // Loads a MusicBrainz release into the form:
 //
 //   GET /api/musicbrainz/release/:mbid        the form values for a release
-//       ?album=Q…                            the album it's for, if the user already picked one
+//       ?album=Q…&releaseGroup=<mbid>        the album it's for, if the user already picked one,
+//                                            and that album's release group
 //   GET /api/musicbrainz/release-group/:mbid  its releases, to pick one
 //
 // The browser can't ask MusicBrainz itself (the CSP and the Toolforge terms
@@ -190,10 +191,14 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
 
 /**
  * The release's MusicBrainz IDs, looked up in the mirror. `album` is the
- * existing album the user is loading it for, which wins over the mirror's:
- * it was found live, so it counts even if it's newer than the last dump.
+ * existing album the user is loading a release group's release for, which
+ * wins over the mirror's when the release is in that group: it was found
+ * live, so it counts even if it's newer than the last dump.
  */
-export async function lookupRelease(release: MbRelease, album?: string): Promise<MbLookups> {
+export async function lookupRelease(
+  release: MbRelease,
+  album?: { qid: string; releaseGroup: string },
+): Promise<MbLookups> {
   const ids = releaseIds(release);
   const [albums, artists, recordings, works, spotify, appleMusic] = await Promise.all([
     lookup("P436", [ids.releaseGroup], ["album", "ep"]),
@@ -207,7 +212,7 @@ export async function lookupRelease(release: MbRelease, album?: string): Promise
   // only right when that's where the edits go.
   const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
   const albumQid =
-    album ??
+    (album?.releaseGroup === ids.releaseGroup ? album.qid : undefined) ??
     albums.unique[ids.releaseGroup] ??
     (onWikidata ? wikidataLink(release["release-group"].relations) : undefined);
   return {
@@ -246,10 +251,14 @@ musicbrainzRoutes.get("/release/:mbid", async (c) => {
     const { error, status } = mbError(err);
     return c.json({ error }, status);
   }
-  const album = c.req.query("album")?.toUpperCase();
+  const qid = c.req.query("album")?.toUpperCase();
+  const releaseGroup = c.req.query("releaseGroup")?.toLowerCase();
   const form = releaseToForm(
     release,
-    await lookupRelease(release, album && /^Q\d+$/.test(album) ? album : undefined),
+    await lookupRelease(
+      release,
+      qid && /^Q\d+$/.test(qid) && releaseGroup ? { qid, releaseGroup } : undefined,
+    ),
   );
   return c.json({ form } satisfies MusicBrainzResponse);
 });
