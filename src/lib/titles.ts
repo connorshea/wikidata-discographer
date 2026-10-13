@@ -6,8 +6,14 @@
 // spacing. Two titles with the same `titleKey` are the "same title".
 // `labelSearchKey` folds further, for finding "similar title" items: `&` and
 // "and", punctuation, dashes and accents. It's the key stored in the mirror's
-// `label_search` column, so changing it means re-keying the mirror
-// (jobs/rekey-titles.ts).
+// `label_search` column, so changing it means bumping TITLE_KEY_VERSION.
+
+/**
+ * The version of `labelSearchKey`. Bump it whenever a key could change:
+ * scripts/migrate.ts then rebuilds the mirror's stored keys, and the server
+ * won't start until it has.
+ */
+export const TITLE_KEY_VERSION = 1; // 1: folded punctuation, accents and "&"
 
 /** The length of the indexed `label_search` column. */
 export const LABEL_SEARCH_LENGTH = 191;

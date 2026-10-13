@@ -55,7 +55,6 @@ pnpm db:generate        # generate a migration from db/schema.ts
 pnpm db:migrate         # apply pending migrations
 pnpm job:import-dump    # refresh the music mirror from the Wikidata JSON dump
 pnpm job:prune-sessions # delete expired login sessions
-pnpm job:rekey-titles   # rebuild the mirror's title keys after src/lib/titles.ts changes
 
 vp check                # format, lint and type-check
 vp test                 # run the tests
@@ -188,6 +187,9 @@ toolforge webservice buildservice start --mount none
 ```
 
 The server refuses to start while migrations are pending (`server/preflight.ts`).
+The migrate job also rebuilds the mirror's stored title keys when
+`TITLE_KEY_VERSION` (`src/lib/titles.ts`) has been bumped, and the server won't
+start until it has.
 
 Load the mirror once by hand. The dump is visible only with `--mount all`:
 
@@ -195,14 +197,6 @@ Load the mirror once by hand. The dump is visible only with `--mount all`:
 toolforge jobs run import-dump --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
   --command "node --max-old-space-size=384 jobs/import-dump.ts" \
   --mount all --mem 1Gi --cpu 2 --emails onfailure
-```
-
-After a deploy that changes how titles are folded (`src/lib/titles.ts`),
-rebuild the stored title keys, since old keys won't match new ones until then:
-
-```sh
-toolforge jobs run rekey-titles --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
-  --command "node jobs/rekey-titles.ts" --emails onfailure
 ```
 
 Then load the weekly schedule. Rerun this whenever `jobs.yaml` changes, but not

@@ -105,10 +105,16 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     map[n] = qid;
     filled++;
   };
-  for (const [key, m] of Object.entries(rows)) {
+  for (const [key, all] of Object.entries(rows)) {
     const [d, num] = key.split(":");
     if (Number(d) !== di) continue;
     const n = Number(num);
+    // A similar title is never filled, so it doesn't make a same-title match ambiguous.
+    const m = {
+      track: all.track.filter((t) => !isSimilarOnly(t)),
+      comp: all.comp.filter((c) => !isSimilarOnly(c)),
+      single: all.single.filter((sg) => !isSimilarOnly(sg)),
+    };
     if (!disc.track[n] && m.track.length === 1 && !isGuess(m.track[0])) {
       const t = m.track[0];
       if (!t.composition || !disc.comp[n] || disc.comp[n] === t.composition) {

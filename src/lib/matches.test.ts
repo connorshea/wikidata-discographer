@@ -150,6 +150,20 @@ describe("fillUnambiguous with similar titles", () => {
     expect(disc.comp).toEqual({ 2: "Q21" });
     expect(disc.single[1].qid).toBe("");
   });
+
+  it("fills a same-title match that a similar title sits beside", () => {
+    const disc = emptyDisc();
+    const rows = {
+      "0:1": rm({
+        track: [
+          { ...track("Q10", null), reasons: ["same title", "same performer"] },
+          { ...track("Q11", null), reasons: ["similar title", "same performer"] },
+        ],
+      }),
+    };
+    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
+    expect(disc.track).toEqual({ 1: "Q10" });
+  });
 });
 
 describe("stillValid", () => {

@@ -95,6 +95,14 @@ export const musicLinks = mysqlTable(
   ],
 );
 
+// Versions of derived mirror data, by name. "title_keys" is the
+// TITLE_KEY_VERSION (src/lib/titles.ts) that `label_search` was last rebuilt
+// with; scripts/migrate.ts rebuilds it when that's behind. A missing row is 0.
+export const mirrorState = mysqlTable("mirror_state", {
+  name: varchar("name", { length: 32 }).primaryKey(),
+  version: int("version").notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // Users and sessions — Wikimedia OAuth 2.0 (server/auth/).
 // ---------------------------------------------------------------------------

@@ -2,12 +2,12 @@
 // `music_external_ids` and `music_links`): converting an entity to a row, and writing rows. Used
 // by the weekly dump import, by runs (each created item is added straight
 // away), and by "add an item" for things created since the last dump.
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db, retryOnLockConflict } from "./db.ts";
 import { propertyNumber, qidNumber } from "./ids.ts";
-import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
+import { mirrorState, musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { ID_PROPERTIES, kindOf, LINK_PROPERTIES, type MusicKind } from "../src/lib/music.ts";
-import { labelSearchKey } from "../src/lib/titles.ts";
+import { labelSearchKey, TITLE_KEY_VERSION } from "../src/lib/titles.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
 /**
@@ -16,7 +16,7 @@ import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
  * contents change (a new column, a class added or removed): rows from an
  * older version are then re-read from the next dump.
  */
-export const MIRROR_VERSION = 2; // 2: music_links, and curly quotes in label_search
+export const MIRROR_VERSION = 3; // 2: music_links, and curly quotes in label_search. 3: folded label_search
 
 export interface MirrorRow {
   qid: string;
@@ -184,7 +184,7 @@ const REKEY_BATCH = 2000;
  * write in between) is left as that write keyed it. Returns how many rows were
  * read and how many re-keyed.
  */
-export async function rekeyLabels(
+async function rekeyLabels(
   opts: { onBatch?: (read: number, changed: number) => void } = {},
 ): Promise<{ read: number; changed: number }> {
   let after = 0;
@@ -227,4 +227,30 @@ export async function rekeyLabels(
     opts.onBatch?.(read, changed);
   }
   return { read, changed };
+}
+
+/** The TITLE_KEY_VERSION the mirror's `label_search` keys were built with (0 if never recorded). */
+export async function storedTitleKeyVersion(): Promise<number> {
+  const [row] = await db
+    .select({ version: mirrorState.version })
+    .from(mirrorState)
+    .where(eq(mirrorState.name, "title_keys"));
+  return row?.version ?? 0;
+}
+
+/**
+ * Rebuild the mirror's title keys if they were built with an older
+ * TITLE_KEY_VERSION, then record the current one. Returns how many rows were
+ * re-keyed, or null if they were current.
+ */
+export async function rekeyIfBehind(
+  opts: Parameters<typeof rekeyLabels>[0] = {},
+): Promise<{ read: number; changed: number } | null> {
+  if ((await storedTitleKeyVersion()) >= TITLE_KEY_VERSION) return null;
+  const result = await rekeyLabels(opts);
+  await db
+    .insert(mirrorState)
+    .values({ name: "title_keys", version: TITLE_KEY_VERSION })
+    .onDuplicateKeyUpdate({ set: { version: TITLE_KEY_VERSION } });
+  return result;
 }
