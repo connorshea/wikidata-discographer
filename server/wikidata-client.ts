@@ -11,6 +11,7 @@
 // marked `ambiguous` (server/recover.ts looks for an item a create may have
 // made). Reads (`read`) also retry timeouts and 5xx: repeating one changes nothing.
 import { wikidataApiUrl } from "./auth/config.ts";
+import { markBlocked } from "./auth/session.ts";
 import { deleteTokens, getAccessToken, TokenError } from "./auth/tokens.ts";
 import { userAgent } from "./auth/user-agent.ts";
 import { type EditPacer, editPacer } from "./edit-pace.ts";
@@ -121,6 +122,9 @@ async function fail(user: EditUser, err: { code: string; text: string }): Promis
       "Wikidata no longer accepts this app's authorization for your account; log in again.",
     );
   }
+  // Wikidata is the authority on blocks: one placed since login shows up here
+  // first. Record it and log the account out everywhere (see markBlocked).
+  if (err.code === "blocked") await markBlocked(user.id);
   throw new WikidataEditError(err.code, err.text || err.code);
 }
 

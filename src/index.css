@@ -538,8 +538,7 @@ button.ghost.quiet {
   margin: 6px 0;
 }
 .msg.err,
-.field-err,
-.badge.err {
+.field-err {
   color: var(--err);
 }
 .msg.warn {

@@ -6,7 +6,6 @@ import type { State } from "./plan.ts";
 export interface AuthUserInfo {
   id: number;
   username: string;
-  blocked: boolean;
   /** Whether a run would be refused for the account's age or edit count. */
   eligibility: EditEligibility;
 }
