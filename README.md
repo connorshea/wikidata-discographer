@@ -222,12 +222,21 @@ toolforge build start https://github.com/connorshea/wikidata-discographer
 # only if the build adds a migration, and before the restart:
 toolforge jobs run migrate --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
   --command "node scripts/migrate.ts" --wait
-toolforge webservice restart
+toolforge jobs run wait-idle --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
+  --command "node scripts/wait-idle.ts" --wait \
+  && toolforge webservice restart
 ```
 
 Run the migration first. The new code may query tables or columns that only
 exist after it. Scheduled jobs pick up the new image on their next run. A
 running `import-dump` keeps the old one until it finishes.
+
+Runs make their edits inside the web process, so a restart cuts off any that
+are going. They end "interrupted" and the user has to start them again.
+`wait-idle` waits up to 15 minutes for them to finish (pass a number of minutes
+to change that) and fails if some are still going, which skips the restart.
+`toolforge jobs logs wait-idle` lists them. A run started between the check and
+the restart is still cut off.
 
 ## License
 
