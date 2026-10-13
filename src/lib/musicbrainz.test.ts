@@ -195,7 +195,7 @@ describe("releaseToForm", () => {
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
     );
     expect(form.summary).toMatch(
-      /The new tracks' durations, ISRCs and track IDs get a MusicBrainz reference, if that's on in Item settings\.$/,
+      /The imported durations, ISRCs and track IDs get a MusicBrainz reference, if that's on in Item settings\.$/,
     );
   });
 
