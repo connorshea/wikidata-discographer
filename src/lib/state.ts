@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
   albumDesc: "{year} {type} by {artists}",
   compPerformer: true,
   duration: true,
-  straight: false,
+  straight: true,
   splitArtists: true,
   extendExisting: true,
   mbIds: true,
