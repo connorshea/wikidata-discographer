@@ -61,8 +61,8 @@ export default function DiscsSection({
         length is optional. Fill in a composition or track QID to reuse an existing item instead of
         creating one. Items already on Wikidata with a track's title are listed under Possible
         matches. A row marked MB has identifiers from a MusicBrainz import, kept while its title
-        stays the same. Its duration gets a MusicBrainz reference while its length stays the same
-        too.
+        stays the same. Its ISRCs and track IDs get a MusicBrainz reference, and so does its
+        duration while its length stays the same too.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
@@ -418,9 +418,15 @@ function MbChip({
           ...ids.appleMusic.map((v) => `Apple Music track ID (P10110) ${v}`),
         ]
       : []),
+    S.mbIds &&
+      S.mbRefs &&
+      ids.source &&
+      ids.isrcs.length + ids.spotify.length + ids.appleMusic.length > 0 &&
+      `A reference for the ISRCs and track IDs, stated in MusicBrainz`,
     S.duration &&
       S.mbRefs &&
-      ids.length?.seconds === row.seconds &&
+      ids.source &&
+      ids.length === row.seconds &&
       `A reference for the duration, stated in MusicBrainz`,
   ].filter(Boolean);
   if (!lines.length) return null;

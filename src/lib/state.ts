@@ -70,6 +70,10 @@ const matching = (v: unknown, pattern: RegExp) =>
 
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
+  // Forms saved before identifiers had references kept the source with the length.
+  const legacy = isObj(ids.length) ? ids.length : null;
+  const source = coerceSource(ids.source ?? legacy);
+  const seconds = legacy ? legacy.seconds : ids.length;
   return {
     title: str(ids.title),
     recording: matching(ids.recording, MBID_PATTERN),
@@ -77,23 +81,20 @@ function coerceMbIds(ids: Obj): MbRowIds {
     isrcs: strList(ids.isrcs, ISRC_PATTERN),
     spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
     appleMusic: strList(ids.appleMusic, APPLE_MUSIC_TRACK_PATTERN),
-    length: coerceLength(ids.length),
+    source,
+    length: Number.isInteger(seconds) && (seconds as number) >= 0 ? (seconds as number) : null,
   };
 }
 
-/** An imported length and its source, or null unless all of it is well-formed. */
-function coerceLength(v: unknown): MbRowIds["length"] {
+/** The recording and day an import came from, or null unless both are well-formed. */
+function coerceSource(v: unknown): MbRowIds["source"] {
   if (!isObj(v)) return null;
-  const { seconds, recording, retrieved } = v;
+  const { recording, retrieved } = v;
   const day = typeof retrieved === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(retrieved) : null;
   const real =
     day && new Date(Date.UTC(+day[1], +day[2] - 1, +day[3])).toISOString().startsWith(day[0]);
-  return Number.isInteger(seconds) &&
-    (seconds as number) >= 0 &&
-    typeof recording === "string" &&
-    MBID_PATTERN.test(recording) &&
-    real
-    ? { seconds: seconds as number, recording, retrieved: day[0] }
+  return typeof recording === "string" && MBID_PATTERN.test(recording) && real
+    ? { recording, retrieved: day[0] }
     : null;
 }
 

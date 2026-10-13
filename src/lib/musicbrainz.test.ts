@@ -194,6 +194,9 @@ describe("releaseToForm", () => {
     expect(form.summary).toContain(
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
     );
+    expect(form.summary).toMatch(
+      /The new tracks' durations, ISRCs and track IDs get a MusicBrainz reference, if that's on in Item settings\.$/,
+    );
   });
 
   it("keeps each track's identifiers with its title", () => {
@@ -205,22 +208,21 @@ describe("releaseToForm", () => {
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
       appleMusic: [],
-      length: {
-        seconds: 252,
-        recording: "263340e1-2f03-4b31-b404-a06a8acda193",
-        retrieved: "2026-10-04",
-      },
+      source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
+      length: 252,
     });
     expect(Object.keys(first.mb)).toEqual(["1", "2", "3"]);
   });
 
-  it("keeps the length's source even when an item already has the recording ID", () => {
+  it("keeps the source even when an item already has the recording ID", () => {
     const t = RELEASE.media[0].tracks![0];
     const form = releaseToForm(RELEASE, { ...NONE, taken: [t.recording.id] });
-    expect(form.discs[0].mb["1"].length?.recording).toBe(t.recording.id);
+    expect(form.discs[0].mb["1"].source?.recording).toBe(t.recording.id);
     const noLength = structuredClone(RELEASE);
     noLength.media[0].tracks![0].length = null;
-    expect(releaseToForm(noLength, NONE).discs[0].mb["1"].length).toBeNull();
+    const ids = releaseToForm(noLength, NONE).discs[0].mb["1"];
+    expect(ids.length).toBeNull();
+    expect(ids.source?.recording).toBe(t.recording.id);
   });
 
   it("leaves out identifiers an item already has", () => {

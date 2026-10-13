@@ -35,7 +35,7 @@ export interface Settings {
   extendExisting: boolean;
   /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
   mbIds: boolean;
-  /** Add a MusicBrainz reference to durations a MusicBrainz import filled in. */
+  /** Add a MusicBrainz reference to durations and identifiers a MusicBrainz import filled in. */
   mbRefs: boolean;
 }
 
@@ -72,11 +72,15 @@ export interface MbRowIds {
   /** P10110 Apple Music track IDs, for the track. */
   appleMusic: string[];
   /**
-   * The length imported, in seconds, with the recording and day it came from,
-   * for the duration's reference. Only used while the row has that length.
-   * Null when MusicBrainz has no length for the track.
+   * The recording and day the import came from, for the references on the
+   * duration and identifiers. Kept even when an item already has the recording ID.
    */
-  length: { seconds: number; recording: string; retrieved: string } | null;
+  source: { recording: string; retrieved: string } | null;
+  /**
+   * The length imported, in seconds. The duration only gets a reference while
+   * the row has this length. Null when MusicBrainz has no length for the track.
+   */
+  length: number | null;
 }
 
 export interface Disc {
@@ -694,32 +698,39 @@ export function buildPlan(state: State): Plan {
     descriptions: desc ? { [lang]: desc } : {},
   });
   const str = (property: string, value: string) => claim(property, { type: "string", value });
-  const trackIds = (mb: MbRowIds | null) =>
-    mb && S.mbIds
-      ? [
-          ...(mb.recording ? [str("P4404", mb.recording)] : []),
-          ...mb.isrcs.map((v) => str("P1243", v)),
-          ...mb.spotify.map((v) => str("P2207", v)),
-          ...mb.appleMusic.map((v) => str("P10110", v)),
-        ]
-      : [];
-  // Stated in MusicBrainz, for a duration still as the import filled it in.
-  const durationRefs = (it: PlanItem): Pick<Claim, "references"> => {
-    const l = it.mb?.length;
-    if (!S.mbRefs || !l || l.seconds !== it.r.seconds) return {};
-    return {
-      references: [
-        [
-          { property: "P248", value: item(MUSICBRAINZ) },
-          { property: "P4404", value: { type: "string", value: l.recording } },
-          {
-            property: "P813",
-            value: { type: "time", time: `+${l.retrieved}T00:00:00Z`, precision: 11 },
-          },
-        ],
-      ],
-    };
+  // Stated in MusicBrainz, with the recording and the day of the import.
+  const mbRef = (mb: MbRowIds | null): Pick<Claim, "references"> =>
+    S.mbRefs && mb?.source
+      ? {
+          references: [
+            [
+              { property: "P248", value: item(MUSICBRAINZ) },
+              { property: "P4404", value: { type: "string", value: mb.source.recording } },
+              {
+                property: "P813",
+                value: {
+                  type: "time",
+                  time: `+${mb.source.retrieved}T00:00:00Z`,
+                  precision: 11,
+                },
+              },
+            ],
+          ],
+        }
+      : {};
+  // The recording ID itself goes unreferenced: citing MusicBrainz for its own ID adds nothing.
+  const trackIds = (mb: MbRowIds | null) => {
+    if (!mb || !S.mbIds) return [];
+    const cited = (property: string, value: string) => ({ ...str(property, value), ...mbRef(mb) });
+    return [
+      ...(mb.recording ? [str("P4404", mb.recording)] : []),
+      ...mb.isrcs.map((v) => cited("P1243", v)),
+      ...mb.spotify.map((v) => cited("P2207", v)),
+      ...mb.appleMusic.map((v) => cited("P10110", v)),
+    ];
   };
+  // Only for a duration still as the import filled it in.
+  const durationRefs = (it: PlanItem) => (it.mb?.length === it.r.seconds ? mbRef(it.mb) : {});
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;

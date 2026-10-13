@@ -99,12 +99,19 @@ describe("buildPlan", () => {
       isrcs: ["USUM72604367"],
       spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
       appleMusic: ["1820000002"],
-      length: {
-        seconds: 177,
-        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
-        retrieved: "2026-10-04",
-      },
+      source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
+      length: 177,
     };
+    const MB_REF = [
+      [
+        { property: "P248", value: { type: "item", id: "Q14005" } },
+        { property: "P4404", value: { type: "string", value: ids.recording } },
+        {
+          property: "P813",
+          value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
+        },
+      ],
+    ];
     const withIds = () => {
       const state = structuredClone(EXAMPLE);
       state.discs[0].mb["2"] = ids;
@@ -144,16 +151,7 @@ describe("buildPlan", () => {
         const op = buildPlan(state).ops.find((o) => o.op === "create" && o.key === "track:0:2");
         return op?.op === "create" ? op.claims.find((c) => c.property === "P2047") : undefined;
       };
-      expect(durationOf(withIds())?.references).toEqual([
-        [
-          { property: "P248", value: { type: "item", id: "Q14005" } },
-          { property: "P4404", value: { type: "string", value: ids.recording } },
-          {
-            property: "P813",
-            value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
-          },
-        ],
-      ]);
+      expect(durationOf(withIds())?.references).toEqual(MB_REF);
       // Even with identifiers off, but not once the length is edited or references are off.
       const noIds = withIds();
       noIds.settings.mbIds = false;
@@ -165,6 +163,58 @@ describe("buildPlan", () => {
       const off = withIds();
       off.settings.mbRefs = false;
       expect(durationOf(off)?.references).toBeUndefined();
+    });
+
+    describe("give each ISRC and track ID on the new track a MusicBrainz reference", () => {
+      const refsOf = (state: typeof EXAMPLE, key = "track:0:2") => {
+        const op = buildPlan(state).ops.find((o) => o.op === "create" && o.key === key);
+        return Object.fromEntries(
+          (op?.op === "create" ? op.claims : [])
+            .filter((c) => ["P4404", "P435", "P1243", "P2207", "P10110"].includes(c.property))
+            .map((c) => [c.property, c.references]),
+        );
+      };
+      const only = (key: "isrcs" | "spotify" | "appleMusic") => {
+        const state = withIds();
+        state.discs[0].mb["2"] = {
+          ...ids,
+          isrcs: [],
+          spotify: [],
+          appleMusic: [],
+          [key]: ids[key],
+        };
+        return state;
+      };
+
+      it.each([
+        ["isrcs", "P1243"],
+        ["spotify", "P2207"],
+        ["appleMusic", "P10110"],
+      ] as const)("%s (%s), with the setting on", (key, property) => {
+        expect(refsOf(only(key))).toEqual({ P4404: undefined, [property]: MB_REF });
+      });
+
+      it.each([
+        ["isrcs", "P1243"],
+        ["spotify", "P2207"],
+        ["appleMusic", "P10110"],
+      ] as const)("%s (%s), not with the setting off", (key, property) => {
+        const state = only(key);
+        state.settings.mbRefs = false;
+        expect(refsOf(state)).toEqual({ P4404: undefined, [property]: undefined });
+      });
+
+      it("but not the recording or work ID", () => {
+        expect(refsOf(withIds()).P4404).toBeUndefined();
+        expect(refsOf(withIds(), "comp:0:2")).toEqual({ P435: undefined });
+      });
+
+      it("even once the length is edited, or when an item already has the recording ID", () => {
+        const state = withIds();
+        state.discs[0].text = state.discs[0].text.replace("(02:57)", "(02:58)");
+        state.discs[0].mb["2"] = { ...ids, recording: "" };
+        expect(refsOf(state).P1243).toEqual(MB_REF);
+      });
     });
 
     it("match the title ignoring case and curly quotes", () => {
