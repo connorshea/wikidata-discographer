@@ -689,8 +689,10 @@ export function buildPlan(state: State): Plan {
   const pubDate = date.ok && date.val ? [claim("P577", { type: "time", ...date.val })] : [];
   const workLang = p407ok ? [claim("P407", item(p407))] : [];
   const title = (t: string) => claim("P1476", { type: "monolingual", text: t, language: lang });
-  const labelled = (t: string, desc: string) => ({
-    labels: { [lang]: t },
+  // A track's title is a name that reads the same in any language, so it also goes under
+  // `mul` and shows in every language without a label for each.
+  const labelled = (t: string, desc: string, mul = false) => ({
+    labels: mul && lang !== "mul" ? { [lang]: t, mul: t } : { [lang]: t },
     descriptions: desc ? { [lang]: desc } : {},
   });
   const str = (property: string, value: string) => claim(property, { type: "string", value });
@@ -804,7 +806,7 @@ export function buildPlan(state: State): Plan {
       op: "create",
       key: trackKey(it),
       kind: "track",
-      ...labelled(it.r.title, fillDesc(S.trackDesc, year, it.r.artists)),
+      ...labelled(it.r.title, fillDesc(S.trackDesc, year, it.r.artists), true),
       claims: [
         claim("P31", item(S.trackType)),
         title(it.r.title),

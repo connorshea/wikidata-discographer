@@ -44,7 +44,10 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   P813: "retrieved",
 };
 
-const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map(LABEL_LANGS);
+const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map([
+  ...LABEL_LANGS,
+  ["mul", "multiple languages"],
+]);
 
 /** A value as shown: `qid` links it to Wikidata; `isNew` marks an item this run creates. */
 export interface PreviewValue {

@@ -51,6 +51,11 @@ describe("previewPlan", () => {
     const track = groups.find((g) => g.id === "track")!.edits[0];
     expect(track.heading).toBe("Create track “After All”");
     expect(track.terms[0]).toEqual({ kind: "Label", language: "English", text: "After All" });
+    expect(track.terms[1]).toEqual({
+      kind: "Label",
+      language: "multiple languages",
+      text: "After All",
+    });
     const show = (e: typeof track) =>
       e.statements.map((s) => [s.property.label, s.value.text, s.value.isNew ?? false]);
     expect(show(track)).toEqual(

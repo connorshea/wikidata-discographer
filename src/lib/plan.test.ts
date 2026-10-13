@@ -222,6 +222,29 @@ describe("buildPlan", () => {
     });
   });
 
+  it("labels a new track under mul as well, but not a composition or the album", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    const { ops } = buildPlan(state);
+    const labelLangs = (key: string) => {
+      const o = find(ops, key);
+      return o?.op === "create" && Object.keys(o.labels);
+    };
+    const track = find(ops, "track:0:2");
+    expect(track?.op === "create" && track.labels).toEqual({
+      en: "Habits of Creatures",
+      mul: "Habits of Creatures",
+    });
+    expect(labelLangs("comp:0:2")).toEqual(["en"]);
+    expect(labelLangs("album")).toEqual(["en"]);
+  });
+
+  it("labels a new track once when the run's language is mul", () => {
+    const state = { ...structuredClone(EXAMPLE), settings: { ...EXAMPLE.settings, lang: "mul" } };
+    const track = find(buildPlan(state).ops, "track:0:2");
+    expect(track?.op === "create" && track.labels).toEqual({ mul: "Habits of Creatures" });
+  });
+
   it("gives compositions a language but not tracks, and neither a publication date", () => {
     const { ops } = buildPlan(EXAMPLE);
     const has = (key: string, property: string) => {
