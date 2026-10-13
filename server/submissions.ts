@@ -40,7 +40,7 @@ import {
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
-import { buildPlan, describeOp, type Op } from "../src/lib/plan.ts";
+import { buildPlan, describeOp, type Op, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { ALBUM_ID_FIELDS, ID_PROPERTIES } from "../src/lib/music.ts";
 import type {
@@ -49,8 +49,10 @@ import type {
   SubmissionListResponse,
   SubmissionRequest,
   SubmissionStatus,
+  RecreateConflict,
   UnknownRunConflict,
 } from "../src/lib/api-types.ts";
+import { recreatedItems } from "./recreate.ts";
 
 /** Appended to every edit summary so the edits are traceable to this tool. */
 const TOOL_CREDIT = "Wikidata Discographer";
@@ -134,6 +136,21 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
         } satisfies UnknownRunConflict,
         409,
       );
+  }
+
+  // A form run again from another browser or device never got the last run's
+  // QIDs, so it would create its items twice. Go on only once the form uses
+  // them, or the user says to create them again.
+  const recreate = await checkRecreate(user, plan.ops, state);
+  if (recreate && body?.confirmRecreate !== recreate.id) {
+    const n = recreate.created.length;
+    return c.json(
+      {
+        error: `Your last run already created ${n === 1 ? recreate.created[0].what : `${n} of the items this run would create`}. Use ${n === 1 ? "it" : "them"} in the form so ${n === 1 ? "it isn't" : "they aren't"} created twice.`,
+        recreate,
+      } satisfies RecreateConflict,
+      409,
+    );
   }
 
   // An identifier given for a new album that the mirror already has is a
@@ -442,6 +459,42 @@ async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unkn
     editGroupUrl: editGroupUrl(last.editGroup),
     qid,
   };
+}
+
+/** The items the user's last run created that `ops` would create again, if any. */
+async function checkRecreate(
+  user: AuthUser,
+  ops: readonly Op[],
+  state: State,
+): Promise<RecreateConflict["recreate"] | null> {
+  const [last] = await db
+    .select()
+    .from(submissions)
+    .where(eq(submissions.userId, user.id))
+    .orderBy(desc(submissions.id))
+    .limit(1);
+  if (!last || last.status === "running") return null;
+  const edits = await db
+    .select({ key: wikidataEdits.key, qid: wikidataEdits.qid })
+    .from(wikidataEdits)
+    .where(
+      and(
+        eq(wikidataEdits.submissionId, last.id),
+        eq(wikidataEdits.op, "create"),
+        eq(wikidataEdits.ok, true),
+      ),
+    )
+    .orderBy(wikidataEdits.id);
+  const created = recreatedItems(ops, state, {
+    input: last.input,
+    albumQid: last.albumQid == null ? null : toQid(last.albumQid),
+    created: edits.flatMap((e) =>
+      e.key != null && e.qid != null ? [{ key: e.key, qid: toQid(e.qid) }] : [],
+    ),
+  });
+  return created.length > 0
+    ? { id: last.id, editGroupUrl: editGroupUrl(last.editGroup), created }
+    : null;
 }
 
 /** Execute the plan's operations in order as `user`. Stops at the first failure. */
