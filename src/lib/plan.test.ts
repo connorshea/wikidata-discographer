@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   buildPlan,
+  citesMb,
+  citesMbDate,
   MAX_TERM_LENGTH,
   MAX_TRACKS,
   MAX_TRACKS_PER_DISC,
@@ -221,6 +223,103 @@ describe("buildPlan", () => {
       const state = withIds();
       state.discs[0].mb["2"] = { ...ids, title: "habits  of creatures" };
       expect(claimsOf(state, "track:0:2")).toHaveLength(4);
+    });
+  });
+
+  describe("album details from a MusicBrainz import", () => {
+    const RG = "b012a117-afa3-4ea3-879f-eeb61b974b0a";
+    const REL = "6d42c8a3-69c3-458c-9f18-f8a503780607";
+    const refTo = (property: string, value: string) => [
+      [
+        { property: "P248", value: { type: "item", id: "Q14005" } },
+        { property, value: { type: "string", value } },
+        {
+          property: "P813",
+          value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
+        },
+      ],
+    ];
+    const imported = () => {
+      const state = structuredClone(EXAMPLE);
+      state.album = {
+        ...state.album,
+        mode: "create",
+        ids: {
+          spotify: "4aawyAB9vmqN3uQ7FjRGTy",
+          musicbrainz: RG,
+          appleMusic: "",
+          discogs: "4348311",
+        },
+        mb: {
+          releaseGroup: RG,
+          release: REL,
+          retrieved: "2026-10-04",
+          date: { value: "2026-09-18", from: "releaseGroup" },
+          ids: {
+            spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
+            discogs: { value: "4348311", from: "releaseGroup" },
+          },
+        },
+      };
+      return state;
+    };
+    const refsOf = (state: typeof EXAMPLE) => {
+      const op = find(buildPlan(state).ops, "album");
+      return Object.fromEntries(
+        (op?.op === "create" ? op.claims : [])
+          .filter((c) => ["P577", "P436", "P2205", "P1954"].includes(c.property))
+          .map((c) => [c.property, c.references]),
+      );
+    };
+
+    it("cite the release group or release each came from", () => {
+      expect(refsOf(imported())).toEqual({
+        P577: refTo("P436", RG),
+        P436: undefined,
+        P2205: refTo("P5813", REL),
+        P1954: refTo("P436", RG),
+      });
+    });
+
+    it("lose the reference once edited, or when the setting is off", () => {
+      const edited = imported();
+      edited.settings.date = "2026-09";
+      edited.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTz";
+      expect(refsOf(edited)).toMatchObject({ P577: undefined, P2205: undefined });
+      expect(refsOf(edited).P1954).toEqual(refTo("P436", RG));
+      const off = imported();
+      off.settings.mbRefs = false;
+      expect(Object.values(refsOf(off)).every((r) => r === undefined)).toBe(true);
+    });
+
+    it("lose the reference once the album's release group is changed", () => {
+      const state = imported();
+      state.album.ids.musicbrainz = "f5093c06-23e3-404f-aeaa-40f72885ee3a";
+      expect(Object.values(refsOf(state)).every((r) => r === undefined)).toBe(true);
+    });
+
+    it("keep the reference with the same release group written another way", () => {
+      const state = imported();
+      const spotify = state.album.mb!.ids.spotify;
+      for (const rg of [RG.toUpperCase(), `https://musicbrainz.org/release-group/${RG}`]) {
+        state.album.ids.musicbrainz = rg;
+        expect(citesMb(state, spotify, "4aawyAB9vmqN3uQ7FjRGTy")).toBe(true);
+      }
+    });
+
+    it("say the date gets a reference only when it does", () => {
+      const state = imported();
+      expect(citesMbDate(state)).toBe(true);
+      state.album.mb!.date = { value: "2026-02-30", from: "releaseGroup" };
+      state.settings.date = "2026-02-30";
+      expect(citesMbDate(state)).toBe(false);
+      expect(refsOf(state).P577).toBeUndefined();
+    });
+
+    it("keep the reference on a date with spaces around it", () => {
+      const state = imported();
+      state.settings.date = " 2026-09-18 ";
+      expect(refsOf(state).P577).toEqual(refTo("P436", RG));
     });
   });
 

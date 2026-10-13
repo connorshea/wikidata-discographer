@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { ALBUM_FORMS, ALBUM_TYPES, QID, splitArtists } from "../lib/plan.ts";
+import { ALBUM_FORMS, ALBUM_TYPES, QID, citesMb, splitArtists } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
@@ -189,7 +189,11 @@ export default function AlbumSection({
                     )
                   }
                 />
-                <span className="sub">Optional. ID or URL, checked for duplicates</span>
+                <span className="sub">
+                  Optional. ID or URL, checked for duplicates.
+                  {citesMb(state, A.mb?.ids[f.key], A.ids[f.key].trim()) &&
+                    " From MusicBrainz, so it gets a MusicBrainz reference while it stays the same."}
+                </span>
                 <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
               </label>
             ))}

@@ -33,6 +33,33 @@ describe("coerceState", () => {
     expect(s.discs[0].single).toEqual({ "1": { date: "2020", qid: "" } });
   });
 
+  it("keeps an album's import source only when it's well-formed", () => {
+    const mb = {
+      releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+      release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+      retrieved: "2026-10-04",
+      date: { value: "2026-09-18", from: "releaseGroup" },
+      ids: {
+        spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
+        appleMusic: { value: "1820000000", from: "elsewhere" },
+        discogs: "4348311",
+        nope: { value: "1", from: "release" },
+        // The release group ID never cites itself.
+        musicbrainz: { value: "b012a117-afa3-4ea3-879f-eeb61b974b0a", from: "releaseGroup" },
+      },
+    };
+    expect(coerceState({ album: { mb } }).album.mb).toEqual({
+      ...mb,
+      ids: { spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" } },
+    });
+    expect(coerceState({ album: { mb: { ...mb, date: { value: "" } } } }).album.mb?.date).toBe(
+      null,
+    );
+    for (const bad of [{ release: "x" }, { releaseGroup: 5 }, { retrieved: "2026-02-30" }])
+      expect(coerceState({ album: { mb: { ...mb, ...bad } } }).album.mb).toBeNull();
+    expect(coerceState({ album: {} }).album.mb).toBeNull();
+  });
+
   it("keeps only well-formed imported identifiers", () => {
     const s = coerceState({
       discs: [

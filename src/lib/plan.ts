@@ -11,7 +11,7 @@
 // "comp:0:3", "track:0:3", "single:0:3" — disc index and track number), and
 // the server swaps in the new QIDs as it goes.
 import { WD_LANG_CODES } from "./languages.ts";
-import { ALBUM_ID_FIELDS, type AlbumIdKey, type MusicKind } from "./music.ts";
+import { ALBUM_ID_FIELDS, type AlbumIdKey, type MusicKind, normalizeAlbumId } from "./music.ts";
 
 // ---------------------------------------------------------------------------
 // Form state
@@ -35,7 +35,10 @@ export interface Settings {
   extendExisting: boolean;
   /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
   mbIds: boolean;
-  /** Add a MusicBrainz reference to durations and identifiers a MusicBrainz import filled in. */
+  /**
+   * Add a MusicBrainz reference to what a MusicBrainz import filled in: track durations and
+   * identifiers, and the album's publication date and identifiers.
+   */
   mbRefs: boolean;
 }
 
@@ -47,6 +50,31 @@ export interface AlbumState {
   type: string;
   form: string;
   ids: Record<AlbumIdKey, string>;
+  /** Where a MusicBrainz import's album details came from. Null without an import. */
+  mb: AlbumMb | null;
+}
+
+/** A value a MusicBrainz import filled in, and the MusicBrainz entity it was read from. */
+export interface MbCited {
+  value: string;
+  from: "releaseGroup" | "release";
+}
+
+/**
+ * The release group and release an import read the album from, for the references on its
+ * publication date and identifiers. Each only gets a reference while it's still as imported.
+ */
+export interface AlbumMb {
+  /** P436 MusicBrainz release group ID. */
+  releaseGroup: string;
+  /** P5813 MusicBrainz release ID. */
+  release: string;
+  /** The day of the import, YYYY-MM-DD. */
+  retrieved: string;
+  /** The publication date imported. Null when MusicBrainz has none. */
+  date: MbCited | null;
+  /** The album identifiers imported from MusicBrainz's links, by field. */
+  ids: Partial<Record<AlbumIdKey, MbCited>>;
 }
 
 export interface SingleState {
@@ -455,6 +483,53 @@ const ref = (key: string): Value => ({ type: "item", ref: key });
 const claim = (property: string, value: Value, qualifiers?: Snak[]): Claim =>
   qualifiers?.length ? { property, value, qualifiers } : { property, value };
 
+/** Stated in MusicBrainz, with the MusicBrainz ID it was read from and the day of the import. */
+const statedInMb = (
+  property: string,
+  id: string,
+  retrieved: string,
+): Pick<Claim, "references"> => ({
+  references: [
+    [
+      { property: "P248", value: item(MUSICBRAINZ) },
+      { property, value: { type: "string", value: id } },
+      { property: "P813", value: { type: "time", time: `+${retrieved}T00:00:00Z`, precision: 11 } },
+    ],
+  ],
+});
+
+/**
+ * Whether a new album's detail gets a MusicBrainz reference: the setting is on, the
+ * detail is still the value the import filled in, and the album still has the
+ * imported release group.
+ */
+export function citesMb(state: State, cited: MbCited | null | undefined, value: string) {
+  const A = state.album;
+  return (
+    state.settings.mbRefs &&
+    A.mode === "create" &&
+    !!A.mb &&
+    !!cited &&
+    cited.value === value &&
+    normalizeAlbumId("musicbrainz", A.ids.musicbrainz) === A.mb.releaseGroup
+  );
+}
+
+/** Whether the new album's publication date gets a MusicBrainz reference. */
+export function citesMbDate(state: State) {
+  const date = parseDate(state.settings.date);
+  return date.ok && !!date.val && citesMb(state, state.album.mb?.date, state.settings.date.trim());
+}
+
+/** A MusicBrainz reference for a new album's detail, when `citesMb` allows one. */
+function albumMbRef(state: State, cited: MbCited | null | undefined, value: string) {
+  const mb = state.album.mb;
+  if (!mb || !cited || !citesMb(state, cited, value)) return {};
+  return cited.from === "releaseGroup"
+    ? statedInMb("P436", mb.releaseGroup, mb.retrieved)
+    : statedInMb("P5813", mb.release, mb.retrieved);
+}
+
 // ---------------------------------------------------------------------------
 // The plan
 // ---------------------------------------------------------------------------
@@ -585,7 +660,11 @@ export function buildPlan(state: State): Plan {
       if (!v) continue;
       if (!f.pattern.test(v))
         fieldErrs[`albumId-${f.key}`] = `That doesn't look like a ${f.label}.`;
-      else albumIds.push(claim(f.property, { type: "string", value: v }));
+      else
+        albumIds.push({
+          ...claim(f.property, { type: "string", value: v }),
+          ...albumMbRef(state, A.mb?.ids[f.key], v),
+        });
     }
   }
   const albumErr =
@@ -690,7 +769,15 @@ export function buildPlan(state: State): Plan {
   /* operations */
   const ops: Op[] = [];
   const year = date.ok ? date.year : "";
-  const pubDate = date.ok && date.val ? [claim("P577", { type: "time", ...date.val })] : [];
+  const pubDate =
+    date.ok && date.val
+      ? [
+          {
+            ...claim("P577", { type: "time", ...date.val }),
+            ...albumMbRef(state, A.mb?.date, S.date.trim()),
+          },
+        ]
+      : [];
   const workLang = p407ok ? [claim("P407", item(p407))] : [];
   const title = (t: string) => claim("P1476", { type: "monolingual", text: t, language: lang });
   // A track's title is a name that reads the same in any language, so it also goes under
@@ -702,24 +789,7 @@ export function buildPlan(state: State): Plan {
   const str = (property: string, value: string) => claim(property, { type: "string", value });
   // Stated in MusicBrainz, with the recording and the day of the import.
   const mbRef = (mb: MbRowIds | null): Pick<Claim, "references"> =>
-    S.mbRefs && mb?.source
-      ? {
-          references: [
-            [
-              { property: "P248", value: item(MUSICBRAINZ) },
-              { property: "P4404", value: { type: "string", value: mb.source.recording } },
-              {
-                property: "P813",
-                value: {
-                  type: "time",
-                  time: `+${mb.source.retrieved}T00:00:00Z`,
-                  precision: 11,
-                },
-              },
-            ],
-          ],
-        }
-      : {};
+    S.mbRefs && mb?.source ? statedInMb("P4404", mb.source.recording, mb.source.retrieved) : {};
   // The recording ID itself goes unreferenced: citing MusicBrainz for its own ID adds nothing.
   const trackIds = (mb: MbRowIds | null) => {
     if (!mb || !S.mbIds) return [];
