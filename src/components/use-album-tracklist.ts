@@ -11,12 +11,24 @@ export interface AlbumTracklist {
   tracks: string[];
 }
 
+export interface ExistingAlbum {
+  /** Set if the album already has a tracklist. */
+  tracklist: AlbumTracklist | null;
+  /**
+   * Its MusicBrainz release group (P436), to suggest loading it, if it has
+   * exactly one and no tracklist.
+   */
+  releaseGroup: string | null;
+}
+
+const UNKNOWN: ExistingAlbum = { tracklist: null, releaseGroup: null };
+
 /**
- * Whether the existing album already has a tracklist, asked of Wikidata once
- * its QID settles. Null while unknown, or if it couldn't be asked: the server
- * checks again before a run starts.
+ * Whether the existing album already has a tracklist, and its release group,
+ * asked of Wikidata once its QID settles. Both null while unknown, or if it
+ * couldn't be asked: the server checks the tracklist again before a run starts.
  */
-export function useAlbumTracklist(state: State): AlbumTracklist | null {
+export function useAlbumTracklist(state: State): ExistingAlbum {
   const typed = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const qid = useDebounced(QID.test(typed) ? typed : "");
   // Tagged with the QID they answer, so a stale answer is never used.
@@ -31,6 +43,12 @@ export function useAlbumTracklist(state: State): AlbumTracklist | null {
       cancelled = true;
     };
   }, [qid]);
-  if (!qid || qid !== typed || result?.qid !== qid) return null;
-  return result.tracks.length ? { qid, tracks: result.tracks } : null;
+  if (!qid || qid !== typed || result?.qid !== qid) return UNKNOWN;
+  if (result.tracks.length)
+    return { tracklist: { qid, tracks: result.tracks }, releaseGroup: null };
+  // More than one is usually a mistake on the item: suggest none of them.
+  return {
+    tracklist: null,
+    releaseGroup: result.releaseGroups.length === 1 ? result.releaseGroups[0] : null,
+  };
 }

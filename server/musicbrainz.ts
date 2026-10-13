@@ -1,6 +1,7 @@
 // Loads a MusicBrainz release into the form:
 //
 //   GET /api/musicbrainz/release/:mbid        the form values for a release
+//       ?album=Q…                            the album it's for, if the user already picked one
 //   GET /api/musicbrainz/release-group/:mbid  its releases, to pick one
 //
 // The browser can't ask MusicBrainz itself (the CSP and the Toolforge terms
@@ -187,8 +188,12 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
   return { unique, taken: [...new Set(rows.map((r) => r.value))] };
 }
 
-/** The release's MusicBrainz IDs, looked up in the mirror. */
-export async function lookupRelease(release: MbRelease): Promise<MbLookups> {
+/**
+ * The release's MusicBrainz IDs, looked up in the mirror. `album` is the
+ * existing album the user is loading it for, which wins over the mirror's:
+ * it was found live, so it counts even if it's newer than the last dump.
+ */
+export async function lookupRelease(release: MbRelease, album?: string): Promise<MbLookups> {
   const ids = releaseIds(release);
   const [albums, artists, recordings, works, spotify, appleMusic] = await Promise.all([
     lookup("P436", [ids.releaseGroup], ["album", "ep"]),
@@ -202,6 +207,7 @@ export async function lookupRelease(release: MbRelease): Promise<MbLookups> {
   // only right when that's where the edits go.
   const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
   const albumQid =
+    album ??
     albums.unique[ids.releaseGroup] ??
     (onWikidata ? wikidataLink(release["release-group"].relations) : undefined);
   return {
@@ -240,7 +246,11 @@ musicbrainzRoutes.get("/release/:mbid", async (c) => {
     const { error, status } = mbError(err);
     return c.json({ error }, status);
   }
-  const form = releaseToForm(release, await lookupRelease(release));
+  const album = c.req.query("album")?.toUpperCase();
+  const form = releaseToForm(
+    release,
+    await lookupRelease(release, album && /^Q\d+$/.test(album) ? album : undefined),
+  );
   return c.json({ form } satisfies MusicBrainzResponse);
 });
 

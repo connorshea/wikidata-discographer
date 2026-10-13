@@ -4,6 +4,7 @@ import {
   editRequest,
   freshStatements,
   getEntities,
+  getStatementValues,
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
@@ -250,6 +251,43 @@ describe("describeItems", () => {
     const got = await describeItems(["Q1", "Q999999999"], "en");
     expect(got.get("Q999999999")).toEqual({ status: "missing" });
     expect(got.get("Q1")).toEqual({ status: "ok", label: null, description: null, classes: [] });
+  });
+});
+
+describe("getStatementValues", () => {
+  let fetch: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const statement = (property: string, value: unknown, rank = "normal") => ({
+    rank,
+    mainsnak: { snaktype: "value", property, datavalue: { value } },
+  });
+
+  it("reads item and identifier values for several properties in one request", async () => {
+    const rg = "f5093c06-23e3-404f-aeaa-40f72885ee3a";
+    fetch.mockResolvedValueOnce(
+      Response.json({
+        claims: {
+          P436: [statement("P436", rg), statement("P436", "old", "deprecated")],
+          P31: [statement("P31", { id: "Q482994" })],
+          P577: [{ rank: "normal", mainsnak: { snaktype: "novalue", property: "P577" } }],
+        },
+      }),
+    );
+    expect(await getStatementValues("Q1", ["P658", "P436", "P31"])).toEqual({
+      P658: [],
+      P436: [rg],
+      P31: ["Q482994"],
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const url = new URL(fetch.mock.calls[0][0] as string);
+    expect(url.searchParams.get("action")).toBe("wbgetclaims");
+    expect(url.searchParams.get("entity")).toBe("Q1");
+    expect(url.searchParams.has("property")).toBe(false);
   });
 });
 

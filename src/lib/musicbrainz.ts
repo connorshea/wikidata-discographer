@@ -11,7 +11,7 @@ import { ALBUM_ID_FIELDS, ISRC_PATTERN } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
 const MBID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
-const MBID_RE = new RegExp(`^${MBID}$`, "i");
+export const MBID_RE = new RegExp(`^${MBID}$`, "i");
 const URL_RE = new RegExp(
   String.raw`musicbrainz\.org/(release|release-group|recording|artist|work)/(${MBID})`,
   "i",

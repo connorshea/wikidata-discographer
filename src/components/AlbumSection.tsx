@@ -15,7 +15,14 @@ export default function AlbumSection({
   update,
   plan,
   albumTracklist,
-}: SectionProps & { albumTracklist: AlbumTracklist | null }) {
+  releaseGroup,
+  onLoadReleaseGroup,
+}: SectionProps & {
+  albumTracklist: AlbumTracklist | null;
+  /** The existing album's MusicBrainz release group, to suggest loading it. */
+  releaseGroup: string | null;
+  onLoadReleaseGroup: (mbid: string, album: string) => void;
+}) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
   const errs = plan.fieldErrs;
@@ -65,6 +72,30 @@ export default function AlbumSection({
               {albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs
               twice, so the run is disabled. Use an album without a tracklist.
             </p>
+          )}
+          {/* Not once it's loaded: the import keeps its release group in the form. */}
+          {releaseGroup && A.ids.musicbrainz !== releaseGroup && (
+            <div className="msg summary row">
+              <span>
+                This album is on{" "}
+                <a
+                  href={`https://musicbrainz.org/release-group/${releaseGroup}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  MusicBrainz
+                </a>
+                . Load it from there to fill in the tracklist, performers and IDs instead of typing
+                them.
+              </span>
+              <button
+                type="button"
+                className="small"
+                onClick={() => onLoadReleaseGroup(releaseGroup, A.qid)}
+              >
+                Load from MusicBrainz
+              </button>
+            </div>
           )}
         </div>
       ) : (

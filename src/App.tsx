@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
@@ -17,7 +17,9 @@ import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import { ConfirmButton } from "./components/ConfirmDialog.tsx";
-import MusicBrainzImport from "./components/MusicBrainzImport.tsx";
+import MusicBrainzImport, {
+  type MusicBrainzImportHandle,
+} from "./components/MusicBrainzImport.tsx";
 import AlbumList from "./components/AlbumList.tsx";
 
 /**
@@ -238,7 +240,8 @@ function Form() {
     }
   }, [state, stale]);
 
-  const albumTracklist = useAlbumTracklist(state);
+  const { tracklist: albumTracklist, releaseGroup } = useAlbumTracklist(state);
+  const mbImport = useRef<MusicBrainzImportHandle>(null);
   const { matches, status } = useMatches(state, plan);
   // Candidates dismissed in the Possible matches card, by candidateId.
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
@@ -259,8 +262,18 @@ function Form() {
         </div>
       )}
       <ItemModel />
-      <MusicBrainzImport state={state} needsConfirm={!isEmpty(state)} onLoad={replace} />
-      <AlbumSection {...props} albumTracklist={albumTracklist} />
+      <MusicBrainzImport
+        ref={mbImport}
+        state={state}
+        needsConfirm={!isEmpty(state)}
+        onLoad={replace}
+      />
+      <AlbumSection
+        {...props}
+        albumTracklist={albumTracklist}
+        releaseGroup={releaseGroup}
+        onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
+      />
       <SettingsSection {...props} />
       <DiscsSection {...props} reviews={reviews} />
       <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
