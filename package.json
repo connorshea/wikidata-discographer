@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.ts",
     "job:import-dump": "node jobs/import-dump.ts",
-    "job:prune-sessions": "node jobs/prune-sessions.ts"
+    "job:prune-sessions": "node jobs/prune-sessions.ts",
+    "job:rekey-titles": "node jobs/rekey-titles.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { assembleMatches, type ItemFacts } from "./matches.ts";
-import { labelSearchKey } from "./mirror.ts";
+import { labelSearchKey } from "../src/lib/titles.ts";
 
 const facts = (
   qid: string,
@@ -84,6 +84,40 @@ describe("assembleMatches", () => {
     const items = mapOf(facts("Q10", "work", "Don't Leave Me", { P175: ["Q52583"] }));
     const { rows } = assembleMatches([row("Don’t Leave Me")], { items, albumTracks: new Set() });
     expect(rows["0:1"].comp.map((m) => m.qid)).toEqual(["Q10"]);
+  });
+
+  it("matches a similar title, after the same title, and passes it on to linked items", () => {
+    const items = mapOf(
+      facts("Q10", "track", "Post Break-Up Sex", { P175: ["Q52583"], P2550: ["Q20"] }),
+      facts("Q11", "track", "Post Break Up Sex", { P175: ["Q52583"], P2550: ["Q21"] }),
+      facts("Q20", "work", "Some Other Title"),
+      facts("Q21", "work", "Another Title"),
+      facts("Q30", "single", "Post Breakup Sex", { P175: ["Q52583"] }),
+    );
+    // MusicBrainz writes the hyphen as U+2010, which is still the same title.
+    const { rows } = assembleMatches([row("Post Break‐Up Sex")], { items, albumTracks: new Set() });
+    expect(rows["0:1"].track.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q10", ["same title", "same performer"]],
+      ["Q11", ["similar title", "same performer"]],
+    ]);
+    expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q20", ["recorded as Q10"]],
+      ["Q21", ["recorded as Q11", "similar title"]],
+    ]);
+    // "Breakup" is a different word, not a folded "Break-Up".
+    expect(rows["0:1"].single).toEqual([]);
+  });
+
+  it("drops the similar title from an item also reached through the same title", () => {
+    const items = mapOf(
+      facts("Q10", "track", "Day and Night", { P175: ["Q52583"], P2550: ["Q20"] }),
+      facts("Q11", "track", "Day & Night", { P175: ["Q52583"], P2550: ["Q20"] }),
+      facts("Q20", "work", "Day & Night"),
+    );
+    const { rows } = assembleMatches([row("Day and Night")], { items, albumTracks: new Set() });
+    expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q20", ["no artist set", "recorded as Q10", "recorded as Q11"]],
+    ]);
   });
 
   it("finds a single's track, and orders album tracks first", () => {

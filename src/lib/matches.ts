@@ -9,6 +9,7 @@ import type {
   TrackMatch,
 } from "./api-types.ts";
 import type { Disc, Row } from "./plan.ts";
+import { SIMILAR_TITLE } from "./titles.ts";
 
 /**
  * The reason given for a same-title item with no performer, composer or
@@ -17,13 +18,24 @@ import type { Disc, Row } from "./plan.ts";
  */
 export const NO_ARTIST = "no artist set";
 
+const isTitleReason = (r: string) => r === "same title" || r === SIMILAR_TITLE;
+
 /** Whether a possible duplicate album's reason is a shared identifier, not its title. */
 export const isIdReason = (r: string) =>
-  r !== "same title" && r !== "same performer" && r !== NO_ARTIST;
+  !isTitleReason(r) && r !== "same performer" && r !== NO_ARTIST;
 
-/** Whether the match is only a same-title item with no artist. */
+/**
+ * Whether the match's title is only similar to the track's, not the same
+ * (or it was reached through such a match). Suggested, but never filled in by
+ * `fillUnambiguous`.
+ */
+export const isSimilarOnly = (m: Pick<Match, "reasons">) =>
+  m.reasons.includes(SIMILAR_TITLE) && !m.reasons.includes("same title");
+
+/** Whether the match is only a title with no artist, or only a similar title. */
 const isGuess = (m: Match) =>
-  m.reasons.includes(NO_ARTIST) && m.reasons.every((r) => r === "same title" || r === NO_ARTIST);
+  isSimilarOnly(m) ||
+  (m.reasons.includes(NO_ARTIST) && m.reasons.every((r) => isTitleReason(r) || r === NO_ARTIST));
 
 /** A matches response, with the request it answers. */
 export interface Answered {
@@ -143,7 +155,7 @@ export function slotValue(disc: Disc, n: number, slot: Slot): string {
  * performer, composer or lyricist, the existing album, or a link to one that
  * does. Anything else is only a same-title item.
  */
-export const isStrong = (m: Match) => m.reasons.some((r) => r !== "same title" && r !== NO_ARTIST);
+export const isStrong = (m: Match) => m.reasons.some((r) => !isTitleReason(r) && r !== NO_ARTIST);
 
 // Where a description's "by …" phrase ends, e.g. "song by X from the album Y".
 const BY_END =

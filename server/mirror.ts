@@ -7,6 +7,7 @@ import { db, retryOnLockConflict } from "./db.ts";
 import { propertyNumber, qidNumber } from "./ids.ts";
 import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { ID_PROPERTIES, kindOf, LINK_PROPERTIES, type MusicKind } from "../src/lib/music.ts";
+import { labelSearchKey } from "../src/lib/titles.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
 /**
@@ -88,24 +89,6 @@ export function entityToRow(entity: Entity): MirrorRow | null {
     links,
   };
 }
-
-/**
- * The key a label is searched and matched by: lowercased, with curly quotes
- * made straight (tracklists and Wikidata labels use either), clipped to the
- * index length.
- */
-export const labelSearchKey = (label: string | null | undefined) =>
-  label
-    ? Array.from(
-        label
-          .normalize("NFC")
-          .toLowerCase()
-          .replace(/[’‘]/g, "'")
-          .replace(/[“”]/g, '"'),
-      )
-        .slice(0, 191)
-        .join("")
-    : null;
 
 /**
  * Insert or update rows and make their external ids and links match. A row older than
@@ -190,4 +173,58 @@ async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "a
   if (ids.length) await tx.insert(musicExternalIds).values(ids);
   await tx.delete(musicLinks).where(inArray(musicLinks.qid, qids));
   if (links.length) await tx.insert(musicLinks).values(links);
+}
+
+const REKEY_BATCH = 2000;
+
+/**
+ * Rebuild `label_search` from each stored label, for after `labelSearchKey`
+ * changes. Reads the mirror in qid order, a batch at a time, and writes only
+ * the keys that differ. A row whose label changed since it was read (an app
+ * write in between) is left as that write keyed it. Returns how many rows were
+ * read and how many re-keyed.
+ */
+export async function rekeyLabels(
+  opts: { onBatch?: (read: number, changed: number) => void } = {},
+): Promise<{ read: number; changed: number }> {
+  let after = 0;
+  let read = 0;
+  let changed = 0;
+  for (;;) {
+    const rows = await db
+      .select({ qid: musicItems.qid, label: musicItems.label, key: musicItems.labelSearch })
+      .from(musicItems)
+      .where(sql`${musicItems.qid} > ${after}`)
+      .orderBy(musicItems.qid)
+      .limit(REKEY_BATCH);
+    if (rows.length === 0) break;
+    after = rows[rows.length - 1].qid;
+    read += rows.length;
+    const stale = rows
+      .map((r) => ({ ...r, next: labelSearchKey(r.label) }))
+      .filter((r) => r.next !== r.key);
+    if (stale.length) {
+      const cases = sql.join(
+        stale.map(
+          (r) =>
+            sql`when ${musicItems.qid} = ${r.qid} and ${musicItems.label} <=> ${r.label} then ${r.next}`,
+        ),
+        sql` `,
+      );
+      await retryOnLockConflict(`re-key (${stale.length} rows)`, () =>
+        db
+          .update(musicItems)
+          .set({ labelSearch: sql`case ${cases} else ${musicItems.labelSearch} end` })
+          .where(
+            inArray(
+              musicItems.qid,
+              stale.map((r) => r.qid),
+            ),
+          ),
+      );
+      changed += stale.length;
+    }
+    opts.onBatch?.(read, changed);
+  }
+  return { read, changed };
 }

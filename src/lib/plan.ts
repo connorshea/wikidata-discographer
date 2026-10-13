@@ -12,6 +12,7 @@
 // the server swaps in the new QIDs as it goes.
 import { WD_LANG_CODES } from "./languages.ts";
 import { ALBUM_ID_FIELDS, type AlbumIdKey, type MusicKind, normalizeAlbumId } from "./music.ts";
+import { sameTitle } from "./titles.ts";
 
 // ---------------------------------------------------------------------------
 // Form state
@@ -557,17 +558,6 @@ interface PlanItem {
   single: { date: ParsedDate; qid: string | null } | null;
   mb: MbRowIds | null;
 }
-
-const sameTitle = (a: string, b: string) => {
-  const norm = (s: string) =>
-    s
-      .replace(/[’‘]/g, "'")
-      .replace(/[“”]/g, '"')
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-  return norm(a) === norm(b);
-};
 
 /** The row's imported identifiers, if it still has the title they were imported with. */
 export function mbIdsFor(disc: Disc, row: ParsedRow): MbRowIds | null {

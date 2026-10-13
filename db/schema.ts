@@ -46,7 +46,8 @@ export const musicItems = mysqlTable(
     qid: itemId("qid").primaryKey(),
     kind: varchar("kind", { length: 16 }).notNull(), // MusicKind (src/lib/music.ts)
     label: varchar("label", { length: 400 }), // en, else mul, else any
-    // Lowercased label, truncated to fit the index, for case-insensitive search.
+    // The label folded for search and matching (labelSearchKey, src/lib/titles.ts),
+    // truncated to fit the index.
     labelSearch: varchar("label_search", { length: 191 }),
     description: varchar("description", { length: 400 }),
     instanceOf: json<number[]>("instance_of").notNull(), // Q-numbers

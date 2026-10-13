@@ -55,6 +55,7 @@ pnpm db:generate        # generate a migration from db/schema.ts
 pnpm db:migrate         # apply pending migrations
 pnpm job:import-dump    # refresh the music mirror from the Wikidata JSON dump
 pnpm job:prune-sessions # delete expired login sessions
+pnpm job:rekey-titles   # rebuild the mirror's title keys after src/lib/titles.ts changes
 
 vp check                # format, lint and type-check
 vp test                 # run the tests
@@ -103,11 +104,14 @@ everything but artists: about a million rows. The lists are in
   already on Wikidata, and warn about albums with the same title
 - suggest QIDs for the performers
 - suggest existing compositions, tracks and singles for each tracklist row
-  (`server/matches.ts`): items with the row's title (ignoring case and curly
-  quotes) that share one of its performers, or that are on the existing album.
-  A suggested track brings the composition it records (P2550) and its singles,
-  so reusing it doesn't give it a second composition. "Fill in unambiguous
-  matches" fills every empty field that has exactly one suggestion.
+  (`server/matches.ts`): items with the row's title that share one of its
+  performers, or that are on the existing album. Titles that differ only in
+  case, quote style, Unicode hyphens or spacing are the same title. Ones that
+  also differ in punctuation, accents or "&" and "and" are a similar title
+  (`src/lib/titles.ts`). A suggested track brings the composition it records
+  (P2550) and its singles, so reusing it doesn't give it a second composition.
+  "Fill in unambiguous matches" fills every empty field that has exactly one
+  suggestion, leaving out similar titles.
 
 Items a run creates, and existing items it adds statements to, are written to
 the mirror straight away. Anything else created since the last dump can be
@@ -191,6 +195,14 @@ Load the mirror once by hand. The dump is visible only with `--mount all`:
 toolforge jobs run import-dump --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
   --command "node --max-old-space-size=384 jobs/import-dump.ts" \
   --mount all --mem 1Gi --cpu 2 --emails onfailure
+```
+
+After a deploy that changes how titles are folded (`src/lib/titles.ts`),
+rebuild the stored title keys, since old keys won't match new ones until then:
+
+```sh
+toolforge jobs run rekey-titles --image tool-wikidata-discographer/tool-wikidata-discographer:latest \
+  --command "node jobs/rekey-titles.ts" --emails onfailure
 ```
 
 Then load the weekly schedule. Rerun this whenever `jobs.yaml` changes, but not
