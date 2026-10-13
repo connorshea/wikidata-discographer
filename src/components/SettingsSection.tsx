@@ -34,7 +34,7 @@ const FLAGS: [FlagKey, string][] = [
   ],
   [
     "mbRefs",
-    "Add a reference to durations from a MusicBrainz import (stated in MusicBrainz, its recording ID and the day it was imported)",
+    "Add a reference to durations, ISRCs and track IDs from a MusicBrainz import (stated in MusicBrainz, its recording ID and the day it was imported)",
   ],
 ];
 

@@ -376,7 +376,7 @@ export function releaseToForm(
   let tracks = 0;
   const many: Record<TrackLinkKey, number> = { spotify: 0, appleMusic: 0 };
   const taken = new Set(lookups.taken);
-  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, appleMusic: 0, refs: 0 };
+  const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, appleMusic: 0, durationRefs: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
     if (media.length > 1) {
@@ -402,10 +402,8 @@ export function releaseToForm(
           isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
           spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
           appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
-          length:
-            t.length === null
-              ? null
-              : { seconds: seconds(t.length), recording: t.recording.id, retrieved },
+          source: { recording: t.recording.id, retrieved },
+          length: t.length === null ? null : seconds(t.length),
         };
         if (
           ids.recording ||
@@ -413,7 +411,7 @@ export function releaseToForm(
           ids.isrcs.length ||
           ids.spotify.length ||
           ids.appleMusic.length ||
-          ids.length
+          ids.length !== null
         ) {
           disc.mb[t.position] = ids;
           if (!disc.track[t.position]) {
@@ -423,7 +421,7 @@ export function releaseToForm(
             toAdd.appleMusic += ids.appleMusic.length;
             for (const key of Object.keys(many) as TrackLinkKey[])
               if (trackLinks(t, key).length > 1) many[key]++;
-            toAdd.refs += ids.length ? 1 : 0;
+            toAdd.durationRefs += ids.length !== null ? 1 : 0;
           }
           if (!disc.comp[t.position]) toAdd.works += ids.work ? 1 : 0;
         }
@@ -503,9 +501,7 @@ export function releaseToForm(
       ? `Found ${joinList(found as string[])} already on Wikidata by their MusicBrainz IDs.`
       : "Found nothing else already on Wikidata by its MusicBrainz ID.") +
     idsSummary(toAdd) +
-    (toAdd.refs
-      ? ` ${toAdd.refs === 1 ? "The new track's duration gets" : `${toAdd.refs} new tracks' durations get`} a MusicBrainz reference, if that's on in Item settings.`
-      : "");
+    refsSummary(toAdd);
 
   return {
     album: {
@@ -524,6 +520,22 @@ export function releaseToForm(
     notes,
     summary,
   };
+}
+
+/** Which of the new tracks' statements get a MusicBrainz reference, as a sentence. */
+function refsSummary(n: {
+  isrcs: number;
+  spotify: number;
+  appleMusic: number;
+  durationRefs: number;
+}) {
+  const what = [
+    n.durationRefs && "durations",
+    n.isrcs && "ISRCs",
+    n.spotify + n.appleMusic && "track IDs",
+  ].filter(Boolean) as string[];
+  if (!what.length) return "";
+  return ` The imported ${joinList(what)} get a MusicBrainz reference, if that's on in Item settings.`;
 }
 
 /** What the import adds to the items the run creates, as a sentence. */

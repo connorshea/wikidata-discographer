@@ -61,6 +61,19 @@ describe("coerceState", () => {
               },
             },
             "4": { title: "Third", length: { seconds: 1.5, recording: "x", retrieved: "" } },
+            "5": {
+              title: "Fourth",
+              source: {
+                recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+                retrieved: "2026-10-04",
+              },
+              length: 200,
+            },
+            "6": {
+              title: "Fifth",
+              source: { recording: "x", retrieved: "2026-10-04" },
+              length: -1,
+            },
           },
         },
       ],
@@ -73,11 +86,9 @@ describe("coerceState", () => {
         isrcs: ["USUM72604367"],
         spotify: [],
         appleMusic: ["1820000002"],
-        length: {
-          seconds: 177,
-          recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
-          retrieved: "2026-10-04",
-        },
+        // Saved before identifiers had references, so the source comes from the length.
+        source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
+        length: 177,
       },
       "3": {
         title: "Other",
@@ -86,7 +97,8 @@ describe("coerceState", () => {
         isrcs: [],
         spotify: [],
         appleMusic: [],
-        length: null,
+        source: null,
+        length: 177,
       },
       "4": {
         title: "Third",
@@ -95,6 +107,27 @@ describe("coerceState", () => {
         isrcs: [],
         spotify: [],
         appleMusic: [],
+        source: null,
+        length: null,
+      },
+      "5": {
+        title: "Fourth",
+        recording: "",
+        work: "",
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
+        length: 200,
+      },
+      "6": {
+        title: "Fifth",
+        recording: "",
+        work: "",
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        source: null,
         length: null,
       },
     });
