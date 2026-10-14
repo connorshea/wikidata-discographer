@@ -1,6 +1,12 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-import { createMusicBrainzClient, MusicBrainzError } from "./musicbrainz.ts";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createMusicBrainzClient, lookupLabels, MusicBrainzError } from "./musicbrainz.ts";
 import { userAgent } from "./auth/user-agent.ts";
+import { itemsWithValues, WikidataEditError } from "./wikidata-client.ts";
+
+vi.mock("./wikidata-client.ts", async (original) => ({
+  ...(await original<typeof import("./wikidata-client.ts")>()),
+  itemsWithValues: vi.fn(),
+}));
 
 const ID = "6d42c8a3-69c3-458c-9f18-f8a503780607";
 
@@ -129,5 +135,37 @@ describe("createMusicBrainzClient", () => {
       status: 404,
       message: expect.stringMatching(/^MusicBrainz has no release with that ID\./),
     });
+  });
+});
+
+describe("lookupLabels", () => {
+  const found = vi.mocked(itemsWithValues);
+  afterEach(() => {
+    found.mockReset();
+    vi.useRealTimers();
+  });
+
+  it("keeps the labels exactly one item has", async () => {
+    found.mockResolvedValue(
+      new Map([
+        ["a", ["Q1"]],
+        ["b", ["Q2", "Q3"]],
+      ]),
+    );
+    expect(await lookupLabels(["a", "b", "c"])).toEqual({ a: "Q1" });
+    expect(await lookupLabels([])).toEqual({});
+  });
+
+  it("gives null when Wikidata fails", async () => {
+    found.mockRejectedValue(new WikidataEditError("http-503", "busy"));
+    expect(await lookupLabels(["a"])).toBeNull();
+  });
+
+  it("gives null rather than waiting out a slow Wikidata", async () => {
+    vi.useFakeTimers();
+    found.mockReturnValue(new Promise(() => {}));
+    const labels = lookupLabels(["a"]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await labels).toBeNull();
   });
 });

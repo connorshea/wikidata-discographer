@@ -191,21 +191,36 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
   return { unique, taken: [...new Set(rows.map((r) => r.value))] };
 }
 
+/** How long the import waits for Wikidata's record labels before going on without them. */
+const LABELS_TIMEOUT_MS = 10_000;
+
 /**
  * Record labels by their MusicBrainz label IDs (P966), label ID → QID when exactly one
  * item has it. Labels aren't in the mirror, so this asks Wikidata, and gives null if
- * that fails: the rest of the import doesn't need it.
+ * that fails or takes longer than LABELS_TIMEOUT_MS: the rest of the import doesn't
+ * need it, and shouldn't wait out Wikidata's retries for it.
  */
-async function lookupLabels(ids: string[]): Promise<Record<string, string> | null> {
+export async function lookupLabels(ids: string[]): Promise<Record<string, string> | null> {
   if (!ids.length) return {};
+  const lookup = async () => {
+    try {
+      const found = await itemsWithValues("P966", ids, { retries: 1 });
+      return Object.fromEntries(
+        [...found].filter(([, qids]) => qids.length === 1).map(([id, [qid]]) => [id, qid]),
+      );
+    } catch (err) {
+      if (err instanceof WikidataEditError) return null;
+      throw err;
+    }
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), LABELS_TIMEOUT_MS);
+  });
   try {
-    const found = await itemsWithValues("P966", ids, { retries: 1 });
-    return Object.fromEntries(
-      [...found].filter(([, qids]) => qids.length === 1).map(([id, [qid]]) => [id, qid]),
-    );
-  } catch (err) {
-    if (err instanceof WikidataEditError) return null;
-    throw err;
+    return await Promise.race([lookup(), deadline]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

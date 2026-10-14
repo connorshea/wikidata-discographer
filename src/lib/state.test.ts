@@ -36,6 +36,8 @@ describe("coerceState", () => {
   it("keeps the record labels' import source only when it's well-formed", () => {
     const labelsMb = {
       release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+      releaseGroup: "3bd96d3b-d3f6-4d1e-9a44-1e7f6b8d6d2a",
+      album: "Q140316456",
       retrieved: "2026-10-04",
       qids: ["Q231694", "nope", "Q231694"],
     };
@@ -43,7 +45,20 @@ describe("coerceState", () => {
       labels: "Q231694",
       labelsMb: { ...labelsMb, qids: ["Q231694"] },
     });
-    for (const bad of [{ ...labelsMb, release: "x" }, { ...labelsMb, qids: [] }, "Q1"])
+    expect(coerceState({ album: { labelsMb: { ...labelsMb, album: "" } } }).album.labelsMb).toEqual(
+      {
+        ...labelsMb,
+        album: "",
+        qids: ["Q231694"],
+      },
+    );
+    for (const bad of [
+      { ...labelsMb, release: "x" },
+      { ...labelsMb, releaseGroup: undefined },
+      { ...labelsMb, album: "nope" },
+      { ...labelsMb, qids: [] },
+      "Q1",
+    ])
       expect(coerceState({ album: { labelsMb: bad } }).album.labelsMb).toBeNull();
   });
 

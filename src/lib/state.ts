@@ -145,9 +145,13 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
 function coerceLabelsMb(v: unknown): LabelsMb | null {
   if (!isObj(v)) return null;
   const release = matching(v.release, MBID_PATTERN);
+  const releaseGroup = matching(v.releaseGroup, MBID_PATTERN);
+  const album = typeof v.album === "string" && /^(?:Q\d+)?$/.test(v.album) ? v.album : null;
   const retrieved = day(v.retrieved);
   const qids = strList(v.qids, /^Q\d+$/);
-  return release && retrieved && qids.length ? { release, retrieved, qids } : null;
+  return release && releaseGroup && album !== null && retrieved && qids.length
+    ? { release, releaseGroup, album, retrieved, qids }
+    : null;
 }
 
 /** A well-formed copy of `raw`, filling anything missing or mistyped with defaults. */

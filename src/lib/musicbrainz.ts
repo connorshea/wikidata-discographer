@@ -591,7 +591,15 @@ export function releaseToForm(
       mb: albumQid ? null : albumMb,
       // Unlike the album's other details, an existing album gets the labels, with references.
       labels: labels.join(" "),
-      labelsMb: labels.length ? { release: release.id, retrieved, qids: labels } : null,
+      labelsMb: labels.length
+        ? {
+            release: release.id,
+            releaseGroup: rg.id,
+            album: albumQid ?? "",
+            retrieved,
+            qids: labels,
+          }
+        : null,
     },
     artists,
     discs: discs.length ? discs : [emptyDisc()],

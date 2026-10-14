@@ -69,6 +69,10 @@ export interface AlbumState {
 export interface LabelsMb {
   /** P5813 MusicBrainz release ID. */
   release: string;
+  /** The release's release group, which a new album must still have for the reference. */
+  releaseGroup: string;
+  /** The existing album the import was for, which must still be the album. Empty for a new one. */
+  album: string;
   /** The day of the import, YYYY-MM-DD. */
   retrieved: string;
   /** The labels' QIDs. */
@@ -576,9 +580,18 @@ function albumMbRef(state: State, cited: MbCited | null | undefined, value: stri
     : statedInMb("P5813", mb.release, mb.retrieved);
 }
 
-/** Whether a record label gets a MusicBrainz reference: the setting is on and the import found it. */
+/**
+ * Whether a record label gets a MusicBrainz reference: the setting is on, the import
+ * found it, and the album is still the one it was imported for. That's the same existing
+ * album, or a new one that still has the imported release group.
+ */
 export function citesMbLabel(state: State, qid: string) {
-  return state.settings.mbRefs && !!state.album.labelsMb?.qids.includes(qid);
+  const A = state.album;
+  const L = A.labelsMb;
+  if (!state.settings.mbRefs || !L?.qids.includes(qid)) return false;
+  return A.mode === "existing"
+    ? !!L.album && normalizeQid(A.qid) === L.album
+    : normalizeAlbumId("musicbrainz", A.ids.musicbrainz) === L.releaseGroup;
 }
 
 // ---------------------------------------------------------------------------
@@ -892,6 +905,15 @@ export function buildPlan(state: State): Plan {
         ...albumIds,
       ],
     });
+  } else if (labelClaims.length) {
+    // An existing album gets its record labels in an edit of their own, first, so
+    // they're added even if the run stops before the tracklist.
+    ops.push({
+      op: "addClaims",
+      target: album,
+      what: "album record labels",
+      claims: labelClaims,
+    });
   }
 
   // 2. Compositions.
@@ -961,8 +983,7 @@ export function buildPlan(state: State): Plan {
   }
 
   // 4. The album's tracklist, in one edit. An existing album also gets its number of tracks,
-  // which a tracklist needs, unless it already says how many it has, and the record labels
-  // it doesn't have yet.
+  // which a tracklist needs, unless it already says how many it has.
   const trackOf = (it: PlanItem): Value =>
     it.existTrack ? item(it.existTrack) : ref(trackKey(it));
   ops.push({
@@ -976,9 +997,7 @@ export function buildPlan(state: State): Plan {
           ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
         ]),
       ),
-      ...(creatingAlbum
-        ? []
-        : [...counts.map((c): Claim => ({ ...c, ifMissing: true })), ...labelClaims]),
+      ...(creatingAlbum ? [] : counts.map((c): Claim => ({ ...c, ifMissing: true }))),
     ],
   });
 

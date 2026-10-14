@@ -564,6 +564,8 @@ describe("record labels", () => {
     expect(form.album.labels).toBe("Q231694 Q7432151");
     expect(form.album.labelsMb).toEqual({
       release: RELEASE.id,
+      releaseGroup: RELEASE["release-group"].id,
+      album: "",
       retrieved: "2026-10-04",
       qids: ["Q231694", "Q7432151"],
     });
@@ -600,7 +602,7 @@ describe("record labels", () => {
     ]);
   });
 
-  it("adds them to an existing album with its tracklist", () => {
+  it("adds them to an existing album in an edit of their own, before anything else", () => {
     const next = applyMbForm(
       EMPTY,
       releaseToForm(
@@ -611,10 +613,51 @@ describe("record labels", () => {
     );
     const ops = buildPlan(next).ops;
     expect(ops.some((o) => o.op === "create" && o.key === "album")).toBe(false);
+    expect(ops[0]).toMatchObject({
+      op: "addClaims",
+      what: "album record labels",
+      target: { id: "Q140316456" },
+    });
+    expect(ops[0].claims).toEqual([
+      { property: "P264", value: { type: "item", id: "Q231694" }, references: ref },
+      { property: "P264", value: { type: "item", id: "Q7432151" }, references: ref },
+    ]);
     const tracklist = ops.find((o) => o.op === "addClaims" && o.what === "album tracklist");
-    expect(tracklist?.op === "addClaims" && tracklist.target).toEqual({ id: "Q140316456" });
-    expect(labelClaims(tracklist?.claims ?? [])).toHaveLength(2);
-    expect(labelClaims(tracklist?.claims ?? [])[0]).toMatchObject({ references: ref });
+    expect(labelClaims(tracklist?.claims ?? [])).toEqual([]);
+  });
+
+  it("drops the reference once the album isn't the one the labels were imported for", () => {
+    const existing = applyMbForm(
+      EMPTY,
+      releaseToForm(
+        RELEASE,
+        { ...NONE, albumQid: "Q140316456", artists: { [CRJ]: "Q1" }, labels: LABELS },
+        "2026-10-04",
+      ),
+    );
+    const labelsOp = (s: typeof existing) =>
+      buildPlan(s).ops.find((o) => o.op === "addClaims" && o.what === "album record labels");
+    existing.album.qid = " Q140316456 ";
+    expect(labelsOp(existing)?.claims[0]).toMatchObject({ references: ref });
+    existing.album.qid = "Q42";
+    expect(labelsOp(existing)?.claims.every((c) => !("references" in c))).toBe(true);
+
+    // Imported as a new album, then switched to an existing one.
+    const created = applyMbForm(
+      EMPTY,
+      releaseToForm(RELEASE, { ...NONE, artists: { [CRJ]: "Q1" }, labels: LABELS }, "2026-10-04"),
+    );
+    created.album.mode = "existing";
+    created.album.qid = "Q140316456";
+    expect(labelsOp(created)?.claims.every((c) => !("references" in c))).toBe(true);
+
+    // A new album that no longer has the imported release group.
+    created.album.mode = "create";
+    created.album.ids.musicbrainz = "";
+    const album = buildPlan(created).ops.find((o) => o.op === "create" && o.key === "album");
+    expect(
+      labelClaims(album?.op === "create" ? album.claims : []).every((c) => !("references" in c)),
+    ).toBe(true);
   });
 
   it("cites only the labels the import found, and only with references on", () => {
