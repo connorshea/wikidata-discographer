@@ -410,27 +410,34 @@ describe("buildPlan", () => {
     });
   });
 
-  it("labels a new track under mul as well, but not a composition or the album", () => {
+  it("labels a new track, composition, single and album under mul as well", () => {
     const state = structuredClone(EXAMPLE);
     state.album.mode = "create";
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "" };
     const { ops } = buildPlan(state);
-    const labelLangs = (key: string) => {
+    const terms = (key: string) => {
       const o = find(ops, key);
-      return o?.op === "create" && Object.keys(o.labels);
+      return o?.op === "create" && { labels: o.labels, descLangs: Object.keys(o.descriptions) };
     };
-    const track = find(ops, "track:0:2");
-    expect(track?.op === "create" && track.labels).toEqual({
-      en: "Habits of Creatures",
-      mul: "Habits of Creatures",
-    });
-    expect(labelLangs("comp:0:2")).toEqual(["en"]);
-    expect(labelLangs("album")).toEqual(["en"]);
+    for (const key of ["track:0:2", "comp:0:2", "single:0:2"])
+      expect(terms(key)).toEqual({
+        labels: { en: "Habits of Creatures", mul: "Habits of Creatures" },
+        descLangs: ["en"],
+      });
+    const album = terms("album");
+    expect(album && Object.keys(album.labels)).toEqual(["en", "mul"]);
+    expect(album && album.descLangs).toEqual(["en"]);
   });
 
-  it("labels a new track once when the run's language is mul", () => {
+  it("labels new items once when the run's language is mul", () => {
     const state = { ...structuredClone(EXAMPLE), settings: { ...EXAMPLE.settings, lang: "mul" } };
-    const track = find(buildPlan(state).ops, "track:0:2");
-    expect(track?.op === "create" && track.labels).toEqual({ mul: "Habits of Creatures" });
+    state.album.mode = "create";
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "" };
+    const { ops } = buildPlan(state);
+    for (const key of ["track:0:2", "comp:0:2", "single:0:2", "album"]) {
+      const o = find(ops, key);
+      expect(o?.op === "create" && Object.keys(o.labels)).toEqual(["mul"]);
+    }
   });
 
   it("gives compositions a language but not tracks, and neither a publication date", () => {
