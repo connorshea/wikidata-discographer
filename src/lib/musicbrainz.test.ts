@@ -368,6 +368,14 @@ describe("releaseToForm", () => {
     });
   });
 
+  it("gives an EP with no secondary type no form, not studio album", () => {
+    const r = release();
+    r["release-group"]["primary-type"] = "EP";
+    r["release-group"]["secondary-types"] = [];
+    const { album } = releaseToForm(r, NONE);
+    expect(album).toMatchObject({ type: "Q169930", form: "" });
+  });
+
   it("cites the release's own date when the release group has none", () => {
     const r = release();
     delete r["release-group"]["first-release-date"];

@@ -8,10 +8,12 @@
 import {
   ALBUM_FORMS,
   ALBUM_TYPES,
+  EP_CLASS,
   NO_LINGUISTIC_CONTENT,
   PARTS,
   parseDate,
   splitArtists,
+  STUDIO_ALBUM,
 } from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, State } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN } from "./music.ts";
@@ -304,8 +306,6 @@ const SECONDARY_FORMS: Record<string, (typeof ALBUM_FORMS)[number][0]> = {
   Remix: "Q963099",
 };
 
-const STUDIO_ALBUM = "Q208569";
-
 const partOptions = (group: string) => PARTS.find(([g]) => g === group)![1].map(([q]) => q);
 const CD_PARTS = partOptions("Compact disc");
 const LP_PARTS = partOptions("Vinyl disc");
@@ -466,9 +466,12 @@ export function releaseToForm(
       `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album or EP. Check the album's type.`,
     );
   const secondary = rg["secondary-types"] ?? [];
+  // "Studio album" is only right for an album, so an EP with no secondary type gets no form.
   const form = secondary.length
     ? (secondary.map((s) => SECONDARY_FORMS[s]).find(Boolean) ?? "")
-    : STUDIO_ALBUM;
+    : type === EP_CLASS
+      ? ""
+      : STUDIO_ALBUM;
 
   const albumQid = lookups.albumQid;
   const ids: AlbumState["ids"] = { spotify: "", musicbrainz: rg.id, appleMusic: "", discogs: "" };
