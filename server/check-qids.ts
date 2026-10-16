@@ -292,9 +292,17 @@ function descriptionSetting(op: Extract<Op, { op: "create" }>): string {
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
+ * The label Wikidata pairs with an item's description in `lang` when it checks
+ * that label and description are unique: the label in that language or, when
+ * there is none, the `mul` label.
+ */
+const labelFor = (labels: Record<string, string>, lang: string): string | undefined =>
+  labels[lang] || labels.mul || undefined;
+
+/**
  * New items that would have the same label and description, in the same
  * language, as an item the form reuses or as another new item, one sentence
- * each. Wikidata refuses to create such an item, which would stop the run
+ * each. A missing label counts as the `mul` label, as on Wikidata. Wikidata refuses to create such an item, which would stop the run
  * partway: a composition described like the existing single in its row, say.
  * Only the reused compositions, tracks and singles and the existing album are
  * asked about, for just those languages' labels and descriptions.
@@ -313,7 +321,7 @@ async function checkTermConflicts(
   for (const op of ops) {
     if (op.op !== "create") continue;
     for (const [lang, desc] of Object.entries(op.descriptions)) {
-      const label = op.labels[lang];
+      const label = labelFor(op.labels, lang);
       if (!label || !desc) continue;
       const k = termKey(lang, label, desc);
       fresh.set(k, [...(fresh.get(k) ?? []), op]);
@@ -341,11 +349,11 @@ async function checkTermConflicts(
     for (const s of Object.values(d.single)) if (s.qid) reused.add(s.qid.trim());
   }
   const qids = [...reused].filter((q) => results.get(q)?.status === "ok");
-  const terms = await getTerms(qids, [...langs], { retries: 1 });
+  const terms = await getTerms(qids, [...langs, "mul"], { retries: 1 });
   for (const [qid, t] of terms) {
     if (t.status !== "ok") continue;
     for (const [lang, desc] of Object.entries(t.descriptions)) {
-      const label = t.labels[lang];
+      const label = labelFor(t.labels, lang);
       const same = label ? fresh.get(termKey(lang, label, desc)) : undefined;
       if (!same) continue;
       const where = sources.get(qid)?.join(", ");

@@ -57,8 +57,8 @@ function stubWiki({
   compositions?: Record<string, string[]>;
   /** P31 values of items fetched with their claims. */
   classes?: Record<string, string[]>;
-  /** English label and description of items fetched for their terms. */
-  terms?: Record<string, [string, string]>;
+  /** English label and description, and any mul label, of items fetched for their terms. */
+  terms?: Record<string, [string | undefined, string, string?]>;
 }) {
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
@@ -103,13 +103,21 @@ function stubWiki({
     if (q.get("props") === "labels|descriptions") {
       const ids = q.get("ids")!.split("|");
       expect(ids.length).toBeLessThanOrEqual(50);
-      expect(q.get("languages")).toBe("en");
-      const term = (value: string | undefined) => (value ? { en: { language: "en", value } } : {});
+      expect(q.get("languages")).toBe("en|mul");
+      const term = (en: string | undefined, mul?: string) => ({
+        ...(en ? { en: { language: "en", value: en } } : {}),
+        ...(mul ? { mul: { language: "mul", value: mul } } : {}),
+      });
       return Response.json({
         entities: Object.fromEntries(
           ids.map((id) => [
             id,
-            { id, type: "item", labels: term(terms[id]?.[0]), descriptions: term(terms[id]?.[1]) },
+            {
+              id,
+              type: "item",
+              labels: term(terms[id]?.[0], terms[id]?.[2]),
+              descriptions: term(terms[id]?.[1]),
+            },
           ]),
         ),
       });
@@ -284,6 +292,12 @@ describe("checkPlanQids", () => {
     stubWiki({ terms: { Q80: [title, `${desc} (single)`] } });
     expect(await checkPlanQids(plan.ops, state)).toEqual([]);
     stubWiki({ terms: { Q80: [`${title} (single)`, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+    // With no English label, Wikidata pairs the English description with the mul label.
+    stubWiki({ terms: { Q80: [undefined, desc, title] } });
+    expect(await checkPlanQids(plan.ops, state)).toHaveLength(1);
+    // But not when there is an English label.
+    stubWiki({ terms: { Q80: [`${title} (single)`, desc, title] } });
     expect(await checkPlanQids(plan.ops, state)).toEqual([]);
   });
 
