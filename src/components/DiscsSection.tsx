@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
 import { emptyDisc } from "../lib/state.ts";
+import { DISCOGS_FIELD, normalizeAlbumId } from "../lib/music.ts";
 import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
   isCustomPart,
@@ -183,8 +184,8 @@ function DiscBlock({
                     Tick a track that was also released as a single. The single becomes its own
                     item, an instance of single (Q134556) with the track’s title and artists, that
                     lists the track and is taken from the album. Its Edit button sets the new
-                    single’s release date, or an existing single’s QID to link that one instead.
-                    Untick it to remove the single.
+                    single’s release date, or an existing single’s QID to link that one instead, and
+                    its Discogs master ID. Untick it to remove the single.
                   </InfoTip>
                 </th>
               </tr>
@@ -245,7 +246,8 @@ function DiscBlock({
                           onChange={(e) =>
                             update((s) => {
                               const disc = s.discs[di];
-                              if (e.target.checked) disc.single[r.n] = { date: "", qid: "" };
+                              if (e.target.checked)
+                                disc.single[r.n] = { date: "", qid: "", discogs: "" };
                               else delete disc.single[r.n];
                             })
                           }
@@ -288,6 +290,7 @@ function SingleRow({
   const sg = state.discs[di].single[n];
   const qid = sg.qid.trim();
   const date = sg.date.trim();
+  const discogs = sg.discogs.trim();
   const found = QID.test(qid) ? lookup(qid) : undefined;
   const notSingle = singleProblem(qid, found);
   const problem = [plan.singleErrs[`${di}:${n}`], notSingle].filter(Boolean).join(" ");
@@ -307,6 +310,7 @@ function SingleRow({
     if (!open) editRef.current?.focus();
   }, [open, editing]);
 
+  const discogsNote = discogs && <span className="muted"> · Discogs master {discogs}</span>;
   if (!open)
     return (
       <div className="single-summary">
@@ -330,10 +334,12 @@ function SingleRow({
             {found?.status === "failed" && (
               <span className="muted"> · couldn’t look it up on Wikidata</span>
             )}
+            {discogsNote}
           </span>
         ) : (
           <span>
             New single <span className="muted">· released {date}</span>
+            {discogsNote}
           </span>
         )}
         <button
@@ -375,6 +381,23 @@ function SingleRow({
           onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
         />
       </label>
+      <label className="f">
+        <Pids>{`${DISCOGS_FIELD.label} (${DISCOGS_FIELD.property})`}</Pids>
+        <input
+          type="text"
+          className="ext-id"
+          spellCheck={false}
+          placeholder="Optional, ID or URL"
+          aria-invalid={discogs !== "" && !DISCOGS_FIELD.pattern.test(discogs)}
+          value={sg.discogs}
+          onChange={(e) =>
+            update(
+              (s) =>
+                void (s.discs[di].single[n].discogs = normalizeAlbumId("discogs", e.target.value)),
+            )
+          }
+        />
+      </label>
       <button
         type="button"
         className="ghost small"
@@ -384,10 +407,10 @@ function SingleRow({
         Done
       </button>
       {/* Just ticked: say what to fill in rather than show an error. */}
-      {qid === "" && date === "" && (
+      {qid === "" && date === "" && discogs === "" && (
         <p className="single-hint muted">Enter its release date, or an existing single's QID.</p>
       )}
-      {problem && (qid !== "" || date !== "") && (
+      {problem && (qid !== "" || date !== "" || discogs !== "") && (
         <p className="field-err" aria-live="polite">
           {problem}
         </p>

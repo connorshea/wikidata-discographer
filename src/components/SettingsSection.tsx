@@ -211,8 +211,8 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
       <p className="hint">
         <Pids>
           Tick "Single" on a track in the disc tables. Each single gets P31 single (Q134556), P1476,
-          P175, its own P577 release date, a P658 tracklist pointing at the track, and P13602 single
-          taken from the album.
+          P175, its own P577 release date, a P658 tracklist pointing at the track, P13602 single
+          taken from the album, and P1954 Discogs master ID when one is given.
         </Pids>
       </p>
       <div className="grid">

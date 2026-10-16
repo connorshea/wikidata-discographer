@@ -364,18 +364,60 @@ describe("buildPlan", () => {
 
   it("needs a single's own release date or an existing single, not both", () => {
     const state = structuredClone(EXAMPLE);
-    state.discs[0].single["2"] = { date: "", qid: "" };
+    state.discs[0].single["2"] = { date: "", qid: "", discogs: "" };
     expect(buildPlan(state).singleErrs["0:2"]).toMatch(/Enter the new single's release date/);
-    state.discs[0].single["2"] = { date: "2026-05-01", qid: "Q30" };
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "Q30", discogs: "" };
     expect(buildPlan(state).singleErrs["0:2"]).toMatch(/not both/);
-    state.discs[0].single["2"] = { date: "", qid: "Q30" };
+    state.discs[0].single["2"] = { date: "", qid: "Q30", discogs: "" };
     expect(buildPlan(state).singleErrs).toEqual({});
+  });
+
+  describe("a single's Discogs master ID", () => {
+    const P1954 = { property: "P1954", value: { type: "string", value: "4348311" } };
+    const withSingle = (sg: { date?: string; qid?: string; discogs?: string }) => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].single["2"] = { date: "", qid: "", discogs: "", ...sg };
+      return buildPlan(state);
+    };
+    const reused = (ops: Op[]) =>
+      ops.find((o) => o.op === "addClaims" && o.what.startsWith("single"));
+    const claimsOf = (o: Op | undefined) => o?.claims ?? [];
+
+    it("goes on a new single", () => {
+      const plan = withSingle({ date: "2026-05-01", discogs: "4348311" });
+      expect(plan.ready).toBe(true);
+      expect(claimsOf(find(plan.ops, "single:0:2"))).toContainEqual(P1954);
+    });
+
+    it("goes on an existing single only if it has none", () => {
+      const plan = withSingle({ qid: "Q30", discogs: "4348311" });
+      expect(plan.ready).toBe(true);
+      expect(claimsOf(reused(plan.ops))).toContainEqual({ ...P1954, ifMissing: true });
+    });
+
+    it("is left out when blank", () => {
+      for (const sg of [{ date: "2026-05-01" }, { qid: "Q30" }]) {
+        const plan = withSingle({ ...sg, discogs: " " });
+        expect(plan.singleErrs).toEqual({});
+        const op = sg.qid ? reused(plan.ops) : find(plan.ops, "single:0:2");
+        expect(op).toBeDefined();
+        expect(claimsOf(op).some((c) => c.property === "P1954")).toBe(false);
+      }
+    });
+
+    it("blocks the run when it isn't an ID", () => {
+      for (const sg of [{ date: "2026-05-01" }, { qid: "Q30" }]) {
+        const plan = withSingle({ ...sg, discogs: "abc" });
+        expect(plan.singleErrs["0:2"]).toMatch(/doesn't look like a Discogs master ID/);
+        expect(plan.ready).toBe(false);
+      }
+    });
   });
 
   it("links created items by reference", () => {
     const state = structuredClone(EXAMPLE);
     state.album.mode = "create";
-    state.discs[0].single["2"] = { date: "2026-05-01", qid: "" };
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "", discogs: "" };
     const { ops, ready } = buildPlan(state);
     expect(ready).toBe(true);
     expect(keys(ops)[0]).toBe("album");
@@ -413,7 +455,7 @@ describe("buildPlan", () => {
   it("labels a new track, composition, single and album under mul as well", () => {
     const state = structuredClone(EXAMPLE);
     state.album.mode = "create";
-    state.discs[0].single["2"] = { date: "2026-05-01", qid: "" };
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "", discogs: "" };
     const { ops } = buildPlan(state);
     const terms = (key: string) => {
       const o = find(ops, key);
@@ -432,7 +474,7 @@ describe("buildPlan", () => {
   it("labels new items once when the run's language is mul", () => {
     const state = { ...structuredClone(EXAMPLE), settings: { ...EXAMPLE.settings, lang: "mul" } };
     state.album.mode = "create";
-    state.discs[0].single["2"] = { date: "2026-05-01", qid: "" };
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "", discogs: "" };
     const { ops } = buildPlan(state);
     for (const key of ["track:0:2", "comp:0:2", "single:0:2", "album"]) {
       const o = find(ops, key);

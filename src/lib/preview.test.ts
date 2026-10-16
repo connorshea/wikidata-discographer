@@ -22,7 +22,7 @@ describe("formatDuration", () => {
 describe("previewPlan", () => {
   const state = structuredClone(EXAMPLE);
   state.album.mode = "create";
-  state.discs[0].single["2"] = { date: "2026-05-01", qid: "" };
+  state.discs[0].single["2"] = { date: "2026-05-01", qid: "", discogs: "" };
   const plan = buildPlan(state);
   const groups = previewPlan(plan, state);
   const edits = groups.flatMap((g) => g.edits);

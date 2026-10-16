@@ -11,7 +11,13 @@
 // "comp:0:3", "track:0:3", "single:0:3" — disc index and track number), and
 // the server swaps in the new QIDs as it goes.
 import { WD_LANG_CODES } from "./languages.ts";
-import { ALBUM_ID_FIELDS, type AlbumIdKey, type MusicKind, normalizeAlbumId } from "./music.ts";
+import {
+  ALBUM_ID_FIELDS,
+  type AlbumIdKey,
+  DISCOGS_FIELD,
+  type MusicKind,
+  normalizeAlbumId,
+} from "./music.ts";
 import { sameTitle } from "./titles.ts";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +87,8 @@ export interface AlbumMb {
 export interface SingleState {
   date: string;
   qid: string;
+  /** P1954 Discogs master ID, for a new or an existing single. */
+  discogs: string;
 }
 
 /**
@@ -555,7 +563,7 @@ interface PlanItem {
   perf: string[];
   existComp: string | null;
   existTrack: string | null;
-  single: { date: ParsedDate; qid: string | null } | null;
+  single: { date: ParsedDate; qid: string | null; discogs: string | null } | null;
   mb: MbRowIds | null;
 }
 
@@ -705,8 +713,11 @@ export function buildPlan(state: State): Plan {
         else if (!sd.val && !sq)
           errs.push("Enter the new single's release date, or an existing single's QID to reuse.");
         if (sq && !QID.test(sq)) errs.push(`"${sq}" isn't a QID.`);
+        const discogs = (sg.discogs ?? "").trim();
+        const discogsOk = DISCOGS_FIELD.pattern.test(discogs);
+        if (discogs && !discogsOk) errs.push(`That doesn't look like a ${DISCOGS_FIELD.label}.`);
         if (errs.length) singleErrs[`${di}:${r.n}`] = errs.join(" ");
-        single = { date: sd, qid: QID.test(sq) ? sq : null };
+        single = { date: sd, qid: QID.test(sq) ? sq : null, discogs: discogsOk ? discogs : null };
       }
       items.push({
         r,
@@ -938,6 +949,7 @@ export function buildPlan(state: State): Plan {
       { property: "P1545", value: { type: "string", value: "1" } },
     ]);
     const takenFrom = claim("P13602", albumValue);
+    const discogs = sg.discogs ? claim("P1954", { type: "string", value: sg.discogs }) : null;
     if (sg.qid) {
       reused++;
       ops.push({
@@ -948,6 +960,8 @@ export function buildPlan(state: State): Plan {
           tracklist,
           takenFrom,
           ...(S.extendExisting ? it.perf.map((p) => claim("P175", item(p))) : []),
+          // Not a second Discogs ID on a single that already has one.
+          ...(discogs ? [{ ...discogs, ifMissing: true as const }] : []),
         ],
       });
     } else {
@@ -966,6 +980,7 @@ export function buildPlan(state: State): Plan {
           ...(sd?.val ? [claim("P577", { type: "time", ...sd.val })] : []),
           tracklist,
           takenFrom,
+          ...(discogs ? [discogs] : []),
         ],
       });
     }

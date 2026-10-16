@@ -100,7 +100,8 @@ export function applyCreated(s: State, edits: readonly Created[]): void {
     } else if (!disc) continue;
     else if (kind === "comp") disc.comp[n] = qid!;
     else if (kind === "track") disc.track[n] = qid!;
-    else if (kind === "single") disc.single[n] = { date: "", qid: qid! };
+    else if (kind === "single")
+      disc.single[n] = { date: "", qid: qid!, discogs: disc.single[n]?.discogs ?? "" };
   }
 }
 

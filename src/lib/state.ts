@@ -184,7 +184,10 @@ export function coerceState(raw: unknown): State {
       ? Object.fromEntries(
           Object.entries(disc.single)
             .filter((e): e is [string, Obj] => isObj(e[1]))
-            .map(([n, sg]): [string, SingleState] => [n, { date: str(sg.date), qid: str(sg.qid) }]),
+            .map(([n, sg]): [string, SingleState] => [
+              n,
+              { date: str(sg.date), qid: str(sg.qid), discogs: str(sg.discogs) },
+            ]),
         )
       : {},
     mb: isObj(disc.mb)
