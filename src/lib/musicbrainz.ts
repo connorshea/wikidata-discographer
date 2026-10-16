@@ -16,7 +16,7 @@ import {
   STUDIO_ALBUM,
 } from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, State } from "./plan.ts";
-import { ALBUM_ID_FIELDS, ISRC_PATTERN } from "./music.ts";
+import { ALBUM_ID_FIELDS, ISRC_PATTERN, type MusicKind } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
 const MBID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
@@ -242,9 +242,23 @@ export interface MbLookups {
   /**
    * Recording, work and Spotify track IDs some item in the mirror already
    * has, however many. They aren't added to new items, which would duplicate them.
+   * A work ID only counts when a composition has it.
    */
   taken: string[];
+  /** P435 work ID → items that have it but aren't compositions, usually singles. */
+  misplacedWorks?: Record<string, { qid: string; kind: MusicKind }[]>;
 }
+
+const KIND_NOUNS: Record<MusicKind, string> = {
+  artist: "artist",
+  album: "album",
+  ep: "EP",
+  single: "single",
+  work: "composition",
+  track: "track",
+};
+const aKind = (kind: MusicKind) =>
+  `${/^[aeiouE]/.test(KIND_NOUNS[kind]) ? "an" : "a"} ${KIND_NOUNS[kind]}`;
 
 /** What the import fills in. Settings other than the date and language are left as they are. */
 export interface MbForm {
@@ -390,6 +404,7 @@ export function releaseToForm(
   let tracks = 0;
   const many: Record<TrackLinkKey, number> = { spotify: 0, appleMusic: 0 };
   const taken = new Set(lookups.taken);
+  const misplaced = new Map<string, string>();
   const toAdd = { recordings: 0, works: 0, isrcs: 0, spotify: 0, appleMusic: 0, durationRefs: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
@@ -401,6 +416,8 @@ export function releaseToForm(
       .tracks!.map((t) => {
         addCredit(t["artist-credit"]);
         const work = workOf(t);
+        if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
+          misplaced.set(work, t.title.trim());
         if (work && lookups.works[work]) {
           disc.comp[t.position] = lookups.works[work];
           comps++;
@@ -446,6 +463,18 @@ export function releaseToForm(
       .join("\n");
     return disc;
   });
+  // A work ID belongs on the composition, never on a single.
+  for (const [work, title] of misplaced) {
+    const holders = lookups.misplacedWorks![work];
+    const which = holders.map((h) => `${h.qid}, ${aKind(h.kind)},`).join(" and ");
+    const one = holders.length === 1;
+    const instead = lookups.works[work]
+      ? ""
+      : " The new composition gets it instead, if adding identifiers is on in Item settings.";
+    notes.push(
+      `${which} ${one ? "has" : "have"} the work ID for “${title}”. Only a composition should have one. Remove it from ${one ? `the ${KIND_NOUNS[holders[0].kind]}` : "them"}.${instead}`,
+    );
+  }
   if (missingLength)
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,
