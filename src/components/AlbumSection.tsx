@@ -4,10 +4,12 @@ import { useAuth } from "../lib/auth-context.ts";
 import {
   ALBUM_FORMS,
   ALBUM_TYPES,
+  EP_CLASS,
   QID,
   citesMb,
   loadedReleaseGroup,
   splitArtists,
+  STUDIO_ALBUM,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
@@ -138,7 +140,14 @@ export default function AlbumSection({
               <Pids>Instance of (P31)</Pids>
               <select
                 value={A.type}
-                onChange={(e) => update((s) => void (s.album.type = e.target.value))}
+                onChange={(e) =>
+                  update((s) => {
+                    s.album.type = e.target.value;
+                    // An EP isn't a studio album, so switching to EP drops that form.
+                    if (s.album.type === EP_CLASS && s.album.form === STUDIO_ALBUM)
+                      s.album.form = "";
+                  })
+                }
               >
                 {ALBUM_TYPES.map(([q, l]) => (
                   <option key={q} value={q}>{`${l} (${q})`}</option>
@@ -168,7 +177,10 @@ export default function AlbumSection({
                       Year of the publication date in Item settings. Needs a publication date.
                     </dd>
                     <dt>{"{type}"}</dt>
-                    <dd>The form, e.g. “studio album”, or “album” or “EP” when there's no form.</dd>
+                    <dd>
+                      The form, e.g. “studio album”, or “album” or “EP” when there's no form. An EP
+                      says “EP” in place of “album”, e.g. “live EP”.
+                    </dd>
                     <dt>{"{artists}"}</dt>
                     <dd>The album artists, joined like “A, B and C”.</dd>
                   </dl>

@@ -3,6 +3,7 @@ import {
   buildPlan,
   citesMb,
   citesMbDate,
+  descTypeLabel,
   loadedReleaseGroup,
   MAX_TERM_LENGTH,
   MAX_TRACKS,
@@ -599,5 +600,20 @@ describe("buildPlan", () => {
           "Split the release into separate runs.",
       ]);
     });
+  });
+});
+
+describe("descTypeLabel", () => {
+  it("uses the form's label for an album", () => {
+    expect(descTypeLabel("Q482994", "Q208569")).toBe("studio album");
+    expect(descTypeLabel("Q482994", "Q209939")).toBe("live album");
+    expect(descTypeLabel("Q482994", "")).toBe("album");
+  });
+
+  it("says EP for an EP, whatever its form", () => {
+    expect(descTypeLabel("Q169930", "")).toBe("EP");
+    expect(descTypeLabel("Q169930", "Q208569")).toBe("EP");
+    expect(descTypeLabel("Q169930", "Q209939")).toBe("live EP");
+    expect(descTypeLabel("Q169930", "Q963099")).toBe("remix EP");
   });
 });

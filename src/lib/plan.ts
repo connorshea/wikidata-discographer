@@ -221,6 +221,8 @@ export const ALBUM_TYPES = [
   ["Q169930", "extended play"],
 ] as const;
 
+export const STUDIO_ALBUM = "Q208569";
+
 export const ALBUM_FORMS = [
   ["Q208569", "studio album"],
   ["Q209939", "live album"],
@@ -332,6 +334,16 @@ export const TRACK_UNIT = "Q7302866";
 export const SECOND_UNIT = "Q11574";
 export const MUSICBRAINZ = "Q14005";
 export const EP_CLASS = "Q169930";
+
+/** The `{type}` in an album's description: the form's label, or "album" or "EP" when
+ * there's no form. An EP says "EP" in place of "album", and a studio EP is just "EP". */
+export const descTypeLabel = (type: string, form: string): string => {
+  const ep = type === EP_CLASS;
+  const label = ALBUM_FORMS.find(([q]) => q === form)?.[1];
+  if (!label) return ep ? "EP" : "album";
+  if (!ep) return label;
+  return form === STUDIO_ALBUM ? "EP" : label.replace(/ album$/, " EP");
+};
 
 // ---------------------------------------------------------------------------
 // Small helpers (also used by the form)
@@ -648,11 +660,7 @@ export function buildPlan(state: State): Plan {
           .replace(/[“”]/g, '"')
       : A.title.trim()
     : "";
-  const albumTypeLabel = A.form
-    ? (ALBUM_FORMS.find(([q]) => q === A.form)?.[1] ?? "album")
-    : A.type === EP_CLASS
-      ? "EP"
-      : "album";
+  const albumTypeLabel = descTypeLabel(A.type, A.form);
   Object.assign(fieldErrs, { albumQid: "", albumTitle: "", albumArtists: "", albumDesc: "" });
   const albumIds: Claim[] = [];
   if (!creatingAlbum) {
