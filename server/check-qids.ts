@@ -15,15 +15,31 @@
 // links it to, or it would end up with two (P2550). When what it records is
 // a single, album or EP rather than a composition, the track itself needs
 // fixing on Wikidata, so the problem says that instead.
+//
+// A new item mustn't have the same label and description as an item the form
+// reuses, as another new item, or as any item in the local mirror with them,
+// or Wikidata would refuse to create it. This is only checked once nothing
+// else is wrong, and the reused tracks' labels and descriptions come from when
+// their compositions were checked.
 import {
   checkItems,
   getEntities,
   getStatementItems,
+  getTerms,
   type ItemCheck,
   type Entity,
 } from "./wikidata-client.ts";
+import { findByTerms } from "./mirror.ts";
 import { CLASS_KINDS, kindOf, type MusicKind } from "../src/lib/music.ts";
-import { ALBUM_FORMS, type Op, QID, type State, type Value } from "../src/lib/plan.ts";
+import {
+  ALBUM_FORMS,
+  describeOp,
+  KIND_NAMES,
+  type Op,
+  QID,
+  type State,
+  type Value,
+} from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -134,7 +150,10 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
     const problem = (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album));
     if (problem) problems.unshift(problem);
   }
-  problems.push(...(await checkTrackCompositions(ops, sources, results)));
+  const tracks = new Map<string, Entity>();
+  problems.push(...(await checkTrackCompositions(ops, sources, results, tracks)));
+  if (problems.length === 0)
+    problems.push(...(await checkTermConflicts(ops, state, sources, results, tracks)));
   if (problems.length > MAX_PROBLEMS)
     return [
       ...problems.slice(0, MAX_PROBLEMS),
@@ -175,11 +194,13 @@ async function checkAlbumTracklist(qid: string): Promise<string | null> {
  * compositions. A track that records a single, album or EP instead is wrongly
  * linked on Wikidata, so its problem says to fix that statement. The tracks,
  * and then what they record, are fetched 50 per request, one request at a time.
+ * The tracks are kept in `fetched`.
  */
 async function checkTrackCompositions(
   ops: readonly Op[],
   sources: Map<string, string[]>,
   results: Map<string, ItemCheck>,
+  fetched: Map<string, Entity>,
 ): Promise<string[]> {
   // Each existing track, with every composition the run links it to: a QID,
   // or the plan key of one it creates.
@@ -198,6 +219,7 @@ async function checkTrackCompositions(
   for (let i = 0; i < qids.length; i += 50) {
     const entities = await getEntities(qids.slice(i, i + 50), { retries: 1 });
     for (const [qid, entity] of entities) {
+      fetched.set(qid, entity);
       const recorded = itemValues(entity, "P2550");
       const linked = [...links.get(qid)!];
       if (
@@ -263,4 +285,131 @@ async function releaseKinds(qids: string[]): Promise<Map<string, MusicKind>> {
     }
   }
   return out;
+}
+
+/** Where a new item's row is in the form, e.g. `disc 1 track 4`, from its plan key. */
+function rowOf(key: string): string | null {
+  const m = /^(?:comp|track|single):(\d+):(.+)$/.exec(key);
+  return m ? `disc ${Number(m[1]) + 1} track ${m[2]}` : null;
+}
+
+function newItemName(op: Extract<Op, { op: "create" }>): string {
+  const row = rowOf(op.key);
+  return `the new ${describeOp(op)}${row ? ` (${row})` : ""}`;
+}
+
+/** Where to change a new item's description. */
+function descriptionSetting(op: Extract<Op, { op: "create" }>): string {
+  if (op.kind === "work") return "the composition description in Item settings";
+  if (op.kind === "track" || op.kind === "single")
+    return `the ${op.kind} description in Item settings`;
+  return "its description in the form";
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * The label Wikidata pairs with an item's description in `lang` when it checks
+ * that label and description are unique: the label in that language or, when
+ * there is none, the `mul` label.
+ */
+const labelFor = (labels: Record<string, string>, lang: string): string | undefined =>
+  labels[lang] || labels.mul || undefined;
+
+/**
+ * New items that would have the same label and description, in the same
+ * language, as another new item or an existing item, one sentence each. A
+ * missing label counts as the `mul` label, as on Wikidata. Wikidata refuses
+ * to create such an item, which would stop the run partway: a composition
+ * described like the existing single in its row, say.
+ *
+ * The existing items asked about are the reused compositions, tracks and
+ * singles, the existing album, and items the local mirror has with the same
+ * label and description. Only those languages' labels and descriptions are
+ * fetched, and items in `fetched` aren't asked about again. If the mirror
+ * can't be read, only the form's items are checked.
+ */
+async function checkTermConflicts(
+  ops: readonly Op[],
+  state: State,
+  sources: Map<string, string[]>,
+  results: Map<string, ItemCheck>,
+  fetched: Map<string, Entity>,
+): Promise<string[]> {
+  const termKey = (lang: string, label: string, desc: string) =>
+    JSON.stringify([lang, label, desc]);
+  // Each label and description a new item would have, with the items that would have it.
+  const fresh = new Map<string, Extract<Op, { op: "create" }>[]>();
+  const langs = new Set<string>();
+  for (const op of ops) {
+    if (op.op !== "create") continue;
+    for (const [lang, desc] of Object.entries(op.descriptions)) {
+      const label = labelFor(op.labels, lang);
+      if (!label || !desc) continue;
+      const k = termKey(lang, label, desc);
+      fresh.set(k, [...(fresh.get(k) ?? []), op]);
+      langs.add(lang);
+    }
+  }
+  if (fresh.size === 0) return [];
+
+  const problems: string[] = [];
+  for (const [k, same] of fresh) {
+    if (same.length < 2) continue;
+    const desc = (JSON.parse(k) as string[])[2];
+    const names = same.map(newItemName);
+    problems.push(
+      `${capitalize(names.slice(0, -1).join(", "))} and ${names[names.length - 1]} would have the same label and description, “${desc}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so give them different descriptions in Item settings.",
+    );
+  }
+
+  const reused = new Set<string>();
+  if (state.album.mode === "existing") reused.add(state.album.qid.trim());
+  for (const d of state.discs) {
+    for (const q of Object.values(d.comp)) reused.add(q.trim());
+    for (const q of Object.values(d.track)) reused.add(q.trim());
+    for (const s of Object.values(d.single)) if (s.qid) reused.add(s.qid.trim());
+  }
+  const qids = [...reused].filter((q) => results.get(q)?.status === "ok");
+  const pairs = [...fresh.keys()].map((k) => {
+    const [, label, description] = JSON.parse(k) as string[];
+    return { label, description };
+  });
+  const elsewhere = await findByTerms(pairs).catch((err: unknown) => {
+    console.warn("Checking the mirror for label and description conflicts failed:", err);
+    return [];
+  });
+  for (const q of elsewhere) if (!reused.has(q) && !qids.includes(q)) qids.push(q);
+  const values = (terms: Entity["labels"]) =>
+    Object.fromEntries(Object.entries(terms ?? {}).map(([l, t]) => [l, t.value]));
+  const terms = await getTerms(
+    qids.filter((q) => !fetched.has(q)),
+    [...langs, "mul"],
+    { retries: 1 },
+  );
+  for (const [qid, e] of fetched)
+    terms.set(qid, {
+      status: "ok",
+      labels: values(e.labels),
+      descriptions: values(e.descriptions),
+    });
+  for (const [qid, t] of terms) {
+    if (t.status !== "ok") continue;
+    for (const [lang, desc] of Object.entries(t.descriptions)) {
+      const label = labelFor(t.labels, lang);
+      const same = label ? fresh.get(termKey(lang, label, desc)) : undefined;
+      if (!same) continue;
+      const where = sources.get(qid)?.join(", ");
+      for (const op of same)
+        problems.push(
+          `${capitalize(newItemName(op))} would have the same label and description as ${qid}${where ? ` (${where})` : ""}, “${desc}”. ` +
+            `Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. ` +
+            (reused.has(qid)
+              ? `Change the description of ${qid} on Wikidata, or ${descriptionSetting(op)}.`
+              : `If ${qid} is the same ${KIND_NAMES[op.kind] ?? "item"}, use it in the form instead. If not, change its description on Wikidata, or ${descriptionSetting(op)}.`),
+        );
+    }
+  }
+  return problems;
 }

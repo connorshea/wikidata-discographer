@@ -3,6 +3,10 @@ import { checkPlanQids, forgetCheckedQids, planQids } from "./check-qids.ts";
 import { buildPlan, type Op } from "../src/lib/plan.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
 
+/** What the mirror has with a new item's label and description. */
+const findByTerms = vi.hoisted(() => vi.fn(async (): Promise<string[]> => []));
+vi.mock("./mirror.ts", () => ({ findByTerms }));
+
 describe("planQids", () => {
   const ops: Op[] = [
     {
@@ -44,6 +48,7 @@ function stubWiki({
   tracklist = [],
   compositions = {},
   classes = {},
+  terms = {},
 }: {
   missing?: string[];
   redirects?: Record<string, string>;
@@ -56,7 +61,13 @@ function stubWiki({
   compositions?: Record<string, string[]>;
   /** P31 values of items fetched with their claims. */
   classes?: Record<string, string[]>;
+  /** English label and description, and any mul label, of items fetched for their terms. */
+  terms?: Record<string, [string | undefined, string, string?]>;
 }) {
+  const term = (en: string | undefined, mul?: string) => ({
+    ...(en ? { en: { language: "en", value: en } } : {}),
+    ...(mul ? { mul: { language: "mul", value: mul } } : {}),
+  });
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
     if (q.get("action") === "wbgetclaims") {
@@ -88,10 +99,30 @@ function stubWiki({
               id,
               type: "item",
               lastrevid: 1,
+              labels: term(terms[id]?.[0], terms[id]?.[2]),
+              descriptions: term(terms[id]?.[1]),
               claims: {
                 P2550: (compositions[id] ?? []).map(claim("P2550")),
                 P31: (classes[id] ?? []).map(claim("P31")),
               },
+            },
+          ]),
+        ),
+      });
+    }
+    if (q.get("props") === "labels|descriptions") {
+      const ids = q.get("ids")!.split("|");
+      expect(ids.length).toBeLessThanOrEqual(50);
+      expect(q.get("languages")).toBe("en|mul");
+      return Response.json({
+        entities: Object.fromEntries(
+          ids.map((id) => [
+            id,
+            {
+              id,
+              type: "item",
+              labels: term(terms[id]?.[0], terms[id]?.[2]),
+              descriptions: term(terms[id]?.[1]),
             },
           ]),
         ),
@@ -248,6 +279,99 @@ describe("checkPlanQids", () => {
     expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([]);
   });
 
+  it("refuses a new item with the same label and description as a reused one", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].single[2] = { date: "", qid: "Q80", discogs: "" };
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    const [title, desc] = [comp.labels.en, comp.descriptions.en];
+    stubWiki({ terms: { Q80: [title, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([
+      `The new composition “${title}” (disc 1 track 2) would have the same label and description as Q80 (Disc 1 track 2 single), “${desc}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. Change the description of Q80 on Wikidata, or the composition description in Item settings.",
+    ]);
+    // A different description, or a different label, is fine.
+    stubWiki({ terms: { Q80: [title, `${desc} (single)`] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+    stubWiki({ terms: { Q80: [`${title} (single)`, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+    // With no English label, Wikidata pairs the English description with the mul label.
+    stubWiki({ terms: { Q80: [undefined, desc, title] } });
+    expect(await checkPlanQids(plan.ops, state)).toHaveLength(1);
+    // But not when there is an English label.
+    stubWiki({ terms: { Q80: [`${title} (single)`, desc, title] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+  });
+
+  it("takes a reused track's label and description from when its composition was checked", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].track[2] = "Q81";
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    const fetch = stubWiki({ terms: { Q81: [comp.labels.en, comp.descriptions.en] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([
+      expect.stringMatching(/would have the same label and description as Q81 /),
+    ]);
+    const asked = fetch.mock.calls
+      .map(([url]) => new URL(url).searchParams)
+      .filter((q) => q.get("props") === "labels|descriptions")
+      .flatMap((q) => q.get("ids")!.split("|"));
+    expect(asked).not.toContain("Q81");
+  });
+
+  it("refuses a new item with the same label and description as one in the mirror", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    const [title, desc] = [comp.labels.en, comp.descriptions.en];
+    findByTerms.mockResolvedValueOnce(["Q90"]);
+    stubWiki({ terms: { Q90: [title, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([
+      `The new composition “${title}” (disc 1 track 2) would have the same label and description as Q90, “${desc}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. If Q90 is the same composition, use it in the form instead. If not, change its description on Wikidata, or the composition description in Item settings.",
+    ]);
+    expect(findByTerms).toHaveBeenLastCalledWith(
+      expect.arrayContaining([{ label: title, description: desc }]),
+    );
+    // What the mirror has is checked on Wikidata, where it may have changed since.
+    findByTerms.mockResolvedValueOnce(["Q90"]);
+    stubWiki({ terms: { Q90: [title, `${desc} (cover)`] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+    // Without the mirror, the form's items are still checked.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    findByTerms.mockRejectedValueOnce(new Error("no database"));
+    stubWiki({ terms: { Q90: [title, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+  });
+
+  it("refuses two new items with the same label and description", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.settings.trackDesc = state.settings.compDesc;
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    stubWiki({});
+    expect(await checkPlanQids(plan.ops, state)).toContain(
+      `The new composition “${comp.labels.en}” (disc 1 track 2) and the new track “${comp.labels.en}” (disc 1 track 2) would have the same label and description, “${comp.descriptions.en}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so give them different descriptions in Item settings.",
+    );
+  });
+
   it("refuses an existing album that isn't an album or EP", async () => {
     stubWiki({ instanceOf: ["Q5"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
@@ -263,6 +387,7 @@ describe("checkPlanQids", () => {
     const fetch = stubWiki({ tooBig: ["Q999999999999"] });
     const problems = await checkPlanQids(buildPlan(state).ops, state);
     expect(problems).toEqual(["The existing album: Q999999999999 doesn't exist."]);
+    // Page info twice. Labels and descriptions aren't checked once something is wrong.
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 

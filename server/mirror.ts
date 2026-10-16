@@ -2,9 +2,9 @@
 // `music_external_ids` and `music_links`): converting an entity to a row, and writing rows. Used
 // by the weekly dump import, by runs (each created item is added straight
 // away), and by "add an item" for things created since the last dump.
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, retryOnLockConflict } from "./db.ts";
-import { propertyNumber, qidNumber } from "./ids.ts";
+import { propertyNumber, qidNumber, toQid } from "./ids.ts";
 import { mirrorState, musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { ID_PROPERTIES, kindOf, LINK_PROPERTIES, type MusicKind } from "../src/lib/music.ts";
 import { labelSearchKey, TITLE_KEY_VERSION } from "../src/lib/titles.ts";
@@ -173,6 +173,38 @@ async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "a
   if (ids.length) await tx.insert(musicExternalIds).values(ids);
   await tx.delete(musicLinks).where(inArray(musicLinks.qid, qids));
   if (links.length) await tx.insert(musicLinks).values(links);
+}
+
+/**
+ * Mirrored items with exactly one of these labels and descriptions, up to
+ * `limit`. The mirror keeps one label (English, else mul) and one description
+ * (English, else any) per item, and may be behind Wikidata, so a hit is only
+ * a candidate: its terms on Wikidata still need checking.
+ */
+export async function findByTerms(
+  pairs: readonly { label: string; description: string }[],
+  limit = 50,
+): Promise<string[]> {
+  const keys = [...new Set(pairs.map((p) => labelSearchKey(p.label)))].filter(
+    (k): k is string => k !== null,
+  );
+  if (keys.length === 0) return [];
+  const rows = await db
+    .select({ qid: musicItems.qid, label: musicItems.label, description: musicItems.description })
+    .from(musicItems)
+    .where(
+      and(
+        inArray(musicItems.labelSearch, keys),
+        inArray(musicItems.description, [...new Set(pairs.map((p) => p.description))]),
+      ),
+    )
+    .limit(limit * 4);
+  // The columns compare case-insensitively; Wikidata doesn't.
+  const want = new Set(pairs.map((p) => JSON.stringify([p.label, p.description])));
+  return rows
+    .filter((r) => want.has(JSON.stringify([r.label, r.description])))
+    .slice(0, limit)
+    .map((r) => toQid(r.qid));
 }
 
 const REKEY_BATCH = 2000;
