@@ -17,7 +17,9 @@
 // fixing on Wikidata, so the problem says that instead.
 //
 // A new item mustn't have the same label and description as an item the form
-// reuses, or as another new item, or Wikidata would refuse to create it.
+// reuses, or as another new item, or Wikidata would refuse to create it. This
+// is only checked once nothing else is wrong, and the reused tracks' labels
+// and descriptions come from when their compositions were checked.
 import {
   checkItems,
   getEntities,
@@ -138,8 +140,10 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
     const problem = (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album));
     if (problem) problems.unshift(problem);
   }
-  problems.push(...(await checkTrackCompositions(ops, sources, results)));
-  problems.push(...(await checkTermConflicts(ops, state, sources, results)));
+  const tracks = new Map<string, Entity>();
+  problems.push(...(await checkTrackCompositions(ops, sources, results, tracks)));
+  if (problems.length === 0)
+    problems.push(...(await checkTermConflicts(ops, state, sources, results, tracks)));
   if (problems.length > MAX_PROBLEMS)
     return [
       ...problems.slice(0, MAX_PROBLEMS),
@@ -180,11 +184,13 @@ async function checkAlbumTracklist(qid: string): Promise<string | null> {
  * compositions. A track that records a single, album or EP instead is wrongly
  * linked on Wikidata, so its problem says to fix that statement. The tracks,
  * and then what they record, are fetched 50 per request, one request at a time.
+ * The tracks are kept in `fetched`.
  */
 async function checkTrackCompositions(
   ops: readonly Op[],
   sources: Map<string, string[]>,
   results: Map<string, ItemCheck>,
+  fetched: Map<string, Entity>,
 ): Promise<string[]> {
   // Each existing track, with every composition the run links it to: a QID,
   // or the plan key of one it creates.
@@ -203,6 +209,7 @@ async function checkTrackCompositions(
   for (let i = 0; i < qids.length; i += 50) {
     const entities = await getEntities(qids.slice(i, i + 50), { retries: 1 });
     for (const [qid, entity] of entities) {
+      fetched.set(qid, entity);
       const recorded = itemValues(entity, "P2550");
       const linked = [...links.get(qid)!];
       if (
@@ -305,13 +312,15 @@ const labelFor = (labels: Record<string, string>, lang: string): string | undefi
  * each. A missing label counts as the `mul` label, as on Wikidata. Wikidata refuses to create such an item, which would stop the run
  * partway: a composition described like the existing single in its row, say.
  * Only the reused compositions, tracks and singles and the existing album are
- * asked about, for just those languages' labels and descriptions.
+ * asked about, for just those languages' labels and descriptions. Items in
+ * `fetched` aren't asked about again.
  */
 async function checkTermConflicts(
   ops: readonly Op[],
   state: State,
   sources: Map<string, string[]>,
   results: Map<string, ItemCheck>,
+  fetched: Map<string, Entity>,
 ): Promise<string[]> {
   const termKey = (lang: string, label: string, desc: string) =>
     JSON.stringify([lang, label, desc]);
@@ -349,9 +358,21 @@ async function checkTermConflicts(
     for (const s of Object.values(d.single)) if (s.qid) reused.add(s.qid.trim());
   }
   const qids = [...reused].filter((q) => results.get(q)?.status === "ok");
-  const terms = await getTerms(qids, [...langs, "mul"], { retries: 1 });
+  const values = (terms: Entity["labels"]) =>
+    Object.fromEntries(Object.entries(terms ?? {}).map(([l, t]) => [l, t.value]));
+  const terms = await getTerms(
+    qids.filter((q) => !fetched.has(q)),
+    [...langs, "mul"],
+    { retries: 1 },
+  );
+  for (const [qid, e] of fetched)
+    terms.set(qid, {
+      status: "ok",
+      labels: values(e.labels),
+      descriptions: values(e.descriptions),
+    });
   for (const [qid, t] of terms) {
-    if (t.status !== "ok") continue;
+    if (t.status !== "ok" || !reused.has(qid)) continue;
     for (const [lang, desc] of Object.entries(t.descriptions)) {
       const label = labelFor(t.labels, lang);
       const same = label ? fresh.get(termKey(lang, label, desc)) : undefined;

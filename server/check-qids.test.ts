@@ -60,6 +60,10 @@ function stubWiki({
   /** English label and description, and any mul label, of items fetched for their terms. */
   terms?: Record<string, [string | undefined, string, string?]>;
 }) {
+  const term = (en: string | undefined, mul?: string) => ({
+    ...(en ? { en: { language: "en", value: en } } : {}),
+    ...(mul ? { mul: { language: "mul", value: mul } } : {}),
+  });
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
     if (q.get("action") === "wbgetclaims") {
@@ -91,6 +95,8 @@ function stubWiki({
               id,
               type: "item",
               lastrevid: 1,
+              labels: term(terms[id]?.[0], terms[id]?.[2]),
+              descriptions: term(terms[id]?.[1]),
               claims: {
                 P2550: (compositions[id] ?? []).map(claim("P2550")),
                 P31: (classes[id] ?? []).map(claim("P31")),
@@ -104,10 +110,6 @@ function stubWiki({
       const ids = q.get("ids")!.split("|");
       expect(ids.length).toBeLessThanOrEqual(50);
       expect(q.get("languages")).toBe("en|mul");
-      const term = (en: string | undefined, mul?: string) => ({
-        ...(en ? { en: { language: "en", value: en } } : {}),
-        ...(mul ? { mul: { language: "mul", value: mul } } : {}),
-      });
       return Response.json({
         entities: Object.fromEntries(
           ids.map((id) => [
@@ -301,6 +303,26 @@ describe("checkPlanQids", () => {
     expect(await checkPlanQids(plan.ops, state)).toEqual([]);
   });
 
+  it("takes a reused track's label and description from when its composition was checked", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].track[2] = "Q81";
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    const fetch = stubWiki({ terms: { Q81: [comp.labels.en, comp.descriptions.en] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([
+      expect.stringMatching(/would have the same label and description as Q81 /),
+    ]);
+    const asked = fetch.mock.calls
+      .map(([url]) => new URL(url).searchParams)
+      .filter((q) => q.get("props") === "labels|descriptions")
+      .flatMap((q) => q.get("ids")!.split("|"));
+    expect(asked).not.toContain("Q81");
+  });
+
   it("refuses two new items with the same label and description", async () => {
     const state = structuredClone(EXAMPLE);
     state.album.mode = "create";
@@ -332,8 +354,8 @@ describe("checkPlanQids", () => {
     const fetch = stubWiki({ tooBig: ["Q999999999999"] });
     const problems = await checkPlanQids(buildPlan(state).ops, state);
     expect(problems).toEqual(["The existing album: Q999999999999 doesn't exist."]);
-    // Page info twice, then the reused composition's label and description.
-    expect(fetch).toHaveBeenCalledTimes(3);
+    // Page info twice. Labels and descriptions aren't checked once something is wrong.
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("asks in batches of 50, and doesn't ask again about items it found", async () => {
