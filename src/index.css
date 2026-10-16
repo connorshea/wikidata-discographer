@@ -517,7 +517,8 @@ button.ghost.quiet {
   min-width: 0;
 }
 /* Monospace is for QIDs only. */
-.single-panel input.date {
+.single-panel input.date,
+.single-panel input.ext-id {
   font-family: var(--sans);
 }
 .single-panel input:disabled {

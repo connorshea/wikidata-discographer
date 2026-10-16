@@ -131,6 +131,9 @@ export const ALBUM_ID_FIELDS = [
 
 export type AlbumIdKey = (typeof ALBUM_ID_FIELDS)[number]["key"];
 
+/** A single's Discogs master ID works the same way as the album's. */
+export const DISCOGS_FIELD = ALBUM_ID_FIELDS.find((f) => f.key === "discogs")!;
+
 /** Turn a pasted URL into the bare id; anything else is returned trimmed. */
 export function normalizeAlbumId(key: AlbumIdKey, raw: string): string {
   const field = ALBUM_ID_FIELDS.find((f) => f.key === key)!;

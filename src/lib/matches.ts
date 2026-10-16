@@ -80,10 +80,11 @@ export function pickTrack(disc: Disc, n: number, t: TrackMatch): void {
 
 /**
  * Use `qid` as track `n`'s single, adding the single if it has none. Any
- * release date goes, since a single is either reused or dated.
+ * release date goes, since a single is either reused or dated, but a Discogs
+ * ID stays.
  */
 export function pickSingle(disc: Disc, n: number, qid: string): void {
-  disc.single[n] = { date: "", qid };
+  disc.single[n] = { date: "", qid, discogs: disc.single[n]?.discogs ?? "" };
 }
 
 /**

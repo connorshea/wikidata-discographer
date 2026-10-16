@@ -30,7 +30,17 @@ describe("coerceState", () => {
       ids: { spotify: "" },
     });
     expect(s.artists).toEqual({ A: "Q1" });
-    expect(s.discs[0].single).toEqual({ "1": { date: "2020", qid: "" } });
+    expect(s.discs[0].single).toEqual({ "1": { date: "2020", qid: "", discogs: "" } });
+  });
+
+  it("gives singles saved before the Discogs field an empty one", () => {
+    const s = coerceState({
+      discs: [{ single: { "1": { date: "2020", qid: "" }, "2": { qid: "Q30", discogs: "123" } } }],
+    });
+    expect(s.discs[0].single).toEqual({
+      "1": { date: "2020", qid: "", discogs: "" },
+      "2": { date: "", qid: "Q30", discogs: "123" },
+    });
   });
 
   it("keeps an album's import source only when it's well-formed", () => {

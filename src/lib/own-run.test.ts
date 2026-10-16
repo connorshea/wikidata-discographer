@@ -139,7 +139,7 @@ describe("applyCreated", () => {
     const s = structuredClone(EMPTY);
     s.album = { ...s.album, mode: "create", title: "New" };
     s.discs = [emptyDisc(), emptyDisc()];
-    s.discs[1].single[2] = { date: "2020-01-01", qid: "" };
+    s.discs[1].single[2] = { date: "2020-01-01", qid: "", discogs: "123" };
     const edits = [
       edit({ key: "album", qid: "Q1" }),
       edit({ key: "comp:0:1", qid: "Q2" }),
@@ -150,8 +150,8 @@ describe("applyCreated", () => {
     applyCreated(s, edits);
     expect(s.album).toMatchObject({ mode: "existing", qid: "Q1", title: "New" });
     expect(s.discs[0]).toMatchObject({ comp: { 1: "Q2" }, track: { 1: "Q3" } });
-    // A reused single has no release date.
-    expect(s.discs[1].single).toEqual({ 2: { date: "", qid: "Q4" } });
+    // A reused single has no release date, but keeps its Discogs ID.
+    expect(s.discs[1].single).toEqual({ 2: { date: "", qid: "Q4", discogs: "123" } });
   });
 
   it("skips failures, unknowns not found, statement edits and missing discs", () => {
@@ -212,7 +212,7 @@ describe("formOfRun", () => {
 
   it("is another form when a single the run created is removed or redated", () => {
     const withSingle = structuredClone(input);
-    withSingle.discs[0].single[1] = { date: "2020-01-01", qid: "" };
+    withSingle.discs[0].single[1] = { date: "2020-01-01", qid: "", discogs: "" };
     const singleRun = {
       input: withSingle,
       edits: [...edits, edit({ key: "single:0:1", qid: "Q4" })],
