@@ -43,6 +43,7 @@ function stubWiki({
   instanceOf = ["Q482994"],
   tracklist = [],
   compositions = {},
+  classes = {},
 }: {
   missing?: string[];
   redirects?: Record<string, string>;
@@ -53,6 +54,8 @@ function stubWiki({
   tracklist?: string[];
   /** Each track's P2550 values. */
   compositions?: Record<string, string[]>;
+  /** P31 values of items fetched with their claims. */
+  classes?: Record<string, string[]>;
 }) {
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
@@ -73,8 +76,8 @@ function stubWiki({
     if (q.get("props")!.includes("claims")) {
       const ids = q.get("ids")!.split("|");
       expect(ids.length).toBeLessThanOrEqual(50);
-      const claim = (id: string) => ({
-        mainsnak: { snaktype: "value", property: "P2550", datavalue: { value: { id } } },
+      const claim = (property: string) => (id: string) => ({
+        mainsnak: { snaktype: "value", property, datavalue: { value: { id } } },
         rank: "normal",
       });
       return Response.json({
@@ -85,7 +88,10 @@ function stubWiki({
               id,
               type: "item",
               lastrevid: 1,
-              claims: { P2550: (compositions[id] ?? []).map(claim) },
+              claims: {
+                P2550: (compositions[id] ?? []).map(claim("P2550")),
+                P31: (classes[id] ?? []).map(claim("P31")),
+              },
             },
           ]),
         ),
@@ -183,6 +189,38 @@ describe("checkPlanQids", () => {
     state.discs[0].comp[2] = "Q62";
     expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
       "Disc 1 track 2 track: Q51 already records the composition Q61. Put Q61 in the track's composition field, so the track isn't given a second one.",
+    ]);
+  });
+
+  it("says to fix a reused track that records a single instead of a composition", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].track[1] = "Q51"; // records Q61, a single
+    state.discs[0].comp[1] = "Q62";
+    stubWiki({ compositions: { Q51: ["Q61"] }, classes: { Q61: ["Q134556"] } });
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      "Disc 1 track 1 track: Q51 is a recording of (P2550) Q61, a single, not a composition. On Wikidata, change that statement to the composition Q62, then start the run again.",
+    ]);
+    // With no composition in the form, there's none to name.
+    delete state.discs[0].comp[1];
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      "Disc 1 track 1 track: Q51 is a recording of (P2550) Q61, a single, not a composition. On Wikidata, change that statement to the song's composition and put the composition in the track's composition field, then start the run again.",
+    ]);
+  });
+
+  it("names a reused track's real composition over a release it also records", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].track[1] = "Q51";
+    state.discs[0].comp[1] = "Q62";
+    stubWiki({
+      compositions: { Q51: ["Q61", "Q63"] },
+      classes: { Q61: ["Q482994"], Q63: ["Q105543609"] },
+    });
+    expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
+      "Disc 1 track 1 track: Q51 already records the composition Q63. Put Q63 in the track's composition field, so the track isn't given a second one.",
     ]);
   });
 

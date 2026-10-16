@@ -12,10 +12,18 @@
 // the run would add a second one beside it.
 //
 // A reused track mustn't record a different composition than the one the run
-// links it to, or it would end up with two (P2550).
-import { checkItems, getEntities, getStatementItems, type ItemCheck } from "./wikidata-client.ts";
-import { CLASS_KINDS } from "../src/lib/music.ts";
-import { ALBUM_FORMS, type Op, type State, type Value } from "../src/lib/plan.ts";
+// links it to, or it would end up with two (P2550). When what it records is
+// a single, album or EP rather than a composition, the track itself needs
+// fixing on Wikidata, so the problem says that instead.
+import {
+  checkItems,
+  getEntities,
+  getStatementItems,
+  type ItemCheck,
+  type Entity,
+} from "./wikidata-client.ts";
+import { CLASS_KINDS, kindOf, type MusicKind } from "../src/lib/music.ts";
+import { ALBUM_FORMS, type Op, QID, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -164,7 +172,9 @@ async function checkAlbumTracklist(qid: string): Promise<string | null> {
  * Reused tracks the run would give a second composition (P2550), one
  * sentence each: one that already records a composition other than one the
  * run links it to, or one used in several rows that link it to different
- * compositions. The tracks are fetched 50 per request, one request at a time.
+ * compositions. A track that records a single, album or EP instead is wrongly
+ * linked on Wikidata, so its problem says to fix that statement. The tracks,
+ * and then what they record, are fetched 50 per request, one request at a time.
  */
 async function checkTrackCompositions(
   ops: readonly Op[],
@@ -182,26 +192,75 @@ async function checkTrackCompositions(
     set.add("id" in v ? v.id : v.ref);
     links.set(op.target.id, set);
   }
-  const problems: string[] = [];
+  // Tracks the run would give a second composition, with what they already record.
+  const bad: { qid: string; recorded: string[]; linked: string[] }[] = [];
   const qids = [...links.keys()];
   for (let i = 0; i < qids.length; i += 50) {
     const entities = await getEntities(qids.slice(i, i + 50), { retries: 1 });
     for (const [qid, entity] of entities) {
-      const recorded = (entity.claims?.P2550 ?? [])
-        .filter((s) => s.rank !== "deprecated")
-        .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
-        .filter((id): id is string => id !== undefined);
+      const recorded = itemValues(entity, "P2550");
       const linked = [...links.get(qid)!];
-      const where = sources.get(qid)?.join(", ") ?? "A reused track";
-      if (recorded.length > 0 && linked.some((l) => !recorded.includes(l)))
-        problems.push(
-          `${where}: ${qid} already records the composition ${recorded.join(", ")}. Put ${recorded[0]} in the track's composition field, so the track isn't given a second one.`,
-        );
-      else if (recorded.length === 0 && linked.length > 1)
-        problems.push(
-          `${where}: ${qid} is used in more than one row with different compositions. Give each of those rows the same composition, so the track isn't given more than one.`,
-        );
+      if (
+        (recorded.length > 0 && linked.some((l) => !recorded.includes(l))) ||
+        (recorded.length === 0 && linked.length > 1)
+      )
+        bad.push({ qid, recorded, linked });
     }
   }
+  const releases = await releaseKinds(bad.flatMap((b) => b.recorded));
+  const problems: string[] = [];
+  for (const { qid, recorded, linked } of bad) {
+    const where = sources.get(qid)?.join(", ") ?? "A reused track";
+    if (recorded.length === 0) {
+      problems.push(
+        `${where}: ${qid} is used in more than one row with different compositions. Give each of those rows the same composition, so the track isn't given more than one.`,
+      );
+      continue;
+    }
+    const works = recorded.filter((r) => !releases.has(r));
+    if (works.length > 0) {
+      problems.push(
+        `${where}: ${qid} already records the composition ${works.join(", ")}. Put ${works[0]} in the track's composition field, so the track isn't given a second one.`,
+      );
+      continue;
+    }
+    // Putting a single in the composition field would only spread the mistake.
+    const what = recorded.map((r) => `${r}, ${RELEASE_NAMES[releases.get(r)!]}`).join(", and ");
+    const comp = linked.find((l) => QID.test(l));
+    problems.push(
+      `${where}: ${qid} is a recording of (P2550) ${what}, not a composition. ` +
+        (comp
+          ? `On Wikidata, change that statement to the composition ${comp}, then start the run again.`
+          : `On Wikidata, change that statement to the song's composition and put the composition in the track's composition field, then start the run again.`),
+    );
+  }
   return problems;
+}
+
+const RELEASE_NAMES: Partial<Record<MusicKind, string>> = {
+  single: "a single",
+  album: "an album",
+  ep: "an EP",
+};
+
+/** An entity's item values for a property, leaving out deprecated statements. */
+function itemValues(entity: Entity, property: string): string[] {
+  return (entity.claims?.[property] ?? [])
+    .filter((s) => s.rank !== "deprecated")
+    .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
+    .filter((id): id is string => id !== undefined);
+}
+
+/** Which of these items are singles, albums or EPs, by kind. Fetched 50 per request. */
+async function releaseKinds(qids: string[]): Promise<Map<string, MusicKind>> {
+  const out = new Map<string, MusicKind>();
+  const unique = [...new Set(qids)];
+  for (let i = 0; i < unique.length; i += 50) {
+    const entities = await getEntities(unique.slice(i, i + 50), { retries: 1 });
+    for (const [qid, entity] of entities) {
+      const kind = kindOf(itemValues(entity, "P31"), []);
+      if (kind && kind in RELEASE_NAMES) out.set(qid, kind);
+    }
+  }
+  return out;
 }
