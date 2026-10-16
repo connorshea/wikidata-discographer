@@ -339,6 +339,42 @@ describe("releaseToForm", () => {
     expect(form.summary).toContain("Found 1 artist, 1 composition and 1 track");
   });
 
+  describe("a work ID on an item that isn't a composition", () => {
+    const t = RELEASE.media[0].tracks![0];
+    const work = t.recording.relations!.find((r) => r.work)!.work!.id;
+
+    it("adds it to the new composition, and says to remove it from the single", () => {
+      const form = releaseToForm(RELEASE, {
+        ...NONE,
+        misplacedWorks: { [work]: [{ qid: "Q2081516", kind: "single" }] },
+      });
+      expect(form.discs[0].comp).toEqual({});
+      expect(form.discs[0].mb["1"].work).toBe(work);
+      expect(form.notes).toEqual([
+        `Q2081516, a single, has the work ID for “${t.title}”. Only a composition should have one. Remove it from the single. The new composition gets it instead, if adding identifiers is on in Item settings.`,
+      ]);
+    });
+
+    it("names every item that has it, and still reuses a composition that has it", () => {
+      const form = releaseToForm(RELEASE, {
+        ...NONE,
+        works: { [work]: "Q20" },
+        taken: [work],
+        misplacedWorks: {
+          [work]: [
+            { qid: "Q1", kind: "single" },
+            { qid: "Q2", kind: "ep" },
+          ],
+        },
+      });
+      expect(form.discs[0].comp).toEqual({ "1": "Q20" });
+      expect(form.discs[0].mb["1"].work).toBe("");
+      expect(form.notes).toEqual([
+        `Q1, a single, and Q2, an EP, have the work ID for “${t.title}”. Only a composition should have one. Remove it from them.`,
+      ]);
+    });
+  });
+
   it("reads the type, form and streaming IDs", () => {
     const r = release();
     r["release-group"]["primary-type"] = "EP";

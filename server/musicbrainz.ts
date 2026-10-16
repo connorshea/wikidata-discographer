@@ -165,12 +165,14 @@ const client = createMusicBrainzClient();
 
 /**
  * Items in the mirror holding these values of `property`: `unique` maps a
- * value to its item when exactly one item of the given kinds has it, and
- * `taken` lists every value any item has.
+ * value to its item when exactly one item of the given kinds has it,
+ * `taken` lists every value any item has, `held` every value an item of
+ * the given kinds has, and `elsewhere` the items of other kinds that have each value.
  */
 async function lookup(property: string, values: string[], kinds: MusicKind[]) {
   const unique: Record<string, string> = {};
-  if (!values.length) return { unique, taken: [] };
+  const elsewhere: Record<string, { qid: string; kind: MusicKind }[]> = {};
+  if (!values.length) return { unique, taken: [], held: [], elsewhere };
   const rows = await db
     .select({ qid: musicExternalIds.qid, value: musicExternalIds.value, kind: musicItems.kind })
     .from(musicExternalIds)
@@ -185,8 +187,14 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
   for (const r of rows)
     if (kinds.includes(r.kind as MusicKind))
       seen.set(r.value, (seen.get(r.value) ?? new Set()).add(r.qid));
+    else (elsewhere[r.value] ??= []).push({ qid: toQid(r.qid), kind: r.kind as MusicKind });
   for (const [value, qids] of seen) if (qids.size === 1) unique[value] = toQid([...qids][0]);
-  return { unique, taken: [...new Set(rows.map((r) => r.value))] };
+  return {
+    unique,
+    taken: [...new Set(rows.map((r) => r.value))],
+    held: [...seen.keys()],
+    elsewhere,
+  };
 }
 
 /**
@@ -220,7 +228,10 @@ export async function lookupRelease(
     artists: artists.unique,
     recordings: recordings.unique,
     works: works.unique,
-    taken: [...recordings.taken, ...works.taken, ...spotify.taken, ...appleMusic.taken],
+    // A work ID belongs on the composition, so one held only by a single or
+    // another item that isn't a composition is still added to the new one.
+    taken: [...recordings.taken, ...works.held, ...spotify.taken, ...appleMusic.taken],
+    misplacedWorks: works.elsewhere,
   };
 }
 
