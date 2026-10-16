@@ -3,6 +3,10 @@ import { checkPlanQids, forgetCheckedQids, planQids } from "./check-qids.ts";
 import { buildPlan, type Op } from "../src/lib/plan.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
 
+/** What the mirror has with a new item's label and description. */
+const findByTerms = vi.hoisted(() => vi.fn(async (): Promise<string[]> => []));
+vi.mock("./mirror.ts", () => ({ findByTerms }));
+
 describe("planQids", () => {
   const ops: Op[] = [
     {
@@ -321,6 +325,35 @@ describe("checkPlanQids", () => {
       .filter((q) => q.get("props") === "labels|descriptions")
       .flatMap((q) => q.get("ids")!.split("|"));
     expect(asked).not.toContain("Q81");
+  });
+
+  it("refuses a new item with the same label and description as one in the mirror", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    const [title, desc] = [comp.labels.en, comp.descriptions.en];
+    findByTerms.mockResolvedValueOnce(["Q90"]);
+    stubWiki({ terms: { Q90: [title, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([
+      `The new composition “${title}” (disc 1 track 2) would have the same label and description as Q90, “${desc}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. If Q90 is the same composition, use it in the form instead. If not, change its description on Wikidata, or the composition description in Item settings.",
+    ]);
+    expect(findByTerms).toHaveBeenLastCalledWith(
+      expect.arrayContaining([{ label: title, description: desc }]),
+    );
+    // What the mirror has is checked on Wikidata, where it may have changed since.
+    findByTerms.mockResolvedValueOnce(["Q90"]);
+    stubWiki({ terms: { Q90: [title, `${desc} (cover)`] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+    // Without the mirror, the form's items are still checked.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    findByTerms.mockRejectedValueOnce(new Error("no database"));
+    stubWiki({ terms: { Q90: [title, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
   });
 
   it("refuses two new items with the same label and description", async () => {

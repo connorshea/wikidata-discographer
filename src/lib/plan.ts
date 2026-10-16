@@ -1036,7 +1036,7 @@ export function buildPlan(state: State): Plan {
 // Describing operations
 // ---------------------------------------------------------------------------
 
-const KIND_NAMES: Record<string, string> = {
+export const KIND_NAMES: Record<string, string> = {
   album: "album",
   ep: "EP",
   single: "single",

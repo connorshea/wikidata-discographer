@@ -17,9 +17,10 @@
 // fixing on Wikidata, so the problem says that instead.
 //
 // A new item mustn't have the same label and description as an item the form
-// reuses, or as another new item, or Wikidata would refuse to create it. This
-// is only checked once nothing else is wrong, and the reused tracks' labels
-// and descriptions come from when their compositions were checked.
+// reuses, as another new item, or as any item in the local mirror with them,
+// or Wikidata would refuse to create it. This is only checked once nothing
+// else is wrong, and the reused tracks' labels and descriptions come from when
+// their compositions were checked.
 import {
   checkItems,
   getEntities,
@@ -28,8 +29,17 @@ import {
   type ItemCheck,
   type Entity,
 } from "./wikidata-client.ts";
+import { findByTerms } from "./mirror.ts";
 import { CLASS_KINDS, kindOf, type MusicKind } from "../src/lib/music.ts";
-import { ALBUM_FORMS, describeOp, type Op, QID, type State, type Value } from "../src/lib/plan.ts";
+import {
+  ALBUM_FORMS,
+  describeOp,
+  KIND_NAMES,
+  type Op,
+  QID,
+  type State,
+  type Value,
+} from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -308,12 +318,16 @@ const labelFor = (labels: Record<string, string>, lang: string): string | undefi
 
 /**
  * New items that would have the same label and description, in the same
- * language, as an item the form reuses or as another new item, one sentence
- * each. A missing label counts as the `mul` label, as on Wikidata. Wikidata refuses to create such an item, which would stop the run
- * partway: a composition described like the existing single in its row, say.
- * Only the reused compositions, tracks and singles and the existing album are
- * asked about, for just those languages' labels and descriptions. Items in
- * `fetched` aren't asked about again.
+ * language, as another new item or an existing item, one sentence each. A
+ * missing label counts as the `mul` label, as on Wikidata. Wikidata refuses
+ * to create such an item, which would stop the run partway: a composition
+ * described like the existing single in its row, say.
+ *
+ * The existing items asked about are the reused compositions, tracks and
+ * singles, the existing album, and items the local mirror has with the same
+ * label and description. Only those languages' labels and descriptions are
+ * fetched, and items in `fetched` aren't asked about again. If the mirror
+ * can't be read, only the form's items are checked.
  */
 async function checkTermConflicts(
   ops: readonly Op[],
@@ -358,6 +372,15 @@ async function checkTermConflicts(
     for (const s of Object.values(d.single)) if (s.qid) reused.add(s.qid.trim());
   }
   const qids = [...reused].filter((q) => results.get(q)?.status === "ok");
+  const pairs = [...fresh.keys()].map((k) => {
+    const [, label, description] = JSON.parse(k) as string[];
+    return { label, description };
+  });
+  const elsewhere = await findByTerms(pairs).catch((err: unknown) => {
+    console.warn("Checking the mirror for label and description conflicts failed:", err);
+    return [];
+  });
+  for (const q of elsewhere) if (!reused.has(q) && !qids.includes(q)) qids.push(q);
   const values = (terms: Entity["labels"]) =>
     Object.fromEntries(Object.entries(terms ?? {}).map(([l, t]) => [l, t.value]));
   const terms = await getTerms(
@@ -372,7 +395,7 @@ async function checkTermConflicts(
       descriptions: values(e.descriptions),
     });
   for (const [qid, t] of terms) {
-    if (t.status !== "ok" || !reused.has(qid)) continue;
+    if (t.status !== "ok") continue;
     for (const [lang, desc] of Object.entries(t.descriptions)) {
       const label = labelFor(t.labels, lang);
       const same = label ? fresh.get(termKey(lang, label, desc)) : undefined;
@@ -381,7 +404,10 @@ async function checkTermConflicts(
       for (const op of same)
         problems.push(
           `${capitalize(newItemName(op))} would have the same label and description as ${qid}${where ? ` (${where})` : ""}, “${desc}”. ` +
-            `Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. Change the description of ${qid} on Wikidata, or ${descriptionSetting(op)}.`,
+            `Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. ` +
+            (reused.has(qid)
+              ? `Change the description of ${qid} on Wikidata, or ${descriptionSetting(op)}.`
+              : `If ${qid} is the same ${KIND_NAMES[op.kind] ?? "item"}, use it in the form instead. If not, change its description on Wikidata, or ${descriptionSetting(op)}.`),
         );
     }
   }
