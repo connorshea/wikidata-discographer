@@ -44,6 +44,7 @@ function stubWiki({
   tracklist = [],
   compositions = {},
   classes = {},
+  terms = {},
 }: {
   missing?: string[];
   redirects?: Record<string, string>;
@@ -56,6 +57,8 @@ function stubWiki({
   compositions?: Record<string, string[]>;
   /** P31 values of items fetched with their claims. */
   classes?: Record<string, string[]>;
+  /** English label and description of items fetched for their terms. */
+  terms?: Record<string, [string, string]>;
 }) {
   const fetch = vi.fn(async (url: string) => {
     const q = new URL(url).searchParams;
@@ -93,6 +96,20 @@ function stubWiki({
                 P31: (classes[id] ?? []).map(claim("P31")),
               },
             },
+          ]),
+        ),
+      });
+    }
+    if (q.get("props") === "labels|descriptions") {
+      const ids = q.get("ids")!.split("|");
+      expect(ids.length).toBeLessThanOrEqual(50);
+      expect(q.get("languages")).toBe("en");
+      const term = (value: string | undefined) => (value ? { en: { language: "en", value } } : {});
+      return Response.json({
+        entities: Object.fromEntries(
+          ids.map((id) => [
+            id,
+            { id, type: "item", labels: term(terms[id]?.[0]), descriptions: term(terms[id]?.[1]) },
           ]),
         ),
       });
@@ -248,6 +265,44 @@ describe("checkPlanQids", () => {
     expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([]);
   });
 
+  it("refuses a new item with the same label and description as a reused one", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.discs[0].single[2] = { date: "", qid: "Q80", discogs: "" };
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    const [title, desc] = [comp.labels.en, comp.descriptions.en];
+    stubWiki({ terms: { Q80: [title, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([
+      `The new composition “${title}” (disc 1 track 2) would have the same label and description as Q80 (Disc 1 track 2 single), “${desc}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. Change the description of Q80 on Wikidata, or the composition description in Item settings.",
+    ]);
+    // A different description, or a different label, is fine.
+    stubWiki({ terms: { Q80: [title, `${desc} (single)`] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+    stubWiki({ terms: { Q80: [`${title} (single)`, desc] } });
+    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
+  });
+
+  it("refuses two new items with the same label and description", async () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.title = "New";
+    state.settings.trackDesc = state.settings.compDesc;
+    delete state.discs[0].comp[2];
+    const plan = buildPlan(state);
+    const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
+    if (comp?.op !== "create") throw new Error("no composition");
+    stubWiki({});
+    expect(await checkPlanQids(plan.ops, state)).toContain(
+      `The new composition “${comp.labels.en}” (disc 1 track 2) and the new track “${comp.labels.en}” (disc 1 track 2) would have the same label and description, “${comp.descriptions.en}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so give them different descriptions in Item settings.",
+    );
+  });
+
   it("refuses an existing album that isn't an album or EP", async () => {
     stubWiki({ instanceOf: ["Q5"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
@@ -263,7 +318,8 @@ describe("checkPlanQids", () => {
     const fetch = stubWiki({ tooBig: ["Q999999999999"] });
     const problems = await checkPlanQids(buildPlan(state).ops, state);
     expect(problems).toEqual(["The existing album: Q999999999999 doesn't exist."]);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    // Page info twice, then the reused composition's label and description.
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it("asks in batches of 50, and doesn't ask again about items it found", async () => {

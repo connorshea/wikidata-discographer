@@ -15,15 +15,19 @@
 // links it to, or it would end up with two (P2550). When what it records is
 // a single, album or EP rather than a composition, the track itself needs
 // fixing on Wikidata, so the problem says that instead.
+//
+// A new item mustn't have the same label and description as an item the form
+// reuses, or as another new item, or Wikidata would refuse to create it.
 import {
   checkItems,
   getEntities,
   getStatementItems,
+  getTerms,
   type ItemCheck,
   type Entity,
 } from "./wikidata-client.ts";
 import { CLASS_KINDS, kindOf, type MusicKind } from "../src/lib/music.ts";
-import { ALBUM_FORMS, type Op, QID, type State, type Value } from "../src/lib/plan.ts";
+import { ALBUM_FORMS, describeOp, type Op, QID, type State, type Value } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
@@ -135,6 +139,7 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
     if (problem) problems.unshift(problem);
   }
   problems.push(...(await checkTrackCompositions(ops, sources, results)));
+  problems.push(...(await checkTermConflicts(ops, state, sources, results)));
   if (problems.length > MAX_PROBLEMS)
     return [
       ...problems.slice(0, MAX_PROBLEMS),
@@ -263,4 +268,93 @@ async function releaseKinds(qids: string[]): Promise<Map<string, MusicKind>> {
     }
   }
   return out;
+}
+
+/** Where a new item's row is in the form, e.g. `disc 1 track 4`, from its plan key. */
+function rowOf(key: string): string | null {
+  const m = /^(?:comp|track|single):(\d+):(.+)$/.exec(key);
+  return m ? `disc ${Number(m[1]) + 1} track ${m[2]}` : null;
+}
+
+function newItemName(op: Extract<Op, { op: "create" }>): string {
+  const row = rowOf(op.key);
+  return `the new ${describeOp(op)}${row ? ` (${row})` : ""}`;
+}
+
+/** Where to change a new item's description. */
+function descriptionSetting(op: Extract<Op, { op: "create" }>): string {
+  if (op.kind === "work") return "the composition description in Item settings";
+  if (op.kind === "track" || op.kind === "single")
+    return `the ${op.kind} description in Item settings`;
+  return "its description in the form";
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * New items that would have the same label and description, in the same
+ * language, as an item the form reuses or as another new item, one sentence
+ * each. Wikidata refuses to create such an item, which would stop the run
+ * partway: a composition described like the existing single in its row, say.
+ * Only the reused compositions, tracks and singles and the existing album are
+ * asked about, for just those languages' labels and descriptions.
+ */
+async function checkTermConflicts(
+  ops: readonly Op[],
+  state: State,
+  sources: Map<string, string[]>,
+  results: Map<string, ItemCheck>,
+): Promise<string[]> {
+  const termKey = (lang: string, label: string, desc: string) =>
+    JSON.stringify([lang, label, desc]);
+  // Each label and description a new item would have, with the items that would have it.
+  const fresh = new Map<string, Extract<Op, { op: "create" }>[]>();
+  const langs = new Set<string>();
+  for (const op of ops) {
+    if (op.op !== "create") continue;
+    for (const [lang, desc] of Object.entries(op.descriptions)) {
+      const label = op.labels[lang];
+      if (!label || !desc) continue;
+      const k = termKey(lang, label, desc);
+      fresh.set(k, [...(fresh.get(k) ?? []), op]);
+      langs.add(lang);
+    }
+  }
+  if (fresh.size === 0) return [];
+
+  const problems: string[] = [];
+  for (const [k, same] of fresh) {
+    if (same.length < 2) continue;
+    const desc = (JSON.parse(k) as string[])[2];
+    const names = same.map(newItemName);
+    problems.push(
+      `${capitalize(names.slice(0, -1).join(", "))} and ${names[names.length - 1]} would have the same label and description, “${desc}”. ` +
+        "Wikidata doesn't allow two items with the same label and description, so give them different descriptions in Item settings.",
+    );
+  }
+
+  const reused = new Set<string>();
+  if (state.album.mode === "existing") reused.add(state.album.qid.trim());
+  for (const d of state.discs) {
+    for (const q of Object.values(d.comp)) reused.add(q.trim());
+    for (const q of Object.values(d.track)) reused.add(q.trim());
+    for (const s of Object.values(d.single)) if (s.qid) reused.add(s.qid.trim());
+  }
+  const qids = [...reused].filter((q) => results.get(q)?.status === "ok");
+  const terms = await getTerms(qids, [...langs], { retries: 1 });
+  for (const [qid, t] of terms) {
+    if (t.status !== "ok") continue;
+    for (const [lang, desc] of Object.entries(t.descriptions)) {
+      const label = t.labels[lang];
+      const same = label ? fresh.get(termKey(lang, label, desc)) : undefined;
+      if (!same) continue;
+      const where = sources.get(qid)?.join(", ");
+      for (const op of same)
+        problems.push(
+          `${capitalize(newItemName(op))} would have the same label and description as ${qid}${where ? ` (${where})` : ""}, “${desc}”. ` +
+            `Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. Change the description of ${qid} on Wikidata, or ${descriptionSetting(op)}.`,
+        );
+    }
+  }
+  return problems;
 }

@@ -100,7 +100,10 @@ function apiError(res: ApiResponse): { code: string; text: string } | null {
     const texts = [
       ...all.map((e) => e.text ?? e.code ?? ""),
       ...all.flatMap((e) => (e.data?.messages ?? []).map((m) => m.text ?? m.name ?? "")),
-    ].filter((t, i, ts) => t !== "" && ts.indexOf(t) === i);
+    ]
+      // Messages can carry wikitext links, such as `[[Q1|Q1]]`: keep the text shown.
+      .map((t) => t.replace(/\[\[(?:[^|\]]*\|)?([^\]]*)\]\]/g, "$1"))
+      .filter((t, i, ts) => t !== "" && ts.indexOf(t) === i);
     return { code: all[0].code ?? "unknown", text: texts.join(" — ") };
   }
   if (res.status >= 400) return { code: `http-${res.status}`, text: `HTTP ${res.status}` };
@@ -390,6 +393,36 @@ export function describeItems(
         .filter((s) => s.rank !== "deprecated")
         .map((s) => (s.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)
         .filter((id): id is string => id !== undefined),
+    }),
+    { retries },
+  );
+}
+
+/** An item's labels and descriptions, by language. */
+export interface Terms {
+  status: "ok";
+  labels: Record<string, string>;
+  descriptions: Record<string, string>;
+}
+
+/**
+ * Each QID's labels and descriptions in exactly these languages, with no
+ * fallback. Batched as for `checkItems`.
+ */
+export function getTerms(
+  qids: readonly string[],
+  langs: readonly string[],
+  { retries }: { retries?: number } = {},
+): Promise<Map<string, Terms | Exclude<ItemCheck, { status: "ok" }>>> {
+  const values = (terms: Entity["labels"]) =>
+    Object.fromEntries(Object.entries(terms ?? {}).map(([l, t]) => [l, t.value]));
+  return entityBatches(
+    qids,
+    { props: "labels|descriptions", languages: langs.join("|") },
+    (e): Terms => ({
+      status: "ok",
+      labels: values(e.labels),
+      descriptions: values(e.descriptions),
     }),
     { retries },
   );

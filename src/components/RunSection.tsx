@@ -570,7 +570,13 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
         {run.edits.map((e, i) => (
           <li key={i} className={e.ok ? undefined : "fail"}>
             {/* Matches the preview's headings; a statements edit's `what` says what it adds. */}
-            {e.unknown ? "Outcome unknown: created? " : e.op === "create" ? "Created " : ""}
+            {e.unknown
+              ? "Outcome unknown: created? "
+              : e.op === "create"
+                ? e.ok
+                  ? "Created "
+                  : "Couldn't create "
+                : ""}
             {e.what}
             {e.qid && (
               <>
