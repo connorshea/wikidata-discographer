@@ -811,7 +811,11 @@ table.album-list td.count {
   margin: 0;
 }
 .turntable {
+  position: relative;
   flex: none;
+}
+.turntable svg {
+  display: block;
   width: 108px;
   height: 90px;
 }
@@ -866,9 +870,36 @@ table.album-list td.count {
   stroke: var(--muted);
   stroke-width: 2;
 }
+.turntable .notes span {
+  position: absolute;
+  top: 30px;
+  left: 44px;
+  color: var(--accent);
+  font-size: 16px;
+  opacity: 0;
+  pointer-events: none;
+  animation: turntable-note 2.4s ease-out infinite;
+}
+.turntable .notes span:nth-child(2) {
+  left: 58px;
+  animation-delay: 0.8s;
+}
+.turntable .notes span:nth-child(3) {
+  left: 36px;
+  animation-delay: 1.6s;
+}
 @keyframes turntable-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+@keyframes turntable-note {
+  20% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(14px, -46px) rotate(15deg);
+    opacity: 0;
   }
 }
 footer {
@@ -885,6 +916,9 @@ footer {
   }
   .turntable .tonearm {
     transition: none;
+  }
+  .turntable .notes {
+    display: none;
   }
 }
 @media (max-width: 560px) {
