@@ -17,9 +17,10 @@ import {
   type Settings,
   type Track,
 } from "../lib/plan.ts";
-import { emptyDisc, splitArtists } from "../lib/state.ts";
+import { artistsText, emptyDisc, parseArtists } from "../lib/state.ts";
 import {
   addTrack,
+  commonArtists,
   formatLength,
   insertTracks,
   lengthText,
@@ -27,6 +28,7 @@ import {
   parseLength,
   pastedTracks,
   removeTrack,
+  rowPerformers,
   type Renumbered,
 } from "../lib/tracks.ts";
 import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
@@ -191,10 +193,21 @@ function DiscBlock({
   // Rows typed in, or added to an import, can be moved and removed. A plain import is a
   // release's tracklist, so it's left as it is.
   const manual = state.start !== "mb" || d.tracks.some((t) => !t.mb);
-  const cols = manual ? 8 : 6;
+  const cols = manual ? 7 : 5;
   const setDisc = (fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
   const ids = useId();
   const known = [...Object.keys(state.artists), ...albumArtists(state)];
+  // The artists listed once above the table: the album's, as entered or imported, or else
+  // those on every row. Rows list only who differs from them.
+  const ofAlbum = (creating || state.start === "mb") && albumArtists(state).length > 0;
+  const base = ofAlbum ? albumArtists(state) : commonArtists(rows);
+  const linked = (name: string) => QID.test((state.artists[name] ?? "").trim());
+  const featOf = (i: number) => (d.tracks[i].artists.length ? d.tracks[i].feat : undefined);
+  const differs = rows.some((r, i) => {
+    const p = rowPerformers({ artists: r.artists, feat: featOf(i) }, base);
+    return p.only.length + p.with.length + p.feat.length > 0;
+  });
+  const anyMb = rows.some((r) => r.mb);
 
   // A key for each row that follows it when rows move, so React moves the row's
   // inputs (and the focus in them) along with it.
@@ -343,6 +356,21 @@ function DiscBlock({
         )}
       </div>
       {open.size > 0 && <UnreviewedNotice count={open.size} />}
+      {rows.length > 0 && base.length > 0 && (
+        <p className="album-line">
+          <span>
+            {ofAlbum ? (base.length > 1 ? "Album artists" : "Album artist") : "On every track"}
+          </span>
+          {base.map((a) => (
+            <PerformerChip key={a} name={a} linked={linked(a)} />
+          ))}
+          <span className="muted">
+            {differs
+              ? "rows only list who differs"
+              : "on every track, so only other performers are listed per row"}
+          </span>
+        </p>
+      )}
       {rows.length > 0 && (
         <div className="tablewrap">
           <table className="tracks" ref={table}>
@@ -355,7 +383,6 @@ function DiscBlock({
                 )}
                 <th>#</th>
                 <th>Title</th>
-                <th>Artists</th>
                 <th>Length</th>
                 <th>Links to existing</th>
                 <th className="single-toggle">
@@ -457,20 +484,28 @@ function DiscBlock({
                           />
                           {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
                           <MbChip track={r} settings={state.settings} />
+                          <RowArtists
+                            n={r.n}
+                            track={t}
+                            performers={rowPerformers(
+                              { artists: r.artists, feat: featOf(i) },
+                              base,
+                            )}
+                            prefixed={base.length > 0}
+                            linked={linked}
+                            known={known}
+                            placeholder={creating ? "Album artist" : "Artists"}
+                            error={t.title.trim() ? errs.artists : undefined}
+                            onCommit={(names) =>
+                              setDisc((disc) => {
+                                const row = disc.tracks[i];
+                                row.artists = names.artists;
+                                if (names.feat) row.feat = names.feat;
+                                else delete row.feat;
+                              })
+                            }
+                          />
                         </span>
-                      </td>
-                      <td className="artists-col">
-                        <ArtistsCell
-                          {...cell("artists")}
-                          label={`Track ${r.n} artists`}
-                          placeholder={creating ? "Album artist" : "Artists"}
-                          artists={t.artists}
-                          known={known}
-                          error={errs.artists}
-                          onCommit={(names) =>
-                            setDisc((disc) => void (disc.tracks[i].artists = names))
-                          }
-                        />
                       </td>
                       <td className="length-col">
                         <Cell
@@ -540,6 +575,22 @@ function DiscBlock({
             </tbody>
           </table>
         </div>
+      )}
+      {rows.length > 0 && (base.length > 0 || anyMb) && (
+        <p className="table-note">
+          {base.length > 0 &&
+            (differs
+              ? `Only performers that differ from ${ofAlbum ? (base.length > 1 ? "the album artists" : "the album artist") : "those on every track"} are listed on their rows. `
+              : ofAlbum
+                ? `All performers here are ${base.length > 1 ? "the album artists" : "the album artist"}, so they're not repeated per row. `
+                : "Every track has the same performers, so they're listed once above the table. ")}
+          {anyMb && (
+            <>
+              Click the <span className="mb-badge">MB</span> badge to see its MusicBrainz
+              identifiers.
+            </>
+          )}
+        </p>
       )}
       <div className="add-track">
         <button ref={addButton} type="button" className="ghost" onClick={() => add("title")}>
@@ -634,38 +685,143 @@ function CellErr({ id, children }: { id: string; children: string }) {
   );
 }
 
-/**
- * A row's artists as one cell, "A, B feat. C". They're split into names when
- * it's left, keeping known names such as "Tyler, the Creator" whole.
- */
-function ArtistsCell({
-  artists,
-  known,
-  onCommit,
-  ...rest
-}: {
-  label: string;
-  placeholder: string;
-  artists: string[];
-  known: string[];
-  error?: string;
-  onCommit: (names: string[]) => void;
-  "data-col": string;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const joined = artists.join(", ");
+/** Scroll to a performer's row in Performers and focus its QID. False if it isn't there. */
+function goToPerformer(name: string): boolean {
+  const row = [...document.querySelectorAll<HTMLElement>("#performers [data-performer]")].find(
+    (el) => el.dataset.performer === name,
+  );
+  const input = row?.querySelector<HTMLInputElement>("input");
+  if (!row || !input) return false;
+  row.scrollIntoView({ block: "center" });
+  input.focus({ preventScroll: true });
+  return true;
+}
+
+/** An artist, with a green dot once it's linked to a QID. It goes to the artist in Performers. */
+function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
   return (
-    <Cell
-      {...rest}
-      value={draft ?? joined}
-      onFocus={() => setDraft(joined)}
-      onChange={setDraft}
-      onBlur={() => {
-        if (draft !== null && draft !== joined) onCommit(splitArtists(draft, known));
-        setDraft(null);
+    <a
+      className={cls("who-chip", !linked && "todo")}
+      href="#performers"
+      onClick={(e) => {
+        if (goToPerformer(name)) e.preventDefault();
       }}
-    />
+    >
+      <i aria-hidden="true" />
+      {name}
+      {linked ? <span className="visually-hidden">, linked</span> : " · needs QID"}
+    </a>
+  );
+}
+
+/**
+ * Who a row credits beyond the artists above the table, as chips, and the
+ * field that edits its artists ("A, B feat. C"), opened by Edit artists. The
+ * field is read when it's left or Enter is pressed, and Escape drops what
+ * was typed.
+ */
+function RowArtists({
+  n,
+  track,
+  performers: p,
+  prefixed,
+  linked,
+  known,
+  placeholder,
+  error,
+  onCommit,
+}: {
+  n: number;
+  track: Track;
+  performers: ReturnType<typeof rowPerformers>;
+  /** Whether there are artists above the table that the chips differ from. */
+  prefixed: boolean;
+  linked: (name: string) => boolean;
+  known: string[];
+  placeholder: string;
+  error?: string;
+  onCommit: (names: Pick<Track, "artists" | "feat">) => void;
+}) {
+  const id = useId();
+  const [draft, setDraft] = useState<string | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    const editing = draft !== null;
+    if (editing === wasEditing.current) return;
+    wasEditing.current = editing;
+    if (editing) input.current?.focus();
+    else if (document.activeElement === document.body) button.current?.focus();
+  }, [draft]);
+  const text = artistsText(track);
+  const close = (commit: boolean) => {
+    if (commit && draft !== null && draft !== text) onCommit(parseArtists(draft, known));
+    setDraft(null);
+  };
+
+  if (draft !== null)
+    return (
+      <span className="who editing">
+        <input
+          ref={input}
+          type="text"
+          className="cell"
+          data-col="artists"
+          aria-label={`Track ${n} artists`}
+          aria-describedby={`${id}-hint`}
+          placeholder={placeholder}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => close(true)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter" || e.key === "Escape") {
+              e.preventDefault();
+              close(e.key === "Enter");
+            }
+          }}
+        />
+        <span className="sub" id={`${id}-hint`}>
+          Separate names with commas, and put featured artists after "feat."
+        </span>
+      </span>
+    );
+  const chips = (names: string[]) =>
+    names.map((a) => <PerformerChip key={a} name={a} linked={linked(a)} />);
+  const groups = [
+    p.only.length > 0 && (["Only", p.only] as const),
+    p.with.length > 0 && ([prefixed ? "With" : "", p.with] as const),
+    p.feat.length > 0 && (["feat.", p.feat] as const),
+  ].filter((g) => g !== false);
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        className={cls("link who-edit", !!error && "shown")}
+        aria-label={`Edit artists for track ${n}`}
+        onClick={() => setDraft(text)}
+      >
+        {track.artists.length ? "Edit artists" : "Add artists"}
+      </button>
+      {(groups.length > 0 || error) && (
+        <span className="who">
+          {groups.map(([label, names], g) => (
+            <Fragment key={label}>
+              {(label || g > 0) && (
+                <span>
+                  {g > 0 ? ", " : ""}
+                  {label}
+                </span>
+              )}
+              {chips(names)}
+            </Fragment>
+          ))}
+          {error && <CellErr id={`${id}-err`}>{error}</CellErr>}
+        </span>
+      )}
+    </>
   );
 }
 

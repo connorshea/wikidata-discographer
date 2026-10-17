@@ -8,7 +8,9 @@ import {
   moveTrack,
   parseLength,
   pastedTracks,
+  commonArtists,
   removeTrack,
+  rowPerformers,
 } from "./tracks.ts";
 
 describe("parseLength", () => {
@@ -113,5 +115,45 @@ describe("pastedTracks", () => {
   it("leaves a single line to paste as usual", () => {
     expect(pastedTracks("After All (4:12)")).toBeNull();
     expect(pastedTracks("After All\n")).toBeNull();
+  });
+});
+
+describe("rowPerformers", () => {
+  const none = { only: [], with: [], feat: [] };
+  it("lists nothing for the artists on every track", () => {
+    expect(rowPerformers({ artists: ["A"] }, ["A"])).toEqual(none);
+    expect(rowPerformers({ artists: ["B", "A"] }, ["A", "B"])).toEqual(none);
+    expect(rowPerformers({ artists: [] }, ["A"])).toEqual(none);
+  });
+
+  it("lists featured and other artists, or only the row's own", () => {
+    expect(rowPerformers({ artists: ["A", "F"], feat: ["F"] }, ["A"])).toEqual({
+      ...none,
+      feat: ["F"],
+    });
+    expect(rowPerformers({ artists: ["A", "B", "G"] }, ["A", "B"])).toEqual({
+      ...none,
+      with: ["G"],
+    });
+    expect(rowPerformers({ artists: ["B", "F"], feat: ["F"] }, ["A", "B"])).toEqual({
+      only: ["B"],
+      with: [],
+      feat: ["F"],
+    });
+    expect(rowPerformers({ artists: ["C"] }, [])).toEqual({ ...none, with: ["C"] });
+  });
+});
+
+describe("commonArtists", () => {
+  it("finds the main artists every credited row has", () => {
+    expect(
+      commonArtists([
+        { artists: ["A", "B"] },
+        { artists: [] },
+        { artists: ["B", "A", "F"], feat: ["F"] },
+      ]),
+    ).toEqual(["A", "B"]);
+    expect(commonArtists([{ artists: ["A"] }, { artists: ["B", "A"], feat: ["A"] }])).toEqual([]);
+    expect(commonArtists([])).toEqual([]);
   });
 });

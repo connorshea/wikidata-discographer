@@ -56,7 +56,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
                 const v = (state.artists[n] ?? "").trim();
                 const set = (q: string) => update((s) => void (s.artists[n] = q.trim()));
                 return (
-                  <tr key={n}>
+                  <tr key={n} data-performer={n}>
                     <td>{n}</td>
                     <td className="qid">
                       <QidInput

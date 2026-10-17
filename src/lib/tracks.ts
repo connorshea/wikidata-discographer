@@ -131,3 +131,36 @@ export function pastedTracks(text: string): { title: string; length: string }[] 
     return { title: title.trim(), length };
   });
 }
+
+/** Who a row credits beyond the artists on every track, as the track table lists them. */
+export interface RowPerformers {
+  /** The row's own artists, when it leaves out one of those on every track. */
+  only: string[];
+  /** Artists on top of those on every track. */
+  with: string[];
+  /** Featured artists who aren't on every track. */
+  feat: string[];
+}
+
+/**
+ * How a row's artists differ from `base`, the artists the table lists once
+ * above it: nothing to list when they're the same.
+ */
+export function rowPerformers(t: Pick<Track, "artists" | "feat">, base: string[]): RowPerformers {
+  const featured = new Set(t.feat ?? []);
+  const main = t.artists.filter((a) => !featured.has(a));
+  const feat = t.artists.filter((a) => featured.has(a) && !base.includes(a));
+  if (!main.length && !feat.length) return { only: [], with: [], feat: [] };
+  if (base.every((b) => main.includes(b)))
+    return { only: [], with: main.filter((a) => !base.includes(a)), feat };
+  return { only: main, with: [], feat };
+}
+
+/** The main artists on every row that has any, or none. */
+export function commonArtists(rows: Pick<Track, "artists" | "feat">[]): string[] {
+  const credited = rows.filter((t) => t.artists.length);
+  if (!credited.length) return [];
+  const main = (t: Pick<Track, "artists" | "feat">) =>
+    t.artists.filter((a) => !(t.feat ?? []).includes(a));
+  return main(credited[0]).filter((a) => credited.every((t) => main(t).includes(a)));
+}
