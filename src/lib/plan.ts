@@ -199,6 +199,8 @@ export type Op =
       target: ItemRef;
       /** What the target is, for the progress log ("album", "track 1.3"…). */
       what: string;
+      /** The row that links to a reused composition, track or single, by disc index and track number. */
+      row?: { kind: "comp" | "track" | "single"; di: number; n: number };
       claims: Claim[];
     };
 
@@ -892,6 +894,11 @@ export function buildPlan(state: State): Plan {
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
+  const rowOf = (kind: "comp" | "track" | "single", it: PlanItem) => ({
+    kind,
+    di: it.di,
+    n: it.r.n,
+  });
 
   // Number of tracks: one statement per disc when every disc names its part, else one in all.
   const perDisc = state.discs
@@ -935,6 +942,7 @@ export function buildPlan(state: State): Plan {
           op: "addClaims",
           target: { id: it.existComp },
           what: `composition for ${where(it)}`,
+          row: rowOf("comp", it),
           claims: perf,
         });
       continue;
@@ -968,6 +976,7 @@ export function buildPlan(state: State): Plan {
           op: "addClaims",
           target: { id: it.existTrack },
           what: where(it),
+          row: rowOf("track", it),
           claims: [claim("P2550", compOf(it)), ...perf],
         });
       continue;
@@ -1032,6 +1041,7 @@ export function buildPlan(state: State): Plan {
         op: "addClaims",
         target: { id: sg.qid },
         what: `single for ${where(it)}`,
+        row: rowOf("single", it),
         claims: [
           // A tracklist needs a title, which an older single may not have.
           { ...title(it.r.title), ifMissing: true },

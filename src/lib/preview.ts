@@ -149,24 +149,20 @@ export function formatDuration(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
-/** A composition, track or single the form reuses, by QID. */
-type ReusedItem = { kind: PreviewKind; title: string; disc: number; n: number };
-
-/** The compositions, tracks and singles the form's rows link to. */
-function reusedItems(state: State, tracks: Plan["tracks"]): Map<string, ReusedItem> {
-  const reused = new Map<string, ReusedItem>();
-  const add = (qid: string | undefined, item: ReusedItem) => {
+/** The compositions, tracks and singles the form's rows link to, by QID. */
+function reusedQids(state: State, tracks: Plan["tracks"]): Set<string> {
+  const reused = new Set<string>();
+  const add = (qid: string | undefined) => {
     const q = qid?.trim();
-    if (q && !reused.has(q)) reused.set(q, item);
+    if (q) reused.add(q);
   };
   tracks.forEach((rows, di) => {
     const disc = state.discs[di];
     if (!disc) return;
     for (const r of rows) {
-      const at = { title: r.title, disc: di + 1, n: r.n };
-      add(disc.comp[r.n], { kind: "comp", ...at });
-      add(disc.track[r.n], { kind: "track", ...at });
-      add(disc.single[r.n]?.qid, { kind: "single", ...at });
+      add(disc.comp[r.n]);
+      add(disc.track[r.n]);
+      add(disc.single[r.n]?.qid);
     }
   });
   return reused;
@@ -224,7 +220,7 @@ function groupOf(op: Op, albumQid: string | null): PreviewGroupId {
 function aboutOp(
   op: Op,
   group: PreviewGroupId,
-  reused: ReadonlyMap<string, ReusedItem>,
+  tracks: Plan["tracks"],
 ): Pick<PreviewEdit, "kind" | "creates" | "title" | "place"> {
   if (op.op === "create") {
     const [, di, n] = op.key.split(":");
@@ -236,13 +232,15 @@ function aboutOp(
       place: kind === "album" || n === undefined ? null : { disc: Number(di) + 1, n: Number(n) },
     };
   }
-  const found = "id" in op.target ? reused.get(op.target.id) : undefined;
-  if (found)
+  // A reused item is called by the row the edit is for, since two rows can share one.
+  const at = op.row;
+  const row = at && tracks[at.di]?.find((r) => r.n === at.n);
+  if (at && row)
     return {
-      kind: found.kind,
+      kind: at.kind,
       creates: false,
-      title: found.title,
-      place: { disc: found.disc, n: found.n },
+      title: row.title,
+      place: { disc: at.di + 1, n: at.n },
     };
   return { kind: "album", creates: false, title: "Album tracklist", place: null };
 }
@@ -250,7 +248,7 @@ function aboutOp(
 /** The plan's operations as grouped, labelled edits. */
 export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewGroup[] {
   const names = itemNames(state, plan.tracks);
-  const reused = reusedItems(state, plan.tracks);
+  const reused = reusedQids(state, plan.tracks);
   const created = new Map<string, string>();
   for (const op of plan.ops) if (op.op === "create") created.set(op.key, `new ${describeOp(op)}`);
 
@@ -289,7 +287,7 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
   const groups = new Map<PreviewGroupId, PreviewEdit[]>();
   plan.ops.forEach((op, i) => {
     const g = groupOf(op, albumQid);
-    const about = aboutOp(op, g, reused);
+    const about = aboutOp(op, g, plan.tracks);
     const edit: PreviewEdit =
       op.op === "create"
         ? {

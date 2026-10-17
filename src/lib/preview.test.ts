@@ -104,6 +104,16 @@ describe("previewPlan", () => {
     });
   });
 
+  it("places each edit to a shared item at its own row", () => {
+    const shared = structuredClone(state);
+    shared.discs[0].comp["2"] = shared.discs[0].comp["1"];
+    const existing = previewPlan(buildPlan(shared), shared).find((g) => g.id === "existing")!;
+    expect(existing.edits.map((e) => [e.title, e.place])).toEqual([
+      ["After All", { disc: 1, n: 1 }],
+      ["Habits of Creatures", { disc: 1, n: 2 }],
+    ]);
+  });
+
   it("leaves no ID without a label when the app knows one", () => {
     for (const e of edits)
       for (const s of e.statements)
