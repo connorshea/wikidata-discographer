@@ -8,6 +8,7 @@ import {
   otherArtists,
   pickSingle,
   pickTrack,
+  renumberDismissed,
   reviewTracks,
   stillValid,
   withoutDismissed,
@@ -288,5 +289,15 @@ describe("reviewTracks", () => {
     const left = withoutDismissed(rows, new Set([candidateId(0, 1, "comp", "Q1")]));
     expect(left["0:1"].comp).toEqual([match("Q2")]);
     expect(left["0:2"]).toEqual(rows["0:2"]);
+  });
+});
+
+describe("renumberDismissed", () => {
+  it("follows the renumbered rows of one disc and drops removed ones", () => {
+    const dismissed = new Set(["0:1:comp:Q1", "0:2:track:Q2", "1:1:comp:Q3"]);
+    expect([...renumberDismissed(dismissed, 0, new Map([[1, 2]]))]).toEqual([
+      "0:2:comp:Q1",
+      "1:1:comp:Q3",
+    ]);
   });
 });

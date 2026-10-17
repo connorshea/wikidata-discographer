@@ -11,6 +11,7 @@
 // "comp:0:3", "track:0:3", "single:0:3" — disc index and track number), and
 // the server swaps in the new QIDs as it goes.
 import { WD_LANG_CODES } from "./languages.ts";
+import { parseLength } from "./tracks.ts";
 import {
   ALBUM_ID_FIELDS,
   type AlbumIdKey,
@@ -110,14 +111,19 @@ export interface MbRowIds {
   source: { recording: string; retrieved: string } | null;
 }
 
-/** A track as a MusicBrainz import read it. */
+/** A row of a disc's tracklist, as a MusicBrainz import read it or as entered by hand. */
 export interface Track {
   n: number;
   title: string;
-  /** The names it's credited to, as the Performers table maps them. */
+  /** The names it's credited to, as the Performers table maps them. None means the album's. */
   artists: string[];
   /** Null when MusicBrainz has no length for it. */
   seconds: number | null;
+  /**
+   * The length as typed, once it's been edited by hand. It's used in place of
+   * `seconds`, and doesn't get the MusicBrainz reference.
+   */
+  length?: string;
   /** Null for a track from a form saved before tracks had identifiers of their own. */
   mb: MbRowIds | null;
 }
@@ -190,6 +196,9 @@ export type Op =
       claims: Claim[];
     };
 
+/** What's wrong with a row, by the cell it's fixed in. */
+export type RowErrs = Partial<Record<"title" | "artists" | "length" | "comp" | "track", string>>;
+
 export type MsgKind = "err" | "warn" | "ok";
 export type Msg = [MsgKind, string];
 
@@ -201,6 +210,8 @@ export interface Plan {
   tracks: Track[][];
   /** Errors for individual form fields, keyed by field id. */
   fieldErrs: Record<string, string>;
+  /** Errors for the cells of a disc's rows, keyed "disc:track". */
+  rowErrs: Record<string, RowErrs>;
   /** Errors for single rows, keyed "disc:track". */
   singleErrs: Record<string, string>;
   messages: Msg[];
@@ -629,6 +640,7 @@ export function buildPlan(state: State): Plan {
   const S = state.settings;
   const lang = S.lang.trim();
   const fieldErrs: Record<string, string> = {};
+  const rowErrs: Record<string, RowErrs> = {};
   const singleErrs: Record<string, string> = {};
   const messages: Msg[] = [];
   const blockers: BlockerAt[] = [];
@@ -666,8 +678,19 @@ export function buildPlan(state: State): Plan {
 
   const straighten = (s: string) =>
     S.straight ? s.replace(/[’‘]/g, "'").replace(/[“”]/g, '"') : s;
+  // A row with no artists of its own is the new album's.
+  const fallbackArtists = state.album.mode === "create" ? albumArtists(state) : [];
+  const typedSeconds = (length: string) => {
+    const parsed = parseLength(length);
+    return parsed.ok ? parsed.seconds : null;
+  };
   const tracks = state.discs.map((d) =>
-    d.tracks.map((t) => ({ ...t, title: straighten(t.title) })),
+    d.tracks.map((t): Track => ({
+      ...t,
+      title: straighten(t.title.trim()),
+      artists: t.artists.length ? t.artists : fallbackArtists,
+      seconds: t.length === undefined ? t.seconds : typedSeconds(t.length),
+    })),
   );
   const unmapped = new Set<string>();
   const badPerf = new Set<string>();
@@ -730,8 +753,15 @@ export function buildPlan(state: State): Plan {
       const perf = perfFor(r.artists);
       const ec = (d.comp[r.n] ?? "").trim();
       const et = (d.track[r.n] ?? "").trim();
-      if (ec && !QID.test(ec)) invalid.push(`Disc ${di + 1} track ${r.n} composition "${ec}"`);
-      if (et && !QID.test(et)) invalid.push(`Disc ${di + 1} track ${r.n} track "${et}"`);
+      const errs: RowErrs = {};
+      if (!r.title) errs.title = "Enter the title.";
+      else if (chars(r.title) > MAX_TERM_LENGTH)
+        errs.title = `Wikidata allows ${MAX_TERM_LENGTH} characters at most. This title has ${chars(r.title)}.`;
+      if (!r.artists.length) errs.artists = "Enter the artists.";
+      if (r.length !== undefined && !parseLength(r.length).ok) errs.length = "Use m:ss";
+      if (ec && !QID.test(ec)) errs.comp = `"${ec}" isn't a QID.`;
+      if (et && !QID.test(et)) errs.track = `"${et}" isn't a QID.`;
+      if (Object.keys(errs).length) rowErrs[`${di}:${r.n}`] = errs;
       let single: PlanItem["single"] = null;
       const sg = d.single[r.n];
       if (sg) {
@@ -770,7 +800,7 @@ export function buildPlan(state: State): Plan {
     seen.add(k);
   }
 
-  if (!items.length) err("Load a release from MusicBrainz to fill in the tracklist.", "tracks");
+  if (!items.length) err("Add the album's tracks, or load them from MusicBrainz.", "tracks");
   tracks.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
       err(
@@ -798,6 +828,12 @@ export function buildPlan(state: State): Plan {
     blocking(fieldErrs.compDesc) ||
     blocking(fieldErrs.trackDesc);
   if (settingsErr) err("Fix the errors in Item settings.", "settings");
+  const badRows = Object.keys(rowErrs).length;
+  if (badRows)
+    err(
+      `${badRows} track${badRows === 1 ? " has" : "s have"} errors. They're marked in the track table.`,
+      "tracks",
+    );
   if (Object.keys(singleErrs).length)
     err(
       `${Object.keys(singleErrs).length} single(s) have errors. They're marked in the disc tables.`,
@@ -807,7 +843,8 @@ export function buildPlan(state: State): Plan {
     err("Fix the single description template in Item settings.", "settings");
 
   const blocked = messages.some((m) => m[0] === "err");
-  if (blocked) return { tracks, fieldErrs, singleErrs, messages, blockers, ops: [], ready: false };
+  if (blocked)
+    return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops: [], ready: false };
 
   /* operations */
   const ops: Op[] = [];
@@ -943,7 +980,8 @@ export function buildPlan(state: State): Plan {
           ? [
               {
                 ...claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT }),
-                ...mbRef(it.r.mb),
+                // A length typed by hand isn't the one MusicBrainz states.
+                ...(it.r.length === undefined ? mbRef(it.r.mb) : {}),
               },
             ]
           : []),
@@ -1042,7 +1080,7 @@ export function buildPlan(state: State): Plan {
         `Too long: ${[...tooLong].join(", ")}.`,
       "create",
     );
-    return { tracks, fieldErrs, singleErrs, messages, blockers, ops: [], ready: false };
+    return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops: [], ready: false };
   }
 
   if (ops.length > MAX_OPS) {
@@ -1050,7 +1088,7 @@ export function buildPlan(state: State): Plan {
       `That's ${ops.length} edits, but a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
       "create",
     );
-    return { tracks, fieldErrs, singleErrs, messages, blockers, ops: [], ready: false };
+    return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops: [], ready: false };
   }
 
   const creates = (prefix: string) =>
@@ -1065,7 +1103,7 @@ export function buildPlan(state: State): Plan {
       ...(made || reused ? [`${made} single(s) to create, ${reused} reused`] : []),
     ].join(". ") + ".",
   ]);
-  return { tracks, fieldErrs, singleErrs, messages, blockers, ops, ready: ops.length > 0 };
+  return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops, ready: ops.length > 0 };
 }
 
 // ---------------------------------------------------------------------------

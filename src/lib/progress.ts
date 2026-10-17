@@ -335,7 +335,7 @@ export function runChecks(
       ? blockedAt(plan, "tracks")
         ? { ok: false, text: "Fix the errors in Tracks", at: "tracks" }
         : { ok: true, text: plural(trackCount, "track"), at: null }
-      : { ok: false, text: "Add at least one track", at: "start" },
+      : { ok: false, text: "Add at least one track", at: "tracks" },
     perf.linked < perf.total || blockedAt(plan, "performers")
       ? {
           ok: false,

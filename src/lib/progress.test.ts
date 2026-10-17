@@ -118,7 +118,7 @@ describe("runChecks", () => {
   it("links each unmet check to its section", () => {
     const list = checks(input({ ...EMPTY, start: "new" }));
     expect(list.filter((c) => !c.ok).map((c) => c.at)).toEqual(
-      expect.arrayContaining(["album", "start", "performers"]),
+      expect.arrayContaining(["album", "tracks", "performers"]),
     );
   });
 

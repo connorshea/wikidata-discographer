@@ -116,6 +116,7 @@ function coerceTrack(t: Obj): Track | null {
       ? t.artists.filter((a): a is string => typeof a === "string" && a.trim() !== "")
       : [],
     seconds: seconds(t.seconds),
+    ...(typeof t.length === "string" ? { length: t.length } : {}),
     mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
   };
 }
@@ -127,7 +128,7 @@ const SEPARATOR = /(\s*(?:,|&|\bfeat\.?|\bft\.?|\bfeaturing\b)\s+)/i;
  * artists were kept one by one. A name in `whole`, such as "Tyler, the
  * Creator", isn't split up.
  */
-function splitArtists(s: string, whole: Iterable<string> = []): string[] {
+export function splitArtists(s: string, whole: Iterable<string> = []): string[] {
   const keep = new Set(whole);
   // Names at the even indexes, with the separators between them.
   const parts = s.split(SEPARATOR);

@@ -297,3 +297,21 @@ export function withoutDismissed(
   }
   return out;
 }
+
+/**
+ * Dismissed candidates with their rows' new track numbers, after the rows of
+ * disc `di` were renumbered. A dismissal for a row that's gone is dropped.
+ */
+export function renumberDismissed(
+  dismissed: ReadonlySet<string>,
+  di: number,
+  moved: ReadonlyMap<number, number>,
+): ReadonlySet<string> {
+  const next = new Set<string>();
+  for (const id of dismissed) {
+    const [d, n, ...rest] = id.split(":");
+    if (Number(d) !== di) next.add(id);
+    else if (moved.has(Number(n))) next.add([d, moved.get(Number(n)), ...rest].join(":"));
+  }
+  return next;
+}

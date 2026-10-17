@@ -99,6 +99,15 @@ describe("coerceState", () => {
     expect(coerceState({ album: {} }).album.mb).toBeNull();
   });
 
+  it("keeps a length typed by hand, even one that isn't valid yet", () => {
+    const tracks = (length: unknown) =>
+      coerceState({
+        discs: [{ tracks: [{ n: 1, title: "Song", artists: [], seconds: 177, length }] }],
+      }).discs[0].tracks;
+    expect(tracks("3:2")[0]).toMatchObject({ seconds: 177, length: "3:2" });
+    expect(tracks(5)[0]).not.toHaveProperty("length");
+  });
+
   it("keeps only well-formed tracks and imported identifiers", () => {
     const s = coerceState({
       discs: [
