@@ -18,6 +18,7 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
   unreviewed: 0,
   hasTracklist: false,
   notAlbum: false,
+  notSingle: false,
   running: null,
   ...more,
 });
@@ -80,6 +81,14 @@ describe("railSteps", () => {
     expect(byId.album).toMatchObject({ status: "attention" });
     expect(byId.create.summary).toBe("Blocked: album QID");
     expect(checks(p)[1]).toMatchObject({ ok: false, at: "album" });
+  });
+
+  it("flags an existing single that can't be used", () => {
+    const p = input(EXAMPLE, { notSingle: true });
+    const byId = Object.fromEntries(railSteps(p).map((s) => [s.id, s]));
+    expect(byId.tracks).toMatchObject({ status: "attention" });
+    expect(byId.create.summary).toBe("Blocked: tracks");
+    expect(checks(p)[2]).toMatchObject({ ok: false, at: "tracks", problem: true });
   });
 
   it("locks the later steps until a starting point is picked", () => {

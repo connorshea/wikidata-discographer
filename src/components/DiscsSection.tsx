@@ -16,7 +16,6 @@ import {
   PARTS,
   parseDate,
   QID,
-  SINGLE_CLASS,
   type Disc,
   type Plan,
   type RowErrs,
@@ -41,7 +40,7 @@ import {
 import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
-import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
+import { type ItemLookup, singleProblem, singleProblems } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 
 const cls = (...names: (string | false | null | undefined)[]) =>
@@ -61,9 +60,9 @@ function partLabel(d: Disc): string {
 }
 
 /** Whether a disc has a problem to fix in one of its rows or singles. */
-const discHasErrors = (plan: Plan, di: number) =>
-  [...Object.keys(plan.rowErrs), ...Object.keys(plan.singleErrs)].some((k) =>
-    k.startsWith(`${di}:`),
+const discHasErrors = (plan: Plan, badSingles: Record<string, string>, di: number) =>
+  [...Object.keys(plan.rowErrs), ...Object.keys(plan.singleErrs), ...Object.keys(badSingles)].some(
+    (k) => k.startsWith(`${di}:`),
   );
 
 export default function DiscsSection({
@@ -71,16 +70,16 @@ export default function DiscsSection({
   update,
   plan,
   reviews,
+  lookup,
   onRowsMoved,
 }: SectionProps & {
   reviews: TrackReview[];
+  /** The existing singles' summaries, looked up on Wikidata. */
+  lookup: Lookup;
   /** Rows were renumbered or a disc removed, so whatever's kept by disc and track number should follow. */
   onRowsMoved: (move: RowMove) => void;
 }) {
-  const lookup = useItemSummaries(
-    state.discs.flatMap((d) => Object.values(d.single).map((sg) => sg.qid.trim())),
-    state.settings.lang,
-  );
+  const badSingles = singleProblems(state, plan, lookup);
   const [tab, setTab] = useState(0);
   const di = Math.min(tab, state.discs.length - 1);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -101,7 +100,7 @@ export default function DiscsSection({
         <div role="tablist" aria-label="Discs">
           {state.discs.map((d, i) => {
             const toReview = reviews.some((r) => r.di === i && !r.reviewed);
-            const errors = discHasErrors(plan, i);
+            const errors = discHasErrors(plan, badSingles, i);
             return (
               <button
                 key={i}
@@ -1599,17 +1598,3 @@ function MatchFlag({ review }: { review: TrackReview }) {
 }
 
 type Lookup = (qid: string) => ItemLookup | undefined;
-
-/**
- * Why an existing single's QID can't be used, or null if it's fine or still
- * being looked up.
- */
-function singleProblem(qid: string, found: ItemLookup | undefined): string | null {
-  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
-  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
-  if (found?.status === "ok" && !found.classes.includes(SINGLE_CLASS)) {
-    const name = found.label ? `${qid} (${found.label})` : qid;
-    return `${name} isn't an instance of single (${SINGLE_CLASS}).`;
-  }
-  return null;
-}

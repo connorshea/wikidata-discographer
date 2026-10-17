@@ -11,6 +11,9 @@
 // album or EP classes the app knows. And it mustn't have a tracklist yet, or
 // the run would add a second one beside it.
 //
+// An existing single must be an instance of single (Q134556), or the run would
+// give a song or an album a tracklist as if it were the track's single.
+//
 // A reused track mustn't record a different composition than the one the run
 // links it to, or it would end up with two (P2550). When what it records is
 // a single, album or EP rather than a composition, the track itself needs
@@ -37,6 +40,7 @@ import {
   KIND_NAMES,
   type Op,
   QID,
+  SINGLE_CLASS,
   type State,
   type Value,
 } from "../src/lib/plan.ts";
@@ -152,6 +156,7 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
   }
   const tracks = new Map<string, Entity>();
   problems.push(...(await checkTrackCompositions(ops, sources, results, tracks)));
+  problems.push(...(await checkSingleKinds(ops, sources, results)));
   if (problems.length === 0)
     problems.push(...(await checkTermConflicts(ops, state, sources, results, tracks)));
   if (problems.length > MAX_PROBLEMS)
@@ -249,6 +254,41 @@ async function checkTrackCompositions(
           ? `On Wikidata, change that statement to the composition ${comp}, then start the run again.`
           : `On Wikidata, change that statement to the song's composition and put the composition in the track's composition field, then start the run again.`),
     );
+  }
+  return problems;
+}
+
+/**
+ * Existing singles that aren't instances of single, one sentence each. They're
+ * fetched 50 per request, one request at a time.
+ */
+async function checkSingleKinds(
+  ops: readonly Op[],
+  sources: Map<string, string[]>,
+  results: Map<string, ItemCheck>,
+): Promise<string[]> {
+  const singles = [
+    ...new Set(
+      ops.flatMap((op) =>
+        op.op === "addClaims" &&
+        "id" in op.target &&
+        op.row?.kind === "single" &&
+        results.get(op.target.id)?.status === "ok"
+          ? [op.target.id]
+          : [],
+      ),
+    ),
+  ];
+  const problems: string[] = [];
+  for (let i = 0; i < singles.length; i += 50) {
+    const entities = await getEntities(singles.slice(i, i + 50), { retries: 1 });
+    for (const [qid, entity] of entities) {
+      if (itemValues(entity, "P31").includes(SINGLE_CLASS)) continue;
+      const where = sources.get(qid)?.join(", ") ?? "An existing single";
+      problems.push(
+        `${where}: ${qid} isn't an instance of single (${SINGLE_CLASS}). Check the QID.`,
+      );
+    }
   }
   return problems;
 }

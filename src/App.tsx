@@ -19,7 +19,7 @@ import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import ProgressRail from "./components/ProgressRail.tsx";
 import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
-import { albumProblem, useItemSummaries } from "./components/use-item-summaries.ts";
+import { albumProblem, singleProblems, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
 
 /**
@@ -260,6 +260,10 @@ function Form() {
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
+  const lookupSingle = useItemSummaries(
+    state.discs.flatMap((d) => Object.values(d.single).map((sg) => sg.qid.trim())),
+    state.settings.lang,
+  );
   const startRef = useRef<StartHandle>(null);
   const matchesRef = useRef<MatchesHandle>(null);
   const { matches, status } = useMatches(state, plan);
@@ -282,6 +286,7 @@ function Form() {
     unreviewed,
     hasTracklist: !!albumTracklist,
     notAlbum: !!albumProblem(existingQid, albumFound),
+    notSingle: Object.keys(singleProblems(state, plan, lookupSingle)).length > 0,
     running,
   };
   const checks = runChecks({
@@ -355,6 +360,7 @@ function Form() {
                 <DiscsSection
                   {...props}
                   reviews={reviews}
+                  lookup={lookupSingle}
                   onRowsMoved={(move) => {
                     setDismissed((prev) => moveRowIds(prev, move));
                     matchesRef.current?.moveRows(move);
