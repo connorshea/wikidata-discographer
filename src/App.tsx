@@ -289,7 +289,7 @@ function Form() {
               releaseGroup={releaseGroup}
               onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
             />
-            <SettingsSection {...props} />
+            <SettingsSection key={formId} {...props} startCollapsed={!empty} />
             <DiscsSection {...props} reviews={reviews} />
             <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
             <PerformersSection {...props} />

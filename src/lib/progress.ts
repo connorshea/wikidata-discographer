@@ -1,6 +1,16 @@
 // What the progress rail and the plan panel show: each step's status and
 // summary, what the run will create, and what still blocks it.
-import { albumArtists, type BlockerAt, LABEL_LANGS, type Plan, QID, type State } from "./plan.ts";
+import {
+  albumArtists,
+  type BlockerAt,
+  LABEL_LANGS,
+  LANGS,
+  NO_LINGUISTIC_CONTENT,
+  type Plan,
+  QID,
+  type Settings,
+  type State,
+} from "./plan.ts";
 
 export type StepId = "start" | "album" | "settings" | "tracks" | "performers" | "create";
 export type StepStatus = "done" | "attention" | "pending";
@@ -58,6 +68,27 @@ function albumSummary(state: State): string | null {
   return title ? `New · ${title}` : "New album";
 }
 
+/** The label language's name, or its code when it isn't a listed one. */
+const labelLangName = (S: Settings) =>
+  LABEL_LANGS.find(([c]) => c === S.lang.trim())?.[1] ?? S.lang.trim();
+
+/** The options Item settings lists as checkboxes. */
+export const SETTING_FLAGS = ["compPerformer", "extendExisting", "straight", "mbIds"] as const;
+
+/** Item settings in a few pills, for when the section is collapsed. */
+export function settingsPills(S: Settings): string[] {
+  const p407 = S.p407.trim();
+  const work =
+    p407 === NO_LINGUISTIC_CONTENT ? "no linguistic content" : LANGS.find(([q]) => q === p407)?.[1];
+  const on = SETTING_FLAGS.filter((k) => S[k]).length;
+  return [
+    `Labels: ${labelLangName(S) || "none"}`,
+    ...(p407 ? [`Language of work: ${work ? `${work} (${p407})` : p407}`] : []),
+    S.date.trim() ? `Published ${S.date.trim()}` : "No publication date",
+    on ? plural(on, "option") + " on" : "No options on",
+  ];
+}
+
 /** The rail's steps, in page order. */
 export function railSteps(p: ProgressInput): Step[] {
   const { state, plan, empty, unreviewed, hasTracklist, running } = p;
@@ -66,7 +97,7 @@ export function railSteps(p: ProgressInput): Step[] {
   const discCount = plan.tracks.filter((rows) => rows.length).length;
   const perf = linkedPerformers(state, plan);
   const album = albumSummary(state);
-  const langName = LABEL_LANGS.find(([c]) => c === S.lang.trim())?.[1] ?? S.lang.trim();
+  const langName = labelLangName(S);
   const status = (attention: boolean, done: boolean): StepStatus =>
     attention ? "attention" : done ? "done" : "pending";
 

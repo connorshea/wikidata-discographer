@@ -3,6 +3,7 @@ import {
   buildPlan,
   citesMb,
   citesMbDate,
+  descPreviews,
   descTypeLabel,
   loadedReleaseGroup,
   MAX_TERM_LENGTH,
@@ -601,5 +602,33 @@ describe("descTypeLabel", () => {
     expect(descTypeLabel("Q169930", "Q208569")).toBe("EP");
     expect(descTypeLabel("Q169930", "Q209939")).toBe("live EP");
     expect(descTypeLabel("Q169930", "Q963099")).toBe("remix EP");
+  });
+});
+
+describe("descPreviews", () => {
+  const previews = (state: typeof EXAMPLE) => descPreviews(state, buildPlan(state));
+
+  it("fills in the templates for the first track", () => {
+    expect(previews(EXAMPLE)).toEqual({
+      comp: "2026 song by Carly Rae Jepsen",
+      track: "vocal track by Carly Rae Jepsen",
+      single: null,
+    });
+  });
+
+  it("takes a single's year from its release date", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].single = { "3": { date: "2025-05-02", qid: "", discogs: "" } };
+    expect(previews(state)?.single).toBe("2025 single by Carly Rae Jepsen");
+  });
+
+  it("leaves {year} as written without a publication date", () => {
+    const state = structuredClone(EXAMPLE);
+    state.settings.date = "";
+    expect(previews(state)?.comp).toBe("{year} song by Carly Rae Jepsen");
+  });
+
+  it("waits for a track or album artist", () => {
+    expect(previews(EMPTY)).toBeNull();
   });
 });

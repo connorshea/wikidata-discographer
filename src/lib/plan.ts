@@ -472,6 +472,38 @@ function fillDesc(tpl: string, year: string, artists: string[], type = ""): stri
     .trim();
 }
 
+export interface DescPreviews {
+  comp: string;
+  track: string;
+  /** Null until a ticked single has a release date to take the year from. */
+  single: string | null;
+}
+
+/**
+ * The description templates filled in for the first track with artists, so the
+ * settings can show what they write. A {year} the form can't fill yet stays as
+ * written. The single's preview is for the first single with a release date,
+ * since each single's year comes from its own date. Null until a track has artists.
+ */
+export function descPreviews(state: State, plan: Plan): DescPreviews | null {
+  const S = state.settings;
+  const rows = plan.tracks.flatMap((ts, di) => ts.map((t) => ({ t, d: state.discs[di] })));
+  const first = rows.find(({ t }) => t.artists.length);
+  const artists = first?.t.artists ?? albumArtists(state);
+  if (!artists.length) return null;
+  const date = parseDate(S.date);
+  const year = (date.ok && date.year) || "{year}";
+  const single = rows
+    .map(({ t, d }) => ({ t, date: parseDate(d.single[t.n]?.date ?? "") }))
+    .find(({ t, date }) => t.artists.length && date.ok && date.year);
+  return {
+    comp: fillDesc(S.compDesc, year, artists),
+    track: fillDesc(S.trackDesc, year, artists),
+    single:
+      single && single.date.ok ? fillDesc(S.singleDesc, single.date.year, single.t.artists) : null,
+  };
+}
+
 const item = (id: string): Value => ({ type: "item", id });
 const ref = (key: string): Value => ({ type: "item", ref: key });
 const claim = (property: string, value: Value, qualifiers?: Snak[]): Claim =>

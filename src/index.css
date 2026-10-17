@@ -23,6 +23,9 @@
   --warn-edge: #c98a00;
   --ok-tint: #e8f4ec;
   --danger-edge: #e8b4b0;
+  /* MusicBrainz: the MB badge on imported values. */
+  --mb-tint: #f1e9fa;
+  --mb-ink: #5b2a86;
   /* System fonts only: the CSP allows no third-party requests. */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -51,6 +54,8 @@
     --warn-edge: #c99a2e;
     --ok-tint: #17301f;
     --danger-edge: #7a3a36;
+    --mb-tint: #33244a;
+    --mb-ink: #d8b9f5;
   }
 }
 *,
@@ -512,11 +517,173 @@ button:focus-visible {
 input[aria-invalid="true"] {
   border-color: var(--err);
 }
-.checks {
+.mono {
+  font-family: var(--mono);
+}
+.pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--ink);
+}
+.mb-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--mb-tint);
+  color: var(--mb-ink);
+}
+.f span.sub.with-badge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+/* Item settings: a header with the show/hide toggle, then the groups. */
+.settings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-bottom: 8px;
+}
+.settings-head > div {
+  flex: 1 1 260px;
+}
+.settings-head .hint {
+  margin-bottom: 0;
+}
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 8px;
+}
+.descs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.descs h3.kicker {
+  margin: 0;
+}
+.desc-vars {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.desc-vars code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--tint);
+  color: var(--ink);
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+.desc-row {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-  margin-top: 12px;
+  grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 16px;
+  align-items: start;
+}
+.desc-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 650;
+  min-height: 38px;
+}
+.desc-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+  color: var(--ink);
+  padding: 7px 12px;
+  min-height: 38px;
+  border-radius: 7px;
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  overflow-wrap: anywhere;
+}
+.desc-preview .sub {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+@media (max-width: 720px) {
+  .desc-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desc-kind {
+    min-height: 0;
+  }
+}
+.track-type {
+  max-width: 360px;
+}
+.option-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+.option-groups fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.option-groups legend {
+  padding: 0;
+  margin-bottom: 10px;
+}
+label.opt {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  cursor: pointer;
+}
+label.opt input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+label.opt > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+label.opt b {
+  font-weight: 600;
+}
+label.opt span span {
+  font-size: 12.5px;
+  color: var(--muted);
 }
 button,
 a.btn {
@@ -964,9 +1131,9 @@ details summary {
   font-weight: 400;
   line-height: 1.45;
   box-shadow: 0 6px 20px rgba(10, 12, 40, 0.18);
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.12s;
+  /* Not laid out while hidden, so a tooltip past the edge of a narrow window
+     doesn't make the page scroll sideways. */
+  display: none;
 }
 .info.end [role="tooltip"] {
   left: auto;
@@ -978,8 +1145,13 @@ th .info {
 }
 .info:hover [role="tooltip"],
 .info button:focus + [role="tooltip"] {
-  visibility: visible;
-  opacity: 1;
+  display: block;
+  animation: tip-in 0.12s;
+}
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
 }
 .info dl {
   margin: 6px 0 0;
@@ -1329,8 +1501,9 @@ footer {
   text-align: center;
 }
 @media (prefers-reduced-motion: reduce) {
-  .info [role="tooltip"] {
-    transition: none;
+  .info:hover [role="tooltip"],
+  .info button:focus + [role="tooltip"] {
+    animation: none;
   }
   .turntable .record {
     animation: none;

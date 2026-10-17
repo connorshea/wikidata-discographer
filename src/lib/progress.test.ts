@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import { EXAMPLE } from "./example.fixture.ts";
 import { buildPlan, type State } from "./plan.ts";
-import { createCounts, type ProgressInput, railSteps, runChecks } from "./progress.ts";
+import {
+  createCounts,
+  type ProgressInput,
+  railSteps,
+  runChecks,
+  settingsPills,
+} from "./progress.ts";
 import { EMPTY } from "./state.ts";
 
 const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput => ({
@@ -84,5 +90,21 @@ describe("runChecks", () => {
   it("asks for matches to be reviewed", () => {
     const c = checks(input(EXAMPLE, { unreviewed: 2 })).find((x) => x.at === "matches");
     expect(c?.text).toBe("Review 2 possible matches");
+  });
+});
+
+describe("settingsPills", () => {
+  it("sums up the settings", () => {
+    expect(settingsPills(EXAMPLE.settings)).toEqual([
+      "Labels: English",
+      "Language of work: English (Q1860)",
+      "Published 2026-09-18",
+      "4 options on",
+    ]);
+  });
+
+  it("names what's missing", () => {
+    const S = { ...EMPTY.settings, lang: "nds", straight: false };
+    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "3 options on"]);
   });
 });
