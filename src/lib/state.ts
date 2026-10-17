@@ -7,6 +7,7 @@ import type {
   MbRowIds,
   Settings,
   SingleState,
+  StartingPoint,
   State,
   Track,
 } from "./plan.ts";
@@ -46,6 +47,7 @@ export const emptyDisc = (): Disc => ({
 });
 
 export const EMPTY: State = {
+  start: null,
   settings: DEFAULT_SETTINGS,
   album: {
     mode: "existing",
@@ -223,6 +225,19 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
   return { releaseGroup, release, retrieved, date: coerceCited(v.date), ids };
 }
 
+const STARTS: readonly StartingPoint[] = ["mb", "existing", "search", "new"];
+
+/**
+ * The starting point of a form saved before it had one: none for an empty
+ * form, otherwise what it looks started from.
+ */
+function legacyStart(s: Omit<State, "start">): StartingPoint | null {
+  if (s.album.mb) return "mb";
+  if (s.album.mode === "existing" && s.album.qid.trim()) return "existing";
+  const blank = JSON.stringify(coerceState({ ...s, start: null }));
+  return blank === JSON.stringify(coerceState(EMPTY)) ? null : "new";
+}
+
 /** A well-formed copy of `raw`, filling anything missing or mistyped with defaults. */
 export function coerceState(raw: unknown): State {
   const r = isObj(raw) ? raw : {};
@@ -290,10 +305,12 @@ export function coerceState(raw: unknown): State {
         )
       : {},
   }));
-  return {
+  const rest = {
     settings,
     album,
     artists: strMap(r.artists),
     discs: discs.length ? discs : [emptyDisc()],
   };
+  const start = "start" in r ? (STARTS.find((p) => p === r.start) ?? null) : legacyStart(rest);
+  return { start, ...rest };
 }

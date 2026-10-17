@@ -700,6 +700,7 @@ const joinList = (xs: string[]) =>
 /** The form filled from `form`, keeping the settings other than the date and language. */
 export function applyMbForm(state: State, form: MbForm): State {
   return coerceState({
+    start: "mb",
     settings: { ...state.settings, date: form.date, p407: form.p407, p407Custom: false },
     album: form.album,
     artists: form.artists,

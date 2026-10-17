@@ -673,6 +673,7 @@ describe("applyMbForm", () => {
     const next = applyMbForm(state, releaseToForm(RELEASE, NONE));
     expect(next.settings).toMatchObject({ lang: "fr", date: "2026-09-18", p407: "Q1860" });
     expect(next.album.mode).toBe("create");
+    expect(next.start).toBe("mb");
     expect(next.discs).toHaveLength(2);
     expect(next.discs[0].comp).toEqual({});
   });

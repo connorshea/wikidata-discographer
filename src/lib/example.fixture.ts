@@ -16,6 +16,7 @@ export const track = (
 const tracks = (titles: [string, string][]) => titles.map(([t, l], i) => track(i + 1, t, l));
 
 export const EXAMPLE: State = {
+  start: "existing",
   settings: { ...EMPTY.settings, date: "2026-09-18", p407: "Q1860" },
   album: {
     ...EMPTY.album,

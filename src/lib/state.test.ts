@@ -25,6 +25,27 @@ describe("coerceState", () => {
     expect(s.settings).not.toHaveProperty("splitArtists");
   });
 
+  it("keeps the starting point, or none when it's mistyped", () => {
+    expect(coerceState({ start: "search" }).start).toBe("search");
+    expect(coerceState({ start: null }).start).toBeNull();
+    expect(coerceState({ start: "nope", album: { qid: "Q1" } }).start).toBeNull();
+  });
+
+  it("gives a form saved before starting points the one it looks started from", () => {
+    expect(coerceState({}).start).toBeNull();
+    expect(coerceState({ album: { qid: "Q1" } }).start).toBe("existing");
+    expect(coerceState({ album: { mode: "create", title: "A" } }).start).toBe("new");
+    expect(coerceState({ settings: { date: "2020-01-01" } }).start).toBe("new");
+    const { start: _, ...saved } = EXAMPLE;
+    expect(coerceState(JSON.parse(JSON.stringify(saved))).start).toBe("existing");
+    const mb = {
+      releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+      release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+      retrieved: "2026-10-04",
+    };
+    expect(coerceState({ album: { qid: "Q1", mb } }).start).toBe("mb");
+  });
+
   it("drops mistyped values", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },

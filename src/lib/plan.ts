@@ -132,7 +132,14 @@ export interface Disc {
   single: Record<string, SingleState>;
 }
 
+/**
+ * How the form was started: from a MusicBrainz release, an existing album's
+ * QID, a search by name, or a new album. Null while it's being picked.
+ */
+export type StartingPoint = "mb" | "existing" | "search" | "new";
+
 export interface State {
+  start: StartingPoint | null;
   settings: Settings;
   album: AlbumState;
   artists: Record<string, string>;
