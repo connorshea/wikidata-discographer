@@ -32,6 +32,13 @@
   /* Steps locked until a starting point is picked. */
   --locked-bg: #f7f8fb;
   --locked-edge: #d3d7e1;
+  --locked-border: dashed;
+  --locked-ink: #5a5f74;
+  /* A card's edge, and a tile raised off a card, e.g. a starting point. */
+  --card-edge: #d7dae4;
+  --raised: #ffffff;
+  /* A dotted underline, e.g. a property in the data model legend. */
+  --dotted: currentColor;
   /* A blocking error's box, e.g. an album that already has a tracklist. */
   --err-tint: #fde7e5;
   --err-ink: #8c1d17;
@@ -56,8 +63,11 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1020;
+    /* Each layer a step lighter than the one below it: page, card, tile. */
+    --bg: #0d0e1b;
     --panel: #181a2e;
+    --raised: #20233a;
+    --card-edge: #262943;
     --ink: #e8e9f3;
     --muted: #a2a6c0;
     --line: #2e3150;
@@ -66,14 +76,14 @@
     --err: #ff8a80;
     --warn: #f2c66b;
     --ok: #7fd39b;
-    --disc-edge: #5c6182;
+    --disc-edge: #8a8fae;
     --trk-edge: #8c98f2;
     --cmp-edge: #6cc48f;
     --rg-edge: #d9b23e;
     --rg-tint: #3a3115;
     --rg-ink: #f0d58a;
     --tint: #23263f;
-    --hover: #272a47;
+    --hover: #292c49;
     --warn-tint: #3a2f12;
     --warn-edge: #c99a2e;
     --ok-tint: #17301f;
@@ -81,8 +91,12 @@
     --mb-tint: #33244a;
     --mb-ink: #d8b9f5;
     --accent-tint: #1f2448;
-    --locked-bg: #14152a;
-    --locked-edge: #363a5e;
+    /* A dashed edge reads as noise on a dark page, so locked is solid and dim. */
+    --locked-bg: #121326;
+    --locked-edge: rgb(255 255 255 / 0.07);
+    --locked-border: solid;
+    --locked-ink: #6d7192;
+    --dotted: #8f94b8;
     --err-tint: #3b1c1d;
     --err-ink: #ffb4ab;
     --chip: #2c3052;
@@ -285,8 +299,9 @@ h2 {
   color: var(--warn);
   box-shadow: inset 0 0 0 1.5px var(--warn-edge);
 }
-.rail-item.locked {
-  color: var(--muted);
+.rail-item.locked,
+.rail-item.locked .rail-text span {
+  color: var(--locked-ink);
 }
 .rail-item.locked:hover {
   background: none;
@@ -338,7 +353,7 @@ button.clear-form path {
 }
 .plan-panel .card {
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--card-edge);
   border-radius: 10px;
   padding: 20px;
   display: flex;
@@ -389,7 +404,7 @@ button.clear-form path {
 }
 .model a.prop {
   color: inherit;
-  text-decoration: underline dotted;
+  text-decoration: underline dotted var(--dotted);
   text-underline-offset: 3px;
 }
 .model a.prop:hover {
@@ -460,7 +475,7 @@ button.clear-form path {
   }
 }
 abbr.pid {
-  text-decoration: underline dotted;
+  text-decoration: underline dotted var(--dotted);
   text-underline-offset: 3px;
   cursor: help;
 }
@@ -483,7 +498,7 @@ abbr.pid {
 }
 section.block {
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--card-edge);
   border-radius: 10px;
   padding: 18px;
   margin-bottom: 18px;
@@ -2592,7 +2607,7 @@ section.block.start.started {
   min-height: 76px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--raised);
   cursor: pointer;
 }
 .start-card:hover {
@@ -2714,9 +2729,9 @@ section.block.locked-step {
   align-items: center;
   gap: 12px 20px;
   padding: 18px 24px;
-  border: 1px dashed var(--locked-edge);
+  border: 1px var(--locked-border) var(--locked-edge);
   background: var(--locked-bg);
-  color: var(--muted);
+  color: var(--locked-ink);
   margin-bottom: 10px;
 }
 .locked-step h2 {
@@ -3268,4 +3283,29 @@ button.mb-button[aria-expanded="true"] {
 }
 .plan-empty .hole {
   fill: var(--locked-bg);
+}
+
+/* Dark mode: the current step and page stand out from the page, and a disabled button
+   goes neutral, since a dim accent still looks half on. */
+@media (prefers-color-scheme: dark) {
+  .rail-item[aria-current="step"] {
+    background: var(--raised);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .top-nav a[aria-current="page"] {
+    background: var(--raised);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  .run-slot > button:disabled {
+    background: var(--tint);
+    border-color: var(--line);
+    color: var(--locked-ink);
+    opacity: 1;
+  }
+  button.clear-form:disabled {
+    background: none;
+    border-color: var(--line);
+    color: var(--locked-ink);
+    opacity: 1;
+  }
 }
