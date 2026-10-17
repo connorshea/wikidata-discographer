@@ -1,21 +1,14 @@
 // The form's first step: a picker of where to start from, which collapses into
 // a summary bar once one is applied.
 import { type Ref, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
-import {
-  ALBUM_TYPES,
-  EP_CLASS,
-  QID,
-  setAlbumType,
-  type StartingPoint,
-  type State,
-} from "../lib/plan.ts";
+import { QID, type StartingPoint, type State } from "../lib/plan.ts";
 import { startSummary } from "../lib/progress.ts";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import type { SearchItem, SearchResponse } from "../lib/api-types.ts";
 import { FieldErr, QidInput } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { AlbumArtists } from "./AlbumSection.tsx";
+import { AlbumTypeSelect, ArtistChips } from "./AlbumSection.tsx";
 import MusicBrainzImport, { type MusicBrainzImportHandle } from "./MusicBrainzImport.tsx";
 import type { SectionProps } from "./types.ts";
 
@@ -412,17 +405,8 @@ function NewPanel({ state, update }: Omit<SectionProps, "plan">) {
             onChange={(e) => update((s) => void (s.album.title = e.target.value))}
           />
         </label>
-        <AlbumArtists state={state} update={update} error={undefined} />
-        <label className="f">
-          Type
-          <select value={A.type} onChange={(e) => update((s) => setAlbumType(s, e.target.value))}>
-            {ALBUM_TYPES.map(([q]) => (
-              <option key={q} value={q}>
-                {q === EP_CLASS ? "EP" : "Album"}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ArtistChips state={state} update={update} />
+        <AlbumTypeSelect state={state} update={update} />
       </div>
       <span className="sub">
         Form, identifiers and the description template come next in the Album section.

@@ -3,6 +3,7 @@ import {
   buildPlan,
   citesMb,
   citesMbDate,
+  albumDescPreview,
   descPreviews,
   descTypeLabel,
   loadedReleaseGroup,
@@ -602,6 +603,26 @@ describe("descTypeLabel", () => {
     expect(descTypeLabel("Q169930", "Q208569")).toBe("EP");
     expect(descTypeLabel("Q169930", "Q209939")).toBe("live EP");
     expect(descTypeLabel("Q169930", "Q963099")).toBe("remix EP");
+  });
+});
+
+describe("albumDescPreview", () => {
+  const album = (more: Partial<typeof EXAMPLE.album> = {}) => {
+    const state = structuredClone(EXAMPLE);
+    Object.assign(state.album, { mode: "create", title: "Day and Night" }, more);
+    return state;
+  };
+
+  it("fills in the year, form and artists", () => {
+    expect(albumDescPreview(album({ artists: ["Carly Rae Jepsen", "Ghost"] }))).toBe(
+      "2026 studio album by Carly Rae Jepsen and Ghost",
+    );
+  });
+
+  it("leaves what it can't fill as written", () => {
+    const state = album({ artists: [], type: "Q169930", form: "" });
+    state.settings.date = "";
+    expect(albumDescPreview(state)).toBe("{year} EP by {artists}");
   });
 });
 

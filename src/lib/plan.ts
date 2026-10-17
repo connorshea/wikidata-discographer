@@ -517,6 +517,23 @@ export function descPreviews(state: State, plan: Plan): DescPreviews | null {
   };
 }
 
+/**
+ * A new album's description template filled in, as `descPreviews` does for the
+ * other items. A {year} or {artists} the form can't fill yet stays as written.
+ */
+export function albumDescPreview(state: State): string {
+  const A = state.album;
+  const date = parseDate(state.settings.date);
+  const year = (date.ok && date.year) || "{year}";
+  const artists = albumArtists(state);
+  return fillDesc(
+    state.settings.albumDesc,
+    year,
+    artists.length ? artists : ["{artists}"],
+    descTypeLabel(A.type, A.form),
+  );
+}
+
 const item = (id: string): Value => ({ type: "item", id });
 const ref = (key: string): Value => ({ type: "item", ref: key });
 const claim = (property: string, value: Value, qualifiers?: Snak[]): Claim =>
