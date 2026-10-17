@@ -917,8 +917,7 @@ table.tracks td.title-col input.cell {
 td.title-col .cell-err {
   flex-basis: 100%;
 }
-/* Performers that differ from the album artists, under a row's title, and the
-   button that edits a row's artists. It shows once the row is hovered or focused. */
+/* Performers that differ from the album artists, under a row's title. */
 .who {
   flex-basis: 100%;
   display: flex;
@@ -937,21 +936,6 @@ td.title-col .cell-err {
 .who .cell-err {
   flex-basis: 100%;
   padding: 0;
-}
-button.link.who-edit {
-  min-height: 28px;
-  padding: 0 4px;
-  font-size: 12.5px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-/* Hidden, but still in the tab order, until its row is hovered or has focus. It
-   keeps its width meanwhile, so showing it doesn't reflow the table. */
-@media (hover: hover) {
-  tr:not(:hover, :focus-within) button.link.who-edit:not(.shown) {
-    opacity: 0;
-  }
 }
 .who-chip {
   display: inline-flex;
@@ -1041,6 +1025,68 @@ button.rm {
 button.rm:hover {
   background: var(--err-tint);
   color: var(--err);
+}
+/* A row's "⋯" button, and the menu of its actions. */
+table.tracks td.menu-col {
+  width: 1%;
+  padding-right: 8px;
+}
+button.row-menu-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+}
+button.row-menu-button:hover,
+button.row-menu-button[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+button.row-menu-button circle {
+  fill: currentColor;
+}
+.row-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow:
+    0 12px 32px rgb(20 23 31 / 16%),
+    0 2px 6px rgb(20 23 31 / 8%);
+}
+.row-menu button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.row-menu button:hover,
+.row-menu button:focus-visible {
+  outline: none;
+  background: var(--hover);
+}
+.row-menu button.danger {
+  color: var(--err);
+}
+.row-menu button.danger:hover,
+.row-menu button.danger:focus-visible {
+  background: var(--err-tint);
 }
 tr.dragging td {
   opacity: 0.5;

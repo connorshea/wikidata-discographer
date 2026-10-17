@@ -194,7 +194,7 @@ function DiscBlock({
   // Rows typed in, or added to an import, can be moved and removed. A plain import is a
   // release's tracklist, so it's left as it is.
   const manual = state.start !== "mb" || d.tracks.some((t) => !t.mb);
-  const cols = manual ? 7 : 5;
+  const cols = manual ? 7 : 6;
   const setDisc = (fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
   const ids = useId();
   const known = [...Object.keys(state.artists), ...albumArtists(state)];
@@ -243,6 +243,10 @@ function DiscBlock({
   );
   if (stuck !== -1) setSinglesOpen(new Set([...singlesOpen, keys[stuck]]));
 
+  // The row (by key) whose artists are open in a dialog.
+  const [artistsOf, setArtistsOf] = useState<number | null>(null);
+  const artistsAt = artistsOf === null ? -1 : keys.indexOf(artistsOf);
+
   const table = useRef<HTMLTableElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   // The cell to focus once the rows have changed.
@@ -285,7 +289,7 @@ function DiscBlock({
     const title = d.tracks[i].title.trim();
     setKeys((ks) => ks.filter((_, j) => j !== i));
     reorder((disc) => removeTrack(disc, i));
-    setFocusNext({ row: Math.min(i, d.tracks.length - 2), col: "remove" });
+    setFocusNext({ row: Math.min(i, d.tracks.length - 2), col: "menu" });
     setSaid(`Removed track ${i + 1}${title ? `, ${title}` : ""}.`);
   };
   /** A list pasted into a title: its first line fills a blank row, the rest are rows after it. */
@@ -425,11 +429,9 @@ function DiscBlock({
                     its Discogs master ID. Currently, you can only create singles with one track.
                   </InfoTip>
                 </th>
-                {manual && (
-                  <th>
-                    <span className="visually-hidden">Remove</span>
-                  </th>
-                )}
+                <th>
+                  <span className="visually-hidden">Options</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -527,26 +529,13 @@ function DiscBlock({
                             />
                           )}
                           <RowArtists
-                            n={r.n}
-                            title={t.title}
-                            track={t}
                             performers={rowPerformers(
                               { artists: r.artists, feat: featOf(i) },
                               base,
                             )}
                             prefixed={base.length > 0}
                             linked={linked}
-                            known={known}
-                            placeholder={creating ? "Album artist" : "Artists"}
                             error={t.title.trim() ? errs.artists : undefined}
-                            onCommit={(names) =>
-                              setDisc((disc) => {
-                                const row = disc.tracks[i];
-                                row.artists = names.artists;
-                                if (names.feat) row.feat = names.feat;
-                                else delete row.feat;
-                              })
-                            }
                           />
                         </span>
                       </td>
@@ -591,19 +580,26 @@ function DiscBlock({
                           }}
                         />
                       </td>
-                      {manual && (
-                        <td>
-                          <button
-                            type="button"
-                            className="rm"
-                            data-col="remove"
-                            aria-label={`Remove track ${r.n}`}
-                            onClick={() => remove(i)}
-                          >
-                            ×
-                          </button>
-                        </td>
-                      )}
+                      <td className="menu-col">
+                        <RowMenu
+                          label={`Track options for ${t.title.trim() || `track ${r.n}`}`}
+                          items={[
+                            {
+                              label: t.artists.length ? "Edit artists" : "Add artists",
+                              onSelect: () => setArtistsOf(keys[i]),
+                            },
+                            ...(manual && i > 0
+                              ? [{ label: "Move up", onSelect: () => move(i, i - 1, "menu") }]
+                              : []),
+                            ...(manual && i < rows.length - 1
+                              ? [{ label: "Move down", onSelect: () => move(i, i + 1, "menu") }]
+                              : []),
+                            ...(manual
+                              ? [{ label: "Remove track", danger: true, onSelect: () => remove(i) }]
+                              : []),
+                          ]}
+                        />
+                      </td>
                     </tr>
                     {singleOpen && (
                       <tr className="sub-row is-single">
@@ -632,6 +628,28 @@ function DiscBlock({
             </tbody>
           </table>
         </div>
+      )}
+      {artistsAt !== -1 && (
+        <ArtistsDialog
+          n={rows[artistsAt].n}
+          title={d.tracks[artistsAt].title}
+          track={d.tracks[artistsAt]}
+          linked={linked}
+          known={known}
+          placeholder={creating ? "Album artist" : "Artists"}
+          onCommit={(names) =>
+            setDisc((disc) => {
+              const row = disc.tracks[artistsAt];
+              row.artists = names.artists;
+              if (names.feat) row.feat = names.feat;
+              else delete row.feat;
+            })
+          }
+          onClose={() => {
+            setArtistsOf(null);
+            setFocusNext({ row: artistsAt, col: "menu" });
+          }}
+        />
       )}
       {rows.length > 0 && (base.length > 0 || anyMb) && (
         <p className="table-note">
@@ -772,36 +790,22 @@ function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
 }
 
 /**
- * Who a row credits beyond the artists above the table, as chips, and the
- * button that opens a dialog to edit its artists.
+ * Who a row credits beyond the artists above the table, as chips. Its menu's
+ * Edit artists opens a dialog to change them.
  */
 function RowArtists({
-  n,
-  title,
-  track,
   performers: p,
   prefixed,
   linked,
-  known,
-  placeholder,
   error,
-  onCommit,
 }: {
-  n: number;
-  title: string;
-  track: Track;
   performers: ReturnType<typeof rowPerformers>;
   /** Whether there are artists above the table that the chips differ from. */
   prefixed: boolean;
   linked: (name: string) => boolean;
-  known: string[];
-  placeholder: string;
   error?: string;
-  onCommit: (names: Pick<Track, "artists" | "feat">) => void;
 }) {
   const id = useId();
-  const [editing, setEditing] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
   const chips = (names: string[]) =>
     names.map((a) => <PerformerChip key={a} name={a} linked={linked(a)} />);
   const groups = [
@@ -810,47 +814,140 @@ function RowArtists({
     p.feat.length > 0 && (["feat.", p.feat] as const),
   ].filter((g) => g !== false);
   return (
+    (groups.length > 0 || error) && (
+      <span className="who">
+        {groups.map(([label, names], g) => (
+          <Fragment key={label}>
+            {(label || g > 0) && (
+              <span className={g > 0 ? "who-sep" : undefined}>
+                {g > 0 ? ", " : ""}
+                {label}
+              </span>
+            )}
+            {chips(names)}
+          </Fragment>
+        ))}
+        {error && <CellErr id={`${id}-err`}>{error}</CellErr>}
+      </span>
+    )
+  );
+}
+
+interface MenuItem {
+  label: string;
+  danger?: boolean;
+  onSelect: () => void;
+}
+
+/**
+ * A row's actions behind a "⋯" button. Arrow keys, Home and End move through
+ * them, and Escape, Tab or a click outside closes the menu. An item's action
+ * moves the focus itself, to a dialog or back to a row.
+ */
+function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const button = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const entries = () => [
+    ...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []),
+  ];
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) button.current?.focus();
+  };
+
+  // Placed under the button, or over it when there's no room below, with their right
+  // edges lined up. It's fixed so the table's scrolling box doesn't clip it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const b = button.current?.getBoundingClientRect();
+      const el = menu.current;
+      if (!b || !el) return;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const below = b.bottom + 4;
+      const top = below + h > window.innerHeight && b.top - h - 4 > 0 ? b.top - h - 4 : below;
+      el.style.left = `${Math.max(8, Math.min(b.right - w, window.innerWidth - w - 8))}px`;
+      el.style.top = `${top}px`;
+    };
+    place();
+    entries()[0]?.focus();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: Event) => {
+      const t = e.target as Node;
+      if (!menu.current?.contains(t) && !button.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open]);
+
+  return (
     <>
       <button
         ref={button}
         type="button"
-        className={cls("link who-edit", !!error && "shown")}
-        aria-label={`Edit artists for track ${n}`}
-        aria-haspopup="dialog"
-        onClick={() => setEditing(true)}
+        className="row-menu-button"
+        data-col="menu"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-menu` : undefined}
+        onClick={() => setOpen(!open)}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+          e.preventDefault();
+          setOpen(true);
+        }}
       >
-        {track.artists.length ? "Edit artists" : "Add artists"}
-      </button>
-      {editing && (
-        <ArtistsDialog
-          n={n}
-          title={title}
-          track={track}
-          linked={linked}
-          known={known}
-          placeholder={placeholder}
-          onCommit={onCommit}
-          onClose={() => {
-            setEditing(false);
-            button.current?.focus();
-          }}
-        />
-      )}
-      {(groups.length > 0 || error) && (
-        <span className="who">
-          {groups.map(([label, names], g) => (
-            <Fragment key={label}>
-              {(label || g > 0) && (
-                <span className={g > 0 ? "who-sep" : undefined}>
-                  {g > 0 ? ", " : ""}
-                  {label}
-                </span>
-              )}
-              {chips(names)}
-            </Fragment>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          {[3, 8, 13].map((x) => (
+            <circle key={x} cx={x} cy="8" r="1.5" />
           ))}
-          {error && <CellErr id={`${id}-err`}>{error}</CellErr>}
-        </span>
+        </svg>
+      </button>
+      {open && (
+        <div
+          ref={menu}
+          id={`${id}-menu`}
+          className="row-menu"
+          role="menu"
+          aria-label={label}
+          onKeyDown={(e) => {
+            const all = entries();
+            const at = all.indexOf(document.activeElement as HTMLElement);
+            const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
+            if (to !== undefined) all[(to + all.length) % all.length]?.focus();
+            else if (e.key !== "Escape" && e.key !== "Tab") return;
+            else close(true);
+            e.preventDefault();
+          }}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              className={item.danger ? "danger" : undefined}
+              onClick={() => {
+                close(false);
+                item.onSelect();
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       )}
     </>
   );
