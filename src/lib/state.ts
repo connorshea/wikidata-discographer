@@ -22,12 +22,10 @@ const DEFAULT_SETTINGS: Settings = {
   singleDesc: "{year} single by {artists}",
   albumDesc: "{year} {type} by {artists}",
   compPerformer: true,
-  duration: true,
   straight: true,
   splitArtists: true,
   extendExisting: true,
   mbIds: true,
-  mbRefs: true,
 };
 
 export const emptyDisc = (): Disc => ({
@@ -163,12 +161,10 @@ export function coerceState(raw: unknown): State {
     singleDesc: str(s.singleDesc, d.singleDesc),
     albumDesc: str(s.albumDesc, d.albumDesc),
     compPerformer: bool(s.compPerformer, d.compPerformer),
-    duration: bool(s.duration, d.duration),
     straight: bool(s.straight, d.straight),
     splitArtists: bool(s.splitArtists, d.splitArtists),
     extendExisting: bool(s.extendExisting, d.extendExisting),
     mbIds: bool(s.mbIds, d.mbIds),
-    mbRefs: bool(s.mbRefs, d.mbRefs),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};

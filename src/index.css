@@ -184,8 +184,7 @@ label.c input {
   margin-top: 3px;
 }
 input[type="text"],
-select,
-textarea {
+select {
   font: inherit;
   color: var(--ink);
   background-color: var(--bg);
@@ -207,15 +206,8 @@ select {
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
-textarea {
-  font-family: var(--mono);
-  font-size: 0.82rem;
-  line-height: 1.5;
-  resize: vertical;
-}
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -287,7 +279,6 @@ button:disabled {
   font-size: 1.05rem;
 }
 .disc input[type="text"],
-.disc textarea,
 .disc select {
   background-color: var(--panel);
 }

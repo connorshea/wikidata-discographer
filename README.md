@@ -8,9 +8,9 @@ album —P658 tracklist→ track —P2550 recording or performance of→ composi
 single —P658 tracklist→ track, single —P13602 single taken from→ album
 ```
 
-Paste a tracklist per disc, map the artist names to QIDs, and the app creates
-the album (or reuses an existing one), a composition and a track for each song,
-and any singles, all linked together. The edits are made directly with the
+Import a release from MusicBrainz, map the artist names to QIDs, and the app
+creates the album (or reuses an existing one), a composition and a track for
+each song, and any singles, all linked together. The edits are made directly with the
 logged-in user's account through OAuth. There is no QuickStatements step. Each
 run is one [EditGroup](https://editgroups.toolforge.org/), so the whole run can
 be reviewed or undone in one place.

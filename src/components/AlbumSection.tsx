@@ -113,8 +113,7 @@ export default function AlbumSection({
                 >
                   MusicBrainz
                 </a>
-                . Load it from there to fill in the tracklist, performers and IDs instead of typing
-                them.
+                . Load it from there to fill in the tracklist, performers and IDs.
               </span>
               <button
                 type="button"
