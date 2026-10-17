@@ -91,18 +91,27 @@ export default function MatchesSection({
     },
   }));
   // The control that takes the place of the one just clicked, to keep focus on.
-  // Failing that, the first control in the track it belongs to, since the
-  // track may have moved between the open ones and Reviewed.
-  const focusTo = useRef<{ to: string; track: TrackReview } | null>(null);
+  // Failing that, the track moved under Reviewed: the next track still to
+  // review slides into its place, so focus goes there rather than following it
+  // down the page. Last of all, the first control in the track itself.
+  const focusTo = useRef<{ to: string; track: TrackReview; next?: TrackReview } | null>(null);
   useEffect(() => {
     if (!focusTo.current) return;
-    const { to, track } = focusTo.current;
+    const { to, track, next } = focusTo.current;
+    const first = (r: TrackReview) =>
+      document.querySelector<HTMLElement>(`#${groupId(r.di, r.n)} button`);
     (
       document.querySelector<HTMLElement>(`#matches [data-focus="${to}"]`) ??
-      document.querySelector<HTMLElement>(`#${groupId(track.di, track.n)} button`)
+      (next && first(next)) ??
+      first(track)
     )?.focus();
     focusTo.current = null;
   });
+  // Where focus goes after an action on `r`, in case it moves under Reviewed.
+  const focusAfter = (to: string, r: TrackReview) => {
+    const i = queue.findIndex((q) => keyOf(q) === keyOf(r));
+    focusTo.current = { to, track: r, next: i < 0 ? undefined : (queue[i + 1] ?? queue[i - 1]) };
+  };
   const setDisc = (r: TrackReview, fn: (disc: Disc) => void) => {
     setKept(true);
     update((s) => fn(s.discs[r.di]));
@@ -117,7 +126,7 @@ export default function MatchesSection({
     });
   };
   const use = (r: TrackReview, c: Candidate) => {
-    focusTo.current = { to: `undo:${c.id}`, track: r };
+    focusAfter(`undo:${c.id}`, r);
     const d = state.discs[r.di];
     before.current.set(c.id, {
       comp: d.comp[r.n],
@@ -155,7 +164,7 @@ export default function MatchesSection({
     });
   };
   const dismiss = (r: TrackReview, ids: string[]) => {
-    focusTo.current = { to: `restore:${r.di}:${r.n}`, track: r };
+    focusAfter(`restore:${r.di}:${r.n}`, r);
     setKept(true);
     setDismissed((prev) => new Set([...prev, ...ids]));
   };
