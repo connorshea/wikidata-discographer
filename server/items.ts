@@ -92,6 +92,12 @@ export function withAlbumFacts(
   );
 }
 
+/** What `albumFacts` knows of a set of albums, keyed by QID. */
+interface AlbumFactLookup {
+  tracks: Map<number, number>;
+  onMusicBrainz: Set<number>;
+}
+
 const P436 = propertyNumber("P436");
 const P658 = propertyNumber("P658");
 
@@ -100,8 +106,8 @@ const P658 = propertyNumber("P658");
  * group, as of the mirror. Both are keyed lookups on the tables' primary
  * keys. The mirror can be a week behind, so a picked album is checked live.
  */
-async function albumFacts(qids: number[]) {
-  if (!qids.length) return { tracks: new Map<number, number>(), onMusicBrainz: new Set<number>() };
+async function albumFacts(qids: number[]): Promise<AlbumFactLookup> {
+  if (!qids.length) return { tracks: new Map(), onMusicBrainz: new Set() };
   const [counts, mb] = await Promise.all([
     db
       .select({ qid: musicLinks.qid, n: count() })
