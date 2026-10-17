@@ -1,7 +1,13 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
 import { DISCOGS_FIELD, normalizeAlbumId } from "../lib/music.ts";
-import { groupId, type TrackReview } from "../lib/matches.ts";
+import {
+  groupId,
+  removedDisc,
+  renumberedRows,
+  type RowMove,
+  type TrackReview,
+} from "../lib/matches.ts";
 import {
   albumArtists,
   isCustomPart,
@@ -65,11 +71,11 @@ export default function DiscsSection({
   update,
   plan,
   reviews,
-  onRenumber,
+  onRowsMoved,
 }: SectionProps & {
   reviews: TrackReview[];
-  /** The rows of disc `di` were renumbered, so whatever's kept by track number should follow. */
-  onRenumber: (di: number, moved: Renumbered) => void;
+  /** Rows were renumbered or a disc removed, so whatever's kept by disc and track number should follow. */
+  onRowsMoved: (move: RowMove) => void;
 }) {
   const lookup = useItemSummaries(
     state.discs.flatMap((d) => Object.values(d.single).map((sg) => sg.qid.trim())),
@@ -155,9 +161,10 @@ export default function DiscsSection({
           di={di}
           reviews={reviews.filter((r) => r.di === di)}
           lookup={lookup}
-          onRenumber={(moved) => onRenumber(di, moved)}
+          onRenumber={(moved) => onRowsMoved(renumberedRows(di, moved))}
           onRemove={() => {
             update((s) => void s.discs.splice(di, 1));
+            onRowsMoved(removedDisc(di));
             pick(Math.max(0, di - 1), true);
           }}
           {...{ state, update, plan }}

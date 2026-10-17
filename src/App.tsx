@@ -9,9 +9,9 @@ import AlbumSection from "./components/AlbumSection.tsx";
 import SettingsSection from "./components/SettingsSection.tsx";
 import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
-import MatchesSection from "./components/MatchesSection.tsx";
+import MatchesSection, { type MatchesHandle } from "./components/MatchesSection.tsx";
 import { useMatches } from "./components/use-matches.ts";
-import { renumberDismissed, reviewTracks } from "./lib/matches.ts";
+import { moveRowIds, reviewTracks } from "./lib/matches.ts";
 import { createCounts, railSteps, type RunningInfo, runChecks } from "./lib/progress.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
@@ -261,6 +261,7 @@ function Form() {
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
   const startRef = useRef<StartHandle>(null);
+  const matchesRef = useRef<MatchesHandle>(null);
   const { matches, status } = useMatches(state, plan);
   // Candidates dismissed in the Possible matches card, by candidateId.
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
@@ -340,12 +341,14 @@ function Form() {
                 <DiscsSection
                   {...props}
                   reviews={reviews}
-                  onRenumber={(di, moved) =>
-                    setDismissed((prev) => renumberDismissed(prev, di, moved))
-                  }
+                  onRowsMoved={(move) => {
+                    setDismissed((prev) => moveRowIds(prev, move));
+                    matchesRef.current?.moveRows(move);
+                  }}
                 />
                 <MatchesSection
                   key={formId}
+                  ref={matchesRef}
                   {...props}
                   {...{ matches, status, reviews, dismissed, setDismissed }}
                 />

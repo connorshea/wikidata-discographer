@@ -291,20 +291,40 @@ export function withoutDismissed(
   return out;
 }
 
+/** Where a row went, as its disc index and track number, or null if it's gone. */
+export type RowMove = (di: number, n: number) => readonly [number, number] | null;
+
+/** The rows of disc `di` were renumbered, `moved` mapping old track numbers to new. */
+export const renumberedRows =
+  (di: number, moved: ReadonlyMap<number, number>): RowMove =>
+  (d, n) => {
+    if (d !== di) return [d, n];
+    const to = moved.get(n);
+    return to === undefined ? null : [d, to];
+  };
+
+/** Disc `di` was removed, so the discs after it move down one. */
+export const removedDisc =
+  (di: number): RowMove =>
+  (d, n) =>
+    d < di ? [d, n] : d === di ? null : [d - 1, n];
+
 /**
- * Dismissed candidates with their rows' new track numbers, after the rows of
- * disc `di` were renumbered. A dismissal for a row that's gone is dropped.
+ * An id that starts with its row's disc index and track number ("0:3:comp:Q1",
+ * "0:3"), following the row, or null if the row is gone.
  */
-export function renumberDismissed(
-  dismissed: ReadonlySet<string>,
-  di: number,
-  moved: ReadonlyMap<number, number>,
-): ReadonlySet<string> {
+export function moveRowId(id: string, move: RowMove): string | null {
+  const [d, n, ...rest] = id.split(":");
+  const to = move(Number(d), Number(n));
+  return to && [...to, ...rest].join(":");
+}
+
+/** Ids kept by row (see `moveRowId`), following their rows. Those of rows that are gone are dropped. */
+export function moveRowIds(ids: Iterable<string>, move: RowMove): Set<string> {
   const next = new Set<string>();
-  for (const id of dismissed) {
-    const [d, n, ...rest] = id.split(":");
-    if (Number(d) !== di) next.add(id);
-    else if (moved.has(Number(n))) next.add([d, moved.get(Number(n)), ...rest].join(":"));
+  for (const id of ids) {
+    const to = moveRowId(id, move);
+    if (to !== null) next.add(to);
   }
   return next;
 }

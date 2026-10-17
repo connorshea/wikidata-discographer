@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
 import {
   type Candidate,
@@ -6,11 +6,14 @@ import {
   fillUnambiguous,
   groupId,
   isSimilarOnly,
+  moveRowId,
+  moveRowIds,
   pickSingle,
   pickTrack,
   comesWithTrack,
   reviewedLine,
   reviewSummary,
+  type RowMove,
   type Slot,
   summaryLine,
   type TrackReview,
@@ -31,6 +34,11 @@ interface Before {
   single?: SingleState;
 }
 
+export interface MatchesHandle {
+  /** Rows moved (renumbered, or their disc removed), so what's kept by row follows them. */
+  moveRows: (move: RowMove) => void;
+}
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const keyOf = (r: TrackReview) => `${r.di}:${r.n}`;
 
@@ -47,12 +55,14 @@ export default function MatchesSection({
   reviews,
   dismissed,
   setDismissed,
+  ref,
 }: SectionProps & {
   matches: Matches;
   status: MatchStatus;
   reviews: TrackReview[];
   dismissed: ReadonlySet<string>;
   setDismissed: (fn: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void;
+  ref?: Ref<MatchesHandle>;
 }) {
   // What each use replaced, by candidate, so Undo puts it back.
   const before = useRef(new Map<string, Before>());
@@ -73,6 +83,18 @@ export default function MatchesSection({
   // Change opens one there again.
   const [held, setHeld] = useState<string | null>(null);
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  useImperativeHandle(ref, () => ({
+    moveRows: (move) => {
+      const moved = new Map<string, Before>();
+      for (const [id, was] of before.current) {
+        const to = moveRowId(id, move);
+        if (to !== null) moved.set(to, was);
+      }
+      before.current = moved;
+      setHeld((h) => h && moveRowId(h, move));
+      setOpened((prev) => moveRowIds(prev, move));
+    },
+  }));
   // The control that takes the place of the one just clicked, to keep focus on.
   // Failing that, the first control in the track it belongs to, since the
   // track may have moved between the open ones and Reviewed.

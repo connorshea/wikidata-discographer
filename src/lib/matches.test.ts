@@ -10,7 +10,9 @@ import {
   otherArtists,
   pickSingle,
   pickTrack,
-  renumberDismissed,
+  moveRowIds,
+  removedDisc,
+  renumberedRows,
   reviewedLine,
   reviewSummary,
   reviewTracks,
@@ -396,12 +398,17 @@ describe("reviewedLine and summaryLine", () => {
   });
 });
 
-describe("renumberDismissed", () => {
+describe("moveRowIds", () => {
   it("follows the renumbered rows of one disc and drops removed ones", () => {
     const dismissed = new Set(["0:1:comp:Q1", "0:2:track:Q2", "1:1:comp:Q3"]);
-    expect([...renumberDismissed(dismissed, 0, new Map([[1, 2]]))]).toEqual([
+    expect([...moveRowIds(dismissed, renumberedRows(0, new Map([[1, 2]])))]).toEqual([
       "0:2:comp:Q1",
       "1:1:comp:Q3",
     ]);
+  });
+
+  it("moves the discs after a removed one down and drops its own", () => {
+    const ids = ["0:1:comp:Q1", "1:4:comp:Q9", "2:3", "2:3:track:Q2"];
+    expect([...moveRowIds(ids, removedDisc(1))]).toEqual(["0:1:comp:Q1", "1:3", "1:3:track:Q2"]);
   });
 });
