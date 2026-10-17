@@ -117,6 +117,12 @@ export interface Track {
   title: string;
   /** The names it's credited to, as the Performers table maps them. None means the album's. */
   artists: string[];
+  /**
+   * Those of `artists` credited as featured ("feat."), as MusicBrainz or the
+   * row's artists field gave them. They're performers like the rest, and only
+   * shown apart in the track table.
+   */
+  feat?: string[];
   /** Null when MusicBrainz has no length for it. */
   seconds: number | null;
   /**

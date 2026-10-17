@@ -109,12 +109,16 @@ const seconds = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 ? (v 
 
 function coerceTrack(t: Obj): Track | null {
   if (!Number.isInteger(t.n) || (t.n as number) < 0) return null;
+  const artists = Array.isArray(t.artists)
+    ? t.artists.filter((a): a is string => typeof a === "string" && a.trim() !== "")
+    : [];
+  const featured: unknown[] = Array.isArray(t.feat) ? t.feat : [];
+  const feat = artists.filter((a) => featured.includes(a));
   return {
     n: t.n as number,
     title: str(t.title),
-    artists: Array.isArray(t.artists)
-      ? t.artists.filter((a): a is string => typeof a === "string" && a.trim() !== "")
-      : [],
+    artists,
+    ...(feat.length ? { feat } : {}),
     seconds: seconds(t.seconds),
     ...(typeof t.length === "string" ? { length: t.length } : {}),
     mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
@@ -157,6 +161,32 @@ export function splitArtists(s: string, whole: Iterable<string> = []): string[] 
   return names.filter(Boolean);
 }
 
+const FEAT = /\s+(?:feat\.?|ft\.?|featuring)\s+/i;
+
+/**
+ * A row's artists as typed, "A, B feat. C": the names, split as `splitArtists`
+ * splits them, and those after "feat.", which are featured.
+ */
+export function parseArtists(
+  s: string,
+  whole: Iterable<string> = [],
+): Pick<Track, "artists" | "feat"> {
+  const keep = [...whole];
+  const m = FEAT.exec(s);
+  if (!m) return { artists: splitArtists(s, keep) };
+  const main = splitArtists(s.slice(0, m.index), keep);
+  const feat = splitArtists(s.slice(m.index + m[0].length), keep).filter((n) => !main.includes(n));
+  const artists = [...new Set([...main, ...feat])];
+  return feat.length ? { artists, feat } : { artists };
+}
+
+/** A row's artists as `parseArtists` reads them back. */
+export function artistsText(t: Pick<Track, "artists" | "feat">): string {
+  const feat = t.feat ?? [];
+  const main = t.artists.filter((a) => !feat.includes(a)).join(", ");
+  return feat.length ? `${main} feat. ${feat.join(", ")}`.trim() : main;
+}
+
 const LEGACY_LINE =
   /^\s*(\d+)\s*[.)]?\s+(.+)\s+[-–—]\s+(.+?)\s*(?:\(\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*\))?\s*$/;
 
@@ -176,7 +206,7 @@ function legacyTracks(text: string, split: boolean, mb: Obj): Track[] {
       {
         n: +m[1],
         title,
-        artists: split ? splitArtists(m[3]) : [m[3].trim()],
+        ...(split ? parseArtists(m[3]) : { artists: [m[3].trim()] }),
         seconds: m[5] ? (m[4] ? +m[4] : 0) * 3600 + +m[5] * 60 + +m[6] : null,
         mb: isObj(ids) && sameTitle(str(ids.title), title) ? coerceMbIds(ids) : null,
       },

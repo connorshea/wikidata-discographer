@@ -640,6 +640,19 @@ describe("releaseToForm", () => {
     ]);
   });
 
+  it("keeps who a track credits as featured", () => {
+    const r = release();
+    r.media[0].tracks![0]["artist-credit"] = credit(
+      ["Carly Rae Jepsen", " feat. "],
+      ["A", " & "],
+      ["B", ""],
+    );
+    r.media[0].tracks![1]["artist-credit"] = credit(["Carly Rae Jepsen", " & "], ["A", ""]);
+    const [first, second] = releaseToForm(r, NONE).discs[0].tracks;
+    expect(first).toMatchObject({ artists: ["Carly Rae Jepsen", "A", "B"], feat: ["A", "B"] });
+    expect(second).not.toHaveProperty("feat");
+  });
+
   it("keeps each credited name whole", () => {
     const r = release();
     r["artist-credit"] = credit(["Simon & Garfunkel", " feat. "], ["Carly Rae Jepsen", ""]);
