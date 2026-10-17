@@ -94,24 +94,32 @@ export default function RunSection({
   const [ownRun, setOwnRun] = useState(loadOwnRun);
   const ownRunRef = useRef(ownRun);
   const formIdRef = useRef(formId);
-  useEffect(() => {
-    formIdRef.current = formId;
-  }, [formId]);
   const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
+  const [run, setRun] = useState<SubmissionInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // The last run ended "unknown": what the server wants done before another.
+  const [unknownRun, setUnknownRun] = useState<UnknownRun | null>(null);
+  // The run would create items the last run already made, e.g. it was run
+  // from another browser: what the server wants done before it goes on.
+  const [recreate, setRecreate] = useState<Recreate | null>(null);
+  // A cleared or replaced form starts with no run on show. A run still going
+  // is followed in the background, like any own run.
+  useEffect(() => {
+    if (formIdRef.current === formId) return;
+    formIdRef.current = formId;
+    setRunId(null);
+    setRun(null);
+    setError(null);
+    setUnknownRun(null);
+    setRecreate(null);
+  }, [formId]);
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!new URLSearchParams(search).has("run")) return;
     navigate("/", { replace: true });
     sectionRef.current?.scrollIntoView();
   }, [search, navigate]);
-  const [run, setRun] = useState<SubmissionInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  // The last run ended "unknown": what the server wants done before another.
-  const [unknownRun, setUnknownRun] = useState<UnknownRun | null>(null);
-  // The run would create items the last run already made, e.g. it was run
-  // from another browser: what the server wants done before it goes on.
-  const [recreate, setRecreate] = useState<Recreate | null>(null);
   // What the user has confirmed so far for this start, so confirming one
   // conflict doesn't take back another.
   const confirmed = useRef<Omit<SubmissionRequest, "state">>({});
