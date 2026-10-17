@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Match, RowMatches, TrackMatch } from "./api-types.ts";
 import {
   candidateId,
+  comesWithTrack,
   dismissAllIds,
   fillUnambiguous,
   isStrong,
@@ -10,9 +11,11 @@ import {
   pickSingle,
   pickTrack,
   renumberDismissed,
+  reviewedLine,
   reviewSummary,
   reviewTracks,
   stillValid,
+  summaryLine,
   withoutDismissed,
 } from "./matches.ts";
 import type { Track } from "./plan.ts";
@@ -333,6 +336,63 @@ describe("reviewTracks", () => {
       dismissed: 3,
     });
     expect(reviewSummary([])).toEqual({ tracks: 0, reviewed: 0, reused: 0, dismissed: 0 });
+  });
+});
+
+describe("reviewedLine and summaryLine", () => {
+  const row: Track = { n: 1, title: "T1", artists: ["A"], seconds: 0, mb: null };
+  const rows = {
+    "0:1": rm({
+      track: [track("Q50", "Q60", ["Q70"])],
+      comp: [match("Q60")],
+      single: [match("Q70")],
+    }),
+  };
+  const review = (disc = emptyDisc(), dismissed = new Set<string>()) =>
+    reviewTracks([disc], [[row]], rows, dismissed)[0];
+
+  it("names the one item used, with its QID", () => {
+    const disc = emptyDisc();
+    disc.single[1] = { date: "", qid: "Q70", discogs: "" };
+    const dismissed = new Set([
+      candidateId(0, 1, "track", "Q50"),
+      candidateId(0, 1, "comp", "Q60"),
+    ]);
+    expect(reviewedLine(review(disc, dismissed))).toBe("Using the single, Q70, 2 dismissed");
+  });
+
+  it("names every kind used, the track first", () => {
+    const disc = emptyDisc();
+    pickTrack(disc, 1, rows["0:1"].track[0]);
+    disc.single[1] = { date: "", qid: "Q70", discogs: "" };
+    const r = review(disc);
+    expect(reviewedLine(r)).toBe("Using the track, composition and single");
+    expect(r.candidates.map((c) => comesWithTrack(r, c))).toEqual([true, false, true]);
+  });
+
+  it("says a track whose candidates were all dismissed is created new", () => {
+    const all = new Set(dismissAllIds(review()));
+    expect(reviewedLine(review(emptyDisc(), all))).toBe("3 dismissed, creating new");
+  });
+
+  it("says when other QIDs are filled in instead", () => {
+    const disc = emptyDisc();
+    disc.track[1] = "Q1";
+    disc.comp[1] = "Q2";
+    const dismissed = new Set([candidateId(0, 1, "single", "Q70")]);
+    expect(reviewedLine(review(disc, dismissed))).toBe("1 dismissed, other QIDs filled in");
+    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
+    expect(reviewedLine(review(disc))).toBe("Other QIDs are filled in");
+  });
+
+  it("folds the whole review into a line", () => {
+    expect(summaryLine({ tracks: 5, reviewed: 5, reused: 4, dismissed: 3 })).toBe(
+      "Using 4 items, 3 dismissed",
+    );
+    expect(summaryLine({ tracks: 1, reviewed: 1, reused: 1, dismissed: 0 })).toBe("Using 1 item");
+    expect(summaryLine({ tracks: 1, reviewed: 1, reused: 0, dismissed: 0 })).toBe(
+      "Other QIDs are filled in",
+    );
   });
 });
 

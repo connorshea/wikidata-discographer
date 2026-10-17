@@ -334,3 +334,60 @@ export function reviewSummary(reviews: readonly TrackReview[]): ReviewSummary {
     dismissed: reviews.reduce((sum, r) => sum + r.dismissed, 0),
   };
 }
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const andList = (xs: string[]) =>
+  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+
+// The order a reviewed track names what it uses: the track brings the rest along.
+const SLOT_NAMES: [Slot, string][] = [
+  ["track", "track"],
+  ["comp", "composition"],
+  ["single", "single"],
+];
+
+/**
+ * Whether a used candidate was filled in by using the track that records it,
+ * so it's undone with the track rather than on its own.
+ */
+export function comesWithTrack(r: TrackReview, c: Candidate): boolean {
+  if (!c.used || c.slot === "track") return false;
+  return r.candidates.some((t) => {
+    if (t.slot !== "track" || !t.used) return false;
+    const m = t.match as TrackMatch;
+    return c.slot === "comp" ? m.composition === c.match.qid : m.singles.includes(c.match.qid);
+  });
+}
+
+/**
+ * A reviewed track's outcome in a line, e.g. "Using the single, Q3962408" or
+ * "1 dismissed, creating new".
+ */
+export function reviewedLine(r: TrackReview): string {
+  const used = SLOT_NAMES.flatMap(([slot, name]) =>
+    r.candidates.filter((c) => c.slot === slot && c.used).map((c) => ({ name, qid: c.match.qid })),
+  );
+  const dismissed = r.dismissed > 0 ? `${r.dismissed} dismissed` : "";
+  if (used.length) {
+    const what =
+      used.length === 1
+        ? `Using the ${used[0].name}, ${used[0].qid}`
+        : `Using the ${andList(used.map((u) => u.name))}`;
+    return [what, dismissed].filter(Boolean).join(", ");
+  }
+  // Nothing used, so whatever's left has another QID in its field.
+  if (!dismissed) return "Other QIDs are filled in";
+  return `${dismissed}, ${r.candidates.length ? "other QIDs filled in" : "creating new"}`;
+}
+
+/** The review folded into a line, once every track is reviewed, e.g. "Using 4 items, 3 dismissed". */
+export function summaryLine(sum: ReviewSummary): string {
+  return (
+    [
+      sum.reused > 0 && `Using ${plural(sum.reused, "item")}`,
+      sum.dismissed > 0 && `${sum.dismissed} dismissed`,
+    ]
+      .filter(Boolean)
+      .join(", ") || "Other QIDs are filled in"
+  );
+}

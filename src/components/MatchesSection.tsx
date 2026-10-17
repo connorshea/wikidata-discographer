@@ -8,8 +8,10 @@ import {
   isSimilarOnly,
   pickSingle,
   pickTrack,
+  reviewedLine,
   reviewSummary,
   type Slot,
+  summaryLine,
   type TrackReview,
   withoutDismissed,
 } from "../lib/matches.ts";
@@ -33,6 +35,7 @@ interface Before {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const keyOf = (r: TrackReview) => `${r.di}:${r.n}`;
 
 /**
  * Items already on Wikidata with a track's title, grouped by disc and track,
@@ -69,36 +72,60 @@ export default function MatchesSection({
   // Once every track is reviewed the card folds into a summary, unless it was
   // opened, or the last one was reviewed here (so Undo stays at hand).
   const [kept, setKept] = useState(false);
+  // The track last acted on keeps its place once it's reviewed, so Undo stays
+  // at hand. Other reviewed tracks fold into a line under Reviewed, and Change
+  // opens one there again.
+  const [held, setHeld] = useState<string | null>(null);
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   // The control that takes the place of the one just clicked, to keep focus on.
-  const focusTo = useRef<string | null>(null);
+  // Failing that, the first control in the track it belongs to, since the
+  // track may have moved between the open ones and Reviewed.
+  const focusTo = useRef<{ to: string; track: TrackReview } | null>(null);
   useEffect(() => {
     if (!focusTo.current) return;
-    document.querySelector<HTMLElement>(`#matches [data-focus="${focusTo.current}"]`)?.focus();
+    const { to, track } = focusTo.current;
+    (
+      document.querySelector<HTMLElement>(`#matches [data-focus="${to}"]`) ??
+      document.querySelector<HTMLElement>(`#${groupId(track.di, track.n)} button`)
+    )?.focus();
     focusTo.current = null;
   });
-  const setDisc = (di: number, fn: (disc: Disc) => void) => {
+  const touch = (r: TrackReview) => {
     setKept(true);
-    update((s) => fn(s.discs[di]));
+    if (!opened.has(keyOf(r))) setHeld(keyOf(r));
+  };
+  const setDisc = (r: TrackReview, fn: (disc: Disc) => void) => {
+    touch(r);
+    update((s) => fn(s.discs[r.di]));
+  };
+  const toggle = (r: TrackReview, open: boolean) => {
+    focusTo.current = { to: `${open ? "hide" : "change"}:${keyOf(r)}`, track: r };
+    setOpened((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(keyOf(r));
+      else next.delete(keyOf(r));
+      return next;
+    });
   };
   const use = (r: TrackReview, c: Candidate) => {
-    focusTo.current = `undo:${c.id}`;
+    focusTo.current = { to: `undo:${c.id}`, track: r };
     const d = state.discs[r.di];
     before.current.set(c.id, {
       comp: d.comp[r.n],
       track: d.track[r.n],
       single: d.single[r.n] && { ...d.single[r.n] },
     });
-    setDisc(r.di, (disc) => {
+    setDisc(r, (disc) => {
       if (c.slot === "comp") disc.comp[r.n] = c.match.qid;
       else if (c.slot === "track") pickTrack(disc, r.n, c.match as TrackMatch);
       else pickSingle(disc, r.n, c.match.qid);
     });
   };
   const undo = (r: TrackReview, c: Candidate) => {
-    focusTo.current = `use:${c.id}`;
+    focusTo.current = { to: `use:${c.id}`, track: r };
     const was = before.current.get(c.id);
     before.current.delete(c.id);
-    setDisc(r.di, (disc) => {
+    setDisc(r, (disc) => {
       const put = (k: "comp" | "track", v: string | undefined) => {
         if (v === undefined) delete disc[k][r.n];
         else disc[k][r.n] = v;
@@ -119,21 +146,26 @@ export default function MatchesSection({
     });
   };
   const dismiss = (r: TrackReview, ids: string[]) => {
-    focusTo.current = `restore:${r.di}:${r.n}`;
-    setKept(true);
+    focusTo.current = { to: `restore:${r.di}:${r.n}`, track: r };
+    touch(r);
     setDismissed((prev) => new Set([...prev, ...ids]));
   };
   const restore = (r: TrackReview) => {
-    setKept(true);
+    touch(r);
     setDismissed((prev) => new Set([...prev].filter((id) => !id.startsWith(`${r.di}:${r.n}:`))));
   };
   const fill = () => {
     setKept(true);
     update((s) => s.discs.forEach((d, di) => fillUnambiguous(d, di, left)));
   };
+  const label = (r: TrackReview) =>
+    state.discs.length > 1 ? `Disc ${r.di + 1} · ${r.n}` : `${r.n}`;
   const sum = reviewSummary(reviews);
   const allReviewed = sum.tracks > 0 && sum.reviewed === sum.tracks;
   const folded = allReviewed && !kept;
+  const below = (r: TrackReview) => opened.has(keyOf(r)) || (r.reviewed && keyOf(r) !== held);
+  const queue = reviews.filter((r) => !below(r));
+  const done = reviews.filter(below);
 
   if (!reviews.length)
     return (
@@ -179,16 +211,7 @@ export default function MatchesSection({
             </span>
           )}
         </h2>
-        {folded && (
-          <span className="match-sum">
-            {[
-              sum.reused > 0 && `${sum.reused} reused`,
-              sum.dismissed > 0 && `${sum.dismissed} dismissed`,
-            ]
-              .filter(Boolean)
-              .join(", ") || "Other QIDs are filled in"}
-          </span>
-        )}
+        {folded && <span className="match-sum">{summaryLine(sum)}</span>}
         {status === "pending" && (
           <span className="match-checking" role="status">
             <span className="spinner" aria-hidden="true" />
@@ -226,65 +249,96 @@ export default function MatchesSection({
               <strong>{visible.length - strong}</strong> title only
             </span>
           </div>
-          <div className="match-groups">
-            {reviews.map((r) => {
-              const rest = dismissAllIds(r);
-              return (
-                <div
-                  className={`match-group${r.reviewed ? " reviewed" : ""}`}
-                  id={groupId(r.di, r.n)}
-                  key={`${r.di}:${r.n}`}
-                >
-                  <div className="match-head">
-                    <span className="muted">
-                      Disc {r.di + 1} · {r.n}
-                    </span>
-                    <strong>{r.title}</strong>
-                    {r.candidates.length > 1 && (
-                      <span className="muted">· {plural(r.candidates.length, "candidate")}</span>
-                    )}
-                    {r.reviewed && <span className="pill ok">Reviewed</span>}
-                    {r.dismissed > 0 && (
+          {queue.length > 0 && <div className="match-groups">{queue.map((r) => group(r))}</div>}
+          {done.length > 0 && (
+            <div className="match-done">
+              <h3 className="kicker">Reviewed · {done.length}</h3>
+              <ul className="match-done-list">
+                {done.map((r) =>
+                  opened.has(keyOf(r)) ? (
+                    <li key={keyOf(r)}>{group(r)}</li>
+                  ) : (
+                    <li className="match-line" id={groupId(r.di, r.n)} key={keyOf(r)}>
+                      <span className="muted">{label(r)}</span>
+                      <strong>{r.title}</strong>
+                      <span className="muted">{reviewedLine(r)}</span>
                       <button
                         type="button"
                         className="link"
-                        data-focus={`restore:${r.di}:${r.n}`}
-                        onClick={() => restore(r)}
+                        data-focus={`change:${keyOf(r)}`}
+                        aria-label={`Change ${r.title}`}
+                        onClick={() => toggle(r, true)}
                       >
-                        {r.dismissed} dismissed · Restore
+                        Change
                       </button>
-                    )}
-                    {!r.reviewed && rest.length > 1 && (
-                      <button
-                        type="button"
-                        className="ghost small"
-                        onClick={() => dismiss(r, rest)}
-                      >
-                        Dismiss all
-                      </button>
-                    )}
-                  </div>
-                  {r.candidates.length > 0 && (
-                    <ul className="candidates">
-                      {r.candidates.map((c) => (
-                        <CandidateItem
-                          key={c.id}
-                          c={c}
-                          onUse={() => use(r, c)}
-                          onUndo={() => undo(r, c)}
-                          onDismiss={() => dismiss(r, [c.id])}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    </li>
+                  ),
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </section>
   );
+
+  function group(r: TrackReview) {
+    const rest = dismissAllIds(r);
+    return (
+      <div
+        className={`match-group${r.reviewed ? " reviewed" : ""}`}
+        id={groupId(r.di, r.n)}
+        key={`${r.di}:${r.n}`}
+      >
+        <div className="match-head">
+          <span className="muted">{label(r)}</span>
+          <strong>{r.title}</strong>
+          {r.candidates.length > 1 && (
+            <span className="muted">· {plural(r.candidates.length, "candidate")}</span>
+          )}
+          {r.reviewed && <span className="pill ok">Reviewed</span>}
+          {r.dismissed > 0 && (
+            <button
+              type="button"
+              className="link"
+              data-focus={`restore:${r.di}:${r.n}`}
+              onClick={() => restore(r)}
+            >
+              {r.dismissed} dismissed · Restore
+            </button>
+          )}
+          {!r.reviewed && rest.length > 1 && (
+            <button type="button" className="ghost small" onClick={() => dismiss(r, rest)}>
+              Dismiss all
+            </button>
+          )}
+          {opened.has(keyOf(r)) && (
+            <button
+              type="button"
+              className="link"
+              data-focus={`hide:${keyOf(r)}`}
+              onClick={() => toggle(r, false)}
+            >
+              Hide
+            </button>
+          )}
+        </div>
+        {r.candidates.length > 0 && (
+          <ul className="candidates">
+            {r.candidates.map((c) => (
+              <CandidateItem
+                key={c.id}
+                c={c}
+                onUse={() => use(r, c)}
+                onUndo={() => undo(r, c)}
+                onDismiss={() => dismiss(r, [c.id])}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
 }
 
 function CandidateItem({
