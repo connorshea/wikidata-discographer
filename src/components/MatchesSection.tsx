@@ -417,7 +417,7 @@ function CandidateItem({
             </span>
           )}
         </span>
-        {m.label && m.description && m.label !== title && (
+        {m.label && m.description && m.label.toLocaleLowerCase() !== title.toLocaleLowerCase() && (
           <span className="match-note">Titled “{m.label}”</span>
         )}
         {composition && !c.used && (
