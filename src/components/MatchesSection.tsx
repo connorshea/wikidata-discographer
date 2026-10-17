@@ -75,13 +75,9 @@ export default function MatchesSection({
   const hasRows = plan.tracks.some((tracks) => tracks.length > 0);
 
   // Once every track is reviewed the card folds into a summary, unless it was
-  // opened, or the last one was reviewed here (so Undo stays at hand).
+  // opened, or the last one was reviewed here.
   const [kept, setKept] = useState(false);
-  // The track last acted on keeps its place once it's reviewed, so Undo stays
-  // at hand, unless every candidate in it was dismissed and there's nothing
-  // left to undo. Other reviewed tracks fold into a line under Reviewed, and
-  // Change opens one there again.
-  const [held, setHeld] = useState<string | null>(null);
+  // Reviewed tracks fold into a line under Reviewed, and Change opens one there again.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   useImperativeHandle(ref, () => ({
     moveRows: (move) => {
@@ -91,7 +87,6 @@ export default function MatchesSection({
         if (to !== null) moved.set(to, was);
       }
       before.current = moved;
-      setHeld((h) => h && moveRowId(h, move));
       setOpened((prev) => moveRowIds(prev, move));
     },
   }));
@@ -108,12 +103,8 @@ export default function MatchesSection({
     )?.focus();
     focusTo.current = null;
   });
-  const touch = (r: TrackReview) => {
-    setKept(true);
-    if (!opened.has(keyOf(r))) setHeld(keyOf(r));
-  };
   const setDisc = (r: TrackReview, fn: (disc: Disc) => void) => {
-    touch(r);
+    setKept(true);
     update((s) => fn(s.discs[r.di]));
   };
   const toggle = (r: TrackReview, open: boolean) => {
@@ -165,11 +156,11 @@ export default function MatchesSection({
   };
   const dismiss = (r: TrackReview, ids: string[]) => {
     focusTo.current = { to: `restore:${r.di}:${r.n}`, track: r };
-    touch(r);
+    setKept(true);
     setDismissed((prev) => new Set([...prev, ...ids]));
   };
   const restore = (r: TrackReview) => {
-    touch(r);
+    setKept(true);
     setDismissed((prev) => new Set([...prev].filter((id) => !id.startsWith(`${r.di}:${r.n}:`))));
   };
   const fill = () => {
@@ -181,8 +172,7 @@ export default function MatchesSection({
   const sum = reviewSummary(reviews);
   const allReviewed = sum.tracks > 0 && sum.reviewed === sum.tracks;
   const folded = allReviewed && !kept;
-  const below = (r: TrackReview) =>
-    opened.has(keyOf(r)) || (r.reviewed && (keyOf(r) !== held || !r.candidates.length));
+  const below = (r: TrackReview) => opened.has(keyOf(r)) || r.reviewed;
   const queue = reviews.filter((r) => !below(r));
   const done = reviews.filter(below);
 
