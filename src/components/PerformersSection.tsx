@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { normalizeQid, QID, splitArtists } from "../lib/plan.ts";
+import { albumArtists, normalizeQid, QID } from "../lib/plan.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
 import { Pids, QidInput, WikiLink } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
@@ -9,12 +9,8 @@ import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
   const names = new Set<string>();
-  for (const r of plan.parsed.flat())
-    if (r.error === undefined) r.artists.forEach((a) => names.add(a));
-  if (state.album.mode === "create")
-    splitArtists(state.album.artists, state.settings.splitArtists)
-      .filter(Boolean)
-      .forEach((a) => names.add(a));
+  for (const t of plan.tracks.flat()) t.artists.forEach((a) => names.add(a));
+  if (state.album.mode === "create") albumArtists(state).forEach((a) => names.add(a));
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);
   const lookup = useItemSummaries(

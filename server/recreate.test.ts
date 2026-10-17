@@ -82,7 +82,7 @@ describe("recreatedItems", () => {
 
   it("ignores a key that's another song now", () => {
     const s = copy(EXAMPLE);
-    s.discs[0].text = s.discs[0].text.replace("Habits of Creatures", "Something Else");
+    s.discs[0].tracks[1].title = "Something Else";
     const last = {
       input: EXAMPLE,
       albumQid: "Q140316456",

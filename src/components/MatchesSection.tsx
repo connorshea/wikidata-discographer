@@ -62,7 +62,7 @@ export default function MatchesSection({
     (sum, d, di) => sum + fillUnambiguous(structuredClone(d), di, left),
     0,
   );
-  const hasRows = plan.parsed.some((rows) => rows.some((r) => r.error === undefined));
+  const hasRows = plan.tracks.some((tracks) => tracks.length > 0);
 
   const setDisc = (di: number, fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
   const use = (r: TrackReview, c: Candidate) => {

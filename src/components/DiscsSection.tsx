@@ -3,21 +3,18 @@ import { useAuth } from "../lib/auth-context.ts";
 import { DISCOGS_FIELD, normalizeAlbumId } from "../lib/music.ts";
 import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
+  albumArtists,
   isCustomPart,
-  type MbRowIds,
-  mbIdsFor,
   normalizeDate,
   normalizeQid,
   PARTS,
   parseDate,
   QID,
   SINGLE_CLASS,
-  type ParsedRow,
   type Plan,
-  type Row,
   type Settings,
-  splitArtists,
   type State,
+  type Track,
 } from "../lib/plan.ts";
 import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
@@ -34,10 +31,9 @@ const fmt = (sec: number | null) =>
  * The album's artists, to dim on each row so features stand out: as entered
  * for a new album, or else those on every track.
  */
-function albumArtists(state: State, plan: Plan): Set<string> {
-  if (state.album.mode === "create")
-    return new Set(splitArtists(state.album.artists, state.settings.splitArtists).filter(Boolean));
-  const rows = plan.parsed.flat().filter((r) => r.error === undefined);
+function mainArtistsOf(state: State, plan: Plan): Set<string> {
+  if (state.album.mode === "create") return new Set(albumArtists(state));
+  const rows = plan.tracks.flat();
   if (rows.length < 2) return new Set();
   return new Set(rows[0].artists.filter((a) => rows.every((r) => r.artists.includes(a))));
 }
@@ -48,7 +44,7 @@ export default function DiscsSection({
   plan,
   reviews,
 }: SectionProps & { reviews: TrackReview[] }) {
-  const mainArtists = albumArtists(state, plan);
+  const mainArtists = mainArtistsOf(state, plan);
   const lookup = useItemSummaries(
     state.discs.flatMap((d) => Object.values(d.single).map((sg) => sg.qid.trim())),
     state.settings.lang,
@@ -60,13 +56,13 @@ export default function DiscsSection({
         One tracklist per disc or side, filled in by a MusicBrainz import. Fill in a composition or
         track QID to reuse an existing item instead of creating one. Items already on Wikidata with
         a track's title are listed under "Possible matches". A row marked "MB" has identifiers from
-        a MusicBrainz import, kept while its title stays the same.
+        a MusicBrainz import.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
           key={di}
           di={di}
-          rows={plan.parsed[di] ?? []}
+          rows={plan.tracks[di] ?? []}
           reviews={reviews.filter((r) => r.di === di)}
           mainArtists={mainArtists}
           lookup={lookup}
@@ -88,7 +84,7 @@ function DiscBlock({
   plan,
 }: SectionProps & {
   di: number;
-  rows: Row[];
+  rows: Track[];
   reviews: TrackReview[];
   mainArtists: Set<string>;
   lookup: Lookup;
@@ -172,80 +168,72 @@ function DiscBlock({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) =>
-                r.error !== undefined ? (
-                  <tr key={i}>
-                    <td className="err" colSpan={7}>
-                      {r.error}: <code>{r.raw}</code>
+              {rows.map((r, i) => (
+                <Fragment key={i}>
+                  <tr className={cls(d.single[r.n] && "has-sub", d.single[r.n] && "is-single")}>
+                    <td className="num">{r.n}</td>
+                    <td>
+                      <span className="title-cell">
+                        {r.title}
+                        {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
+                        <MbChip track={r} settings={state.settings} />
+                      </span>
+                    </td>
+                    <td>
+                      {r.artists.map((a, j) => (
+                        <Fragment key={j}>
+                          {j > 0 && ", "}
+                          <span className={mainArtists.has(a) ? "muted" : undefined}>{a}</span>
+                        </Fragment>
+                      ))}
+                    </td>
+                    <td className="num">{fmt(r.seconds)}</td>
+                    {(["comp", "track"] as const).map((k) => {
+                      const v = (d[k][r.n] ?? "").trim();
+                      return (
+                        <td key={k}>
+                          <QidInput
+                            className="quiet"
+                            placeholder="Q…"
+                            aria-label={`Track ${r.n} existing ${k === "comp" ? "composition" : "track"}`}
+                            aria-invalid={v !== "" && !QID.test(v)}
+                            value={d[k][r.n] ?? ""}
+                            onChange={(q) =>
+                              setDisc((disc) => {
+                                if (q.trim()) disc[k][r.n] = q.trim();
+                                else delete disc[k][r.n];
+                              })
+                            }
+                          />
+                        </td>
+                      );
+                    })}
+                    <td className="single-toggle">
+                      <input
+                        type="checkbox"
+                        aria-label={`Track ${r.n} is a single`}
+                        checked={!!d.single[r.n]}
+                        onChange={(e) =>
+                          update((s) => {
+                            const disc = s.discs[di];
+                            if (e.target.checked)
+                              disc.single[r.n] = { date: "", qid: "", discogs: "" };
+                            else delete disc.single[r.n];
+                          })
+                        }
+                      />
                     </td>
                   </tr>
-                ) : (
-                  <Fragment key={i}>
-                    <tr className={cls(d.single[r.n] && "has-sub", d.single[r.n] && "is-single")}>
-                      <td className="num">{r.n}</td>
-                      <td>
-                        <span className="title-cell">
-                          {r.title}
-                          {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
-                          <MbChip ids={mbIdsFor(d, r)} row={r} settings={state.settings} />
-                        </span>
-                      </td>
-                      <td>
-                        {r.artists.map((a, j) => (
-                          <Fragment key={j}>
-                            {j > 0 && ", "}
-                            <span className={mainArtists.has(a) ? "muted" : undefined}>{a}</span>
-                          </Fragment>
-                        ))}
-                      </td>
-                      <td className="num">{fmt(r.seconds)}</td>
-                      {(["comp", "track"] as const).map((k) => {
-                        const v = (d[k][r.n] ?? "").trim();
-                        return (
-                          <td key={k}>
-                            <QidInput
-                              className="quiet"
-                              placeholder="Q…"
-                              aria-label={`Track ${r.n} existing ${k === "comp" ? "composition" : "track"}`}
-                              aria-invalid={v !== "" && !QID.test(v)}
-                              value={d[k][r.n] ?? ""}
-                              onChange={(q) =>
-                                setDisc((disc) => {
-                                  if (q.trim()) disc[k][r.n] = q.trim();
-                                  else delete disc[k][r.n];
-                                })
-                              }
-                            />
-                          </td>
-                        );
-                      })}
-                      <td className="single-toggle">
-                        <input
-                          type="checkbox"
-                          aria-label={`Track ${r.n} is a single`}
-                          checked={!!d.single[r.n]}
-                          onChange={(e) =>
-                            update((s) => {
-                              const disc = s.discs[di];
-                              if (e.target.checked)
-                                disc.single[r.n] = { date: "", qid: "", discogs: "" };
-                              else delete disc.single[r.n];
-                            })
-                          }
-                        />
+                  {d.single[r.n] && (
+                    <tr className="sub-row is-single">
+                      <td />
+                      <td colSpan={6}>
+                        <SingleRow di={di} n={r.n} {...{ lookup, state, update, plan }} />
                       </td>
                     </tr>
-                    {d.single[r.n] && (
-                      <tr className="sub-row is-single">
-                        <td />
-                        <td colSpan={6}>
-                          <SingleRow di={di} n={r.n} {...{ lookup, state, update, plan }} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ),
-              )}
+                  )}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
@@ -402,15 +390,8 @@ function SingleRow({
 
 /** A warning icon on a track with possible matches to review, linked to them. */
 /** Marks a row with identifiers from a MusicBrainz import, listing them on hover. */
-function MbChip({
-  ids,
-  row,
-  settings: S,
-}: {
-  ids: MbRowIds | null;
-  row: ParsedRow;
-  settings: Settings;
-}) {
+function MbChip({ track, settings: S }: { track: Track; settings: Settings }) {
+  const ids = track.mb;
   if (!ids) return null;
   const lines = [
     ...(S.mbIds
@@ -435,9 +416,7 @@ function MbChip({
         ids.tidal.length >
         0 &&
       `A reference for the ISRCs, ISWCs and track IDs, stated in MusicBrainz`,
-    ids.source &&
-      ids.length === row.seconds &&
-      `A reference for the duration, stated in MusicBrainz`,
+    ids.source && track.seconds !== null && `A reference for the duration, stated in MusicBrainz`,
   ].filter(Boolean);
   if (!lines.length) return null;
   const text = `From MusicBrainz, added if this row creates the item:\n${lines.join("\n")}`;

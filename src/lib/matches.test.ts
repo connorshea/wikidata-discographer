@@ -12,7 +12,7 @@ import {
   stillValid,
   withoutDismissed,
 } from "./matches.ts";
-import type { Row } from "./plan.ts";
+import type { Track } from "./plan.ts";
 import { emptyDisc } from "./state.ts";
 
 const match = (qid: string): Match => ({
@@ -229,18 +229,18 @@ describe("otherArtists", () => {
 });
 
 describe("reviewTracks", () => {
-  const row = (n: number, title = `T${n}`): Row => ({
+  const row = (n: number, title = `T${n}`): Track => ({
     n,
     title,
     artists: ["A"],
     seconds: 0,
-    raw: "",
+    mb: null,
   });
   const rows = {
     "0:1": rm({ comp: [match("Q1"), match("Q2")], single: [match("Q3")] }),
     "0:2": rm({ comp: [{ ...match("Q4"), description: "song by B" }] }),
   };
-  const parsed = [[row(1), row(2), { error: "bad", raw: "x" }]];
+  const parsed = [[row(1), row(2)]];
 
   it("lists each track's candidates, open until one is used", () => {
     const disc = emptyDisc();

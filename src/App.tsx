@@ -251,7 +251,7 @@ function Form() {
   const { matches, status } = useMatches(state, plan);
   // Candidates dismissed in the Possible matches card, by candidateId.
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
-  const reviews = reviewTracks(state.discs, plan.parsed, matches, dismissed);
+  const reviews = reviewTracks(state.discs, plan.tracks, matches, dismissed);
   const props = { state, update, plan };
   return (
     <main>

@@ -14,12 +14,11 @@ import { FieldErr, InfoTip, Pids } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc" | "singleDesc";
-type FlagKey = "compPerformer" | "straight" | "splitArtists" | "extendExisting" | "mbIds";
+type FlagKey = "compPerformer" | "straight" | "extendExisting" | "mbIds";
 
 const FLAGS: [FlagKey, string][] = [
   ["compPerformer", "Add performer (P175) to compositions as well as tracks"],
   ["straight", "Convert curly apostrophes and quotes to straight ones"],
-  ["splitArtists", "Split artists on “,” “&” “feat.” “ft.”"],
   ["extendExisting", "Add missing links to existing items you reuse (P2550, P175)"],
   [
     "mbIds",

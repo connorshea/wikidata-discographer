@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
+  albumArtists,
   ALBUM_CLASSES,
   ALBUM_FORMS,
   ALBUM_TYPES,
@@ -9,7 +10,6 @@ import {
   QID,
   citesMb,
   loadedReleaseGroup,
-  splitArtists,
   STUDIO_ALBUM,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
@@ -149,9 +149,7 @@ export default function AlbumSection({
                 aria-invalid={!!errs.albumArtists}
                 onChange={(e) => update((s) => void (s.album.artists = e.target.value))}
               />
-              <span className="sub">
-                Names as you'd write them in the tracklist, mapped in Performers
-              </span>
+              <span className="sub">Separated by “,” “&” or “feat.”, and mapped in Performers</span>
               <FieldErr id="albumArtists" msg={errs.albumArtists} />
             </label>
             <label className="f">
@@ -277,7 +275,7 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
       title: A.title,
       kinds: ["album", "ep"],
       ids: Object.fromEntries(ALBUM_ID_FIELDS.map((f) => [f.property, A.ids[f.key]])),
-      performers: splitArtists(A.artists, state.settings.splitArtists)
+      performers: albumArtists(state)
         .map((a) => (state.artists[a] ?? "").trim())
         .filter((q) => QID.test(q)),
     } satisfies DuplicatesRequest),
