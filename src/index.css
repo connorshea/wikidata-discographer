@@ -37,6 +37,11 @@
   /* An album artist's chip, set apart from the input it sits in. */
   --chip: #dde1ec;
   --chip-edge: #bfc5d4;
+  /* A track row's link to an existing composition or track. */
+  --cmp-tint: #e8f4ec;
+  --cmp-ink: #17532d;
+  --trk-tint: #eceefb;
+  --trk-ink: #2a3593;
   /* System fonts only: the CSP allows no third-party requests. */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -74,6 +79,10 @@
     --err-ink: #ffb4ab;
     --chip: #2c3052;
     --chip-edge: #464b78;
+    --cmp-tint: #17301f;
+    --cmp-ink: #a8e2bd;
+    --trk-tint: #22264a;
+    --trk-ink: #c3caff;
   }
 }
 *,
@@ -734,31 +743,294 @@ button:disabled {
   align-items: center;
   margin-top: 8px;
 }
-/* Discs are neutral: the item colours (composition, track, single) mean nothing else. */
-.disc {
-  border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 14px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-left: 6px solid var(--disc-edge);
-}
-.disc .head {
+/* Tracks: a tab per disc, then the disc's part and its rows. */
+.disc-tabs {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
 }
-.disc .head h3 {
-  margin: 0;
-  font-size: 1.05rem;
+.disc-tabs [role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
-.disc input[type="text"],
-.disc select {
-  background-color: var(--panel);
+.disc-tabs [role="tab"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2.5px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.disc-tabs [role="tab"]:hover {
+  color: var(--ink);
+}
+.disc-tabs [role="tab"][aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: 650;
+}
+.disc-tabs [role="tab"] .muted {
+  font-weight: 500;
+}
+.tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn-edge);
+}
+.tab-dot.err {
+  background: var(--err);
+}
+.disc-tabs button.add-disc {
+  min-height: 44px;
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.disc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+}
+.disc-bar .f {
+  flex: 0 1 260px;
+}
+.disc-bar > .sub {
+  font-size: 13px;
+  color: var(--muted);
+  padding-bottom: 10px;
+}
+.disc-bar .remove-disc {
+  margin-left: auto;
+  align-self: center;
+}
+/* The rows: cells read as text until they're hovered or focused. */
+table.tracks td {
+  padding: 6px 4px;
+}
+table.tracks td.num {
+  padding-left: 8px;
+}
+table.tracks th {
+  padding: 5px 4px;
+  white-space: nowrap;
+}
+table.tracks td input.cell {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+table.tracks td input.cell.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+table.tracks td input.cell:hover {
+  border-color: var(--line);
+}
+table.tracks td input.cell:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  background: var(--panel);
+}
+table.tracks td input.cell::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+table.tracks td input.cell[aria-invalid="true"] {
+  border-color: var(--err);
+  background: var(--err-tint);
+}
+.cell-err {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 2px 0;
+  color: var(--err);
+  font-size: 12px;
+  font-weight: 400;
+}
+.cell-err svg {
+  flex: none;
+}
+table.tracks td.title-col {
+  min-width: 8rem;
+}
+td.title-col .title-cell {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+}
+table.tracks td.title-col input.cell {
+  flex: 1 1 10rem;
+  font-weight: 600;
+}
+td.title-col .cell-err {
+  flex-basis: 100%;
+}
+td.artists-col {
+  min-width: 6rem;
+}
+td.length-col .cell-err {
+  white-space: nowrap;
+}
+td.length-col {
+  width: 76px;
+  min-width: 68px;
+}
+.grip-col {
+  width: 28px;
+  padding-right: 0 !important;
+}
+button.grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  fill: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+button.grip:active {
+  cursor: grabbing;
+}
+button.rm {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 400;
+}
+button.rm:hover {
+  background: var(--err-tint);
+  color: var(--err);
+}
+tr.dragging td {
+  opacity: 0.5;
+}
+tr.drop-before td {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+tr.drop-after td {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+/* Links to existing items, as chips, or their QID fields. */
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.links button.link {
+  min-height: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 2px 1px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.link-chip i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.link-chip.comp {
+  background: var(--cmp-tint);
+  color: var(--cmp-ink);
+}
+.link-chip.comp i {
+  background: var(--cmp-edge);
+}
+.link-chip.track {
+  background: var(--trk-tint);
+  color: var(--trk-ink);
+}
+.link-chip.track i {
+  background: var(--trk-edge);
+}
+.link-chip a {
+  color: inherit;
+  font-family: var(--mono);
+}
+.link-chip button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  font-weight: 400;
+}
+.link-chip button:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.links-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 10px;
+}
+.links-edit .f {
+  font-size: 12px;
+}
+.links-edit input[type="text"] {
+  width: 14ch;
+  background: var(--panel);
+}
+.add-track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 14px;
+}
+.add-track button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.add-track .sub {
+  font-size: 13px;
+  color: var(--muted);
 }
 .tablewrap {
+  /* Holds the visually hidden headings in, so they can't widen the page. */
+  position: relative;
   overflow-x: auto;
   margin-top: 12px;
 }

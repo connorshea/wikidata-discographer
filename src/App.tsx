@@ -11,7 +11,7 @@ import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
 import MatchesSection from "./components/MatchesSection.tsx";
 import { useMatches } from "./components/use-matches.ts";
-import { reviewTracks } from "./lib/matches.ts";
+import { renumberDismissed, reviewTracks } from "./lib/matches.ts";
 import { createCounts, railSteps, type RunningInfo, runChecks } from "./lib/progress.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
@@ -346,7 +346,13 @@ function Form() {
                   {...props}
                   startCollapsed={!isEmpty({ ...state, start: null })}
                 />
-                <DiscsSection {...props} reviews={reviews} />
+                <DiscsSection
+                  {...props}
+                  reviews={reviews}
+                  onRenumber={(di, moved) =>
+                    setDismissed((prev) => renumberDismissed(prev, di, moved))
+                  }
+                />
                 <MatchesSection
                   {...props}
                   {...{ matches, status, reviews, dismissed, setDismissed }}
