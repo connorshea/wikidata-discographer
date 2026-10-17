@@ -14,6 +14,7 @@ import { WD_LANG_CODES } from "./languages.ts";
 import {
   ALBUM_ID_FIELDS,
   type AlbumIdKey,
+  CLASS_KINDS,
   DISCOGS_FIELD,
   type MusicKind,
   normalizeAlbumId,
@@ -237,6 +238,12 @@ export const ALBUM_FORMS = [
   ["Q963099", "remix album"],
   ["Q1138081", "covers album"],
 ] as const;
+
+/** The album and EP classes the app knows. Exact QIDs, no subclasses. */
+export const ALBUM_CLASSES: ReadonlySet<string> = new Set([
+  ...CLASS_KINDS.filter(([, kind]) => kind === "album" || kind === "ep").map(([q]) => q),
+  ...ALBUM_FORMS.map(([q]) => q),
+]);
 
 export const TRACK_TYPES = [
   ["Q55850593", "music track with vocals"],

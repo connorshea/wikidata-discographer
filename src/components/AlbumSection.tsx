@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
+  ALBUM_CLASSES,
   ALBUM_FORMS,
   ALBUM_TYPES,
   EP_CLASS,
@@ -16,7 +17,7 @@ import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { useItemSummaries } from "./use-item-summaries.ts";
+import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
@@ -38,6 +39,7 @@ export default function AlbumSection({
   const errs = plan.fieldErrs;
   const lookup = useItemSummaries([A.qid], state.settings.lang);
   const found = A.mode === "existing" ? lookup(A.qid) : undefined;
+  const notAlbum = albumProblem(A.qid, found);
   return (
     <section className="block">
       <h2>Album</h2>
@@ -80,19 +82,15 @@ export default function AlbumSection({
                 id="albumQid"
                 placeholder="Q…"
                 value={A.qid}
-                aria-invalid={!!errs.albumQid}
+                aria-invalid={!!errs.albumQid || !!notAlbum}
                 onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
               />
               <span className="sub">
-                {found?.status === "missing"
-                  ? `${A.qid} doesn't exist on Wikidata.`
-                  : found?.status === "redirect"
-                    ? `${A.qid} redirects to ${found.to}. Use ${found.to}.`
-                    : found?.status === "ok" && found.description
-                      ? found.description
-                      : "Q-number or Wikidata URL"}
+                {found?.status === "ok" && found.description
+                  ? found.description
+                  : "Q-number or Wikidata URL"}
               </span>
-              <FieldErr id="albumQid" msg={errs.albumQid} />
+              <FieldErr id="albumQid" msg={errs.albumQid ?? notAlbum ?? undefined} />
             </label>
           </div>
           {albumTracklist && (
@@ -250,6 +248,20 @@ export default function AlbumSection({
       )}
     </section>
   );
+}
+
+/**
+ * Why an existing album's QID can't be used, or null if it's fine or still
+ * being looked up. The run checks this again before it starts.
+ */
+function albumProblem(qid: string, found: ItemLookup | undefined): string | null {
+  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
+  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
+  if (found?.status !== "ok" || found.classes.some((c) => ALBUM_CLASSES.has(c))) return null;
+  const name = found.label ? `${qid} (${found.label})` : qid;
+  return found.classes.length === 0
+    ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
+    : `${name} isn't an album or EP. Check the QID.`;
 }
 
 /**

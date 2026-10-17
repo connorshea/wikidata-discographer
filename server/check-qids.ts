@@ -30,9 +30,9 @@ import {
   type Entity,
 } from "./wikidata-client.ts";
 import { findByTerms } from "./mirror.ts";
-import { CLASS_KINDS, kindOf, type MusicKind } from "../src/lib/music.ts";
+import { kindOf, type MusicKind } from "../src/lib/music.ts";
 import {
-  ALBUM_FORMS,
+  ALBUM_CLASSES,
   describeOp,
   KIND_NAMES,
   type Op,
@@ -161,12 +161,6 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
     ];
   return problems;
 }
-
-/** The album and EP classes the app knows. Exact QIDs, no subclasses. */
-const ALBUM_CLASSES: ReadonlySet<string> = new Set([
-  ...CLASS_KINDS.filter(([, kind]) => kind === "album" || kind === "ep").map(([q]) => q),
-  ...ALBUM_FORMS.map(([q]) => q),
-]);
 
 /**
  * Why the existing album isn't an album or EP, or null if it is. Only that
