@@ -99,7 +99,7 @@ export default function RunSection({
   update,
   plan,
   state,
-  checked,
+  checklistDone,
   unreviewed,
   formId,
   stale,
@@ -110,7 +110,7 @@ export default function RunSection({
   onRunning,
 }: SectionProps & {
   /** Everything in the run's checklist (`runChecks`) is done. */
-  checked: boolean;
+  checklistDone: boolean;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
   unreviewed: number;
   /** Identifies the form until it's cleared or replaced (see `useFormId`). */
@@ -318,7 +318,7 @@ export default function RunSection({
   const n = `${count} edit${count === 1 ? "" : "s"}`;
   const edits = useMemo(() => runEdits(plan, state), [plan, state]);
   // The run can't start until everything in the checklist is done.
-  const blocked = !checked || !user || !plan.ready || stale;
+  const blocked = !checklistDone || !user || !plan.ready || stale;
   const disabled = blocked || finished || running || starting;
   const label = starting
     ? "Checking the QIDs…"

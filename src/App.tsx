@@ -285,7 +285,7 @@ function Form() {
   const checks = runChecks({
     ...progress,
     loggedIn: !!user,
-    ineligible: user && !user.eligibility.ok ? (user.eligibility.reason ?? null) : null,
+    ineligible: user && !user.eligibility.ok ? user.eligibility.reason : null,
     matchesPending: status === "pending",
     albumPending: tracklistPending || albumFound?.status === "loading",
   });
@@ -366,7 +366,7 @@ function Form() {
             )}
             <RunSection
               {...props}
-              checked={checks.every((c) => c.ok)}
+              checklistDone={checks.every((c) => c.ok)}
               unreviewed={unreviewed}
               formId={formId}
               stale={stale}
