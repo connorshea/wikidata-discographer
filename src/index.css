@@ -1897,6 +1897,22 @@ label.perf-qid input {
   background: var(--soft-bg);
   border: 1px dashed var(--line);
 }
+.perf-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--tint);
+}
+.perf-foot p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: 14px;
+}
+.perf-none button.link {
+  font-size: inherit;
+}
 .perf-empty {
   margin: 14px 0 0;
 }
@@ -2255,6 +2271,52 @@ dialog.confirm::backdrop {
 .confirm-body .row {
   margin-top: 16px;
   justify-content: flex-end;
+}
+dialog.add-item {
+  width: min(460px, calc(100vw - 32px));
+  max-width: none;
+  border-radius: 12px;
+}
+.add-item .confirm-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.add-item-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.add-item-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 19px;
+}
+button.add-item-x {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  width: 40px;
+  height: 40px;
+  margin: -8px -8px 0 0;
+  padding: 0;
+  font-size: 22px;
+  border-radius: 8px;
+}
+button.add-item-x:hover {
+  background: var(--hover);
+}
+.add-item .confirm-body > p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.add-item .confirm-body > p.field-err {
+  color: var(--err);
+}
+.add-item .confirm-body .row {
+  margin-top: 4px;
 }
 
 /* Step 1: the starting-point picker, then the summary bar once one is applied. */
