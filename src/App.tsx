@@ -201,10 +201,17 @@ function Form() {
   // Clear also starts the import afresh, without the last load's summary.
   const [clears, setClears] = useState(0);
   // Clear and a MusicBrainz import start a new form.
-  const replace = (next: State) => {
-    setState(next);
-    renewFormId();
-  };
+  const replace = useCallback(
+    (next: State) => {
+      setState(next);
+      renewFormId();
+    },
+    [renewFormId],
+  );
+  const clear = useCallback(() => {
+    replace(structuredClone(EMPTY));
+    setClears((n) => n + 1);
+  }, [replace]);
   const plan = useMemo(() => buildPlan(state), [state]);
   const update = useCallback<Update>(
     (fn) =>
@@ -285,6 +292,7 @@ function Form() {
         matchesPending={status === "pending"}
         formId={formId}
         stale={stale}
+        onFinished={clear}
       />
       <div className="row" style={{ marginBottom: 24 }}>
         <ConfirmButton
@@ -299,10 +307,7 @@ function Form() {
                   action: "Clear the form",
                 }
           }
-          onConfirm={() => {
-            replace(structuredClone(EMPTY));
-            setClears((n) => n + 1);
-          }}
+          onConfirm={clear}
         />
       </div>
       <Footer />
