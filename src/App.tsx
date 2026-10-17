@@ -18,9 +18,8 @@ import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import ProgressRail from "./components/ProgressRail.tsx";
 import PlanPanel from "./components/PlanPanel.tsx";
-import MusicBrainzImport, {
-  type MusicBrainzImportHandle,
-} from "./components/MusicBrainzImport.tsx";
+import StartSection, { type StartHandle } from "./components/StartSection.tsx";
+import { useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
 
 /**
@@ -82,6 +81,39 @@ function useFormId(): [string, () => void] {
 
 /** Whether the form is as Clear leaves it, so replacing it loses nothing. */
 const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
+
+/** Where the later steps stand until a starting point is picked: locked, with nothing to fill in. */
+function LockedSteps() {
+  return (
+    <div className="locked" aria-disabled="true">
+      <p className="locked-note">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <rect x="2.5" y="6" width="9" height="6.5" rx="1.5" />
+          <path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" />
+        </svg>
+        Pick a starting point first
+      </p>
+      <section className="block locked-step" id="settings">
+        <h2>Item settings</h2>
+        <button type="button" className="ghost" disabled>
+          Show all settings
+        </button>
+      </section>
+      <section className="block locked-step" id="tracks">
+        <h2>
+          <span className="sw" aria-hidden="true" />
+          Tracks
+        </h2>
+        <button type="button" className="link" disabled>
+          Add a tracklist →
+        </button>
+      </section>
+      <section className="block locked-step" id="performers">
+        <h2>Performers</h2>
+      </section>
+    </div>
+  );
+}
 
 /** A header link, marked as the current page while it's open. */
 function NavLink({ href, children }: { href: string; children: string }) {
@@ -228,8 +260,11 @@ function Form() {
     }
   }, [state, stale]);
 
-  const { tracklist: albumTracklist, releaseGroup } = useAlbumTracklist(state);
-  const mbImport = useRef<MusicBrainzImportHandle>(null);
+  const { tracklist: albumTracklist, releaseGroup, checked } = useAlbumTracklist(state);
+  const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
+  const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
+  const albumFound = lookupAlbum(existingQid);
+  const startRef = useRef<StartHandle>(null);
   const { matches, status } = useMatches(state, plan);
   // Candidates dismissed in the Possible matches card, by candidateId.
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
@@ -276,23 +311,45 @@ function Form() {
             onClear={clear}
           />
           <main className="steps">
-            <MusicBrainzImport
+            <StartSection
               key={clears}
-              ref={mbImport}
-              state={state}
+              ref={startRef}
+              {...props}
               needsConfirm={!empty}
+              albumLabel={albumFound?.status === "ok" ? albumFound.label : null}
               onLoad={replace}
             />
-            <AlbumSection
-              {...props}
-              albumTracklist={albumTracklist}
-              releaseGroup={releaseGroup}
-              onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
-            />
-            <SettingsSection key={formId} {...props} startCollapsed={!empty} />
-            <DiscsSection {...props} reviews={reviews} />
-            <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
-            <PerformersSection {...props} />
+            {state.start ? (
+              <>
+                <AlbumSection
+                  {...props}
+                  found={albumFound}
+                  albumTracklist={albumTracklist}
+                  checked={checked}
+                  releaseGroup={releaseGroup}
+                  onLoadReleaseGroup={(mbid, album) =>
+                    startRef.current?.loadReleaseGroup(mbid, album)
+                  }
+                  onPickAnother={() =>
+                    startRef.current?.change(state.start === "search" ? "search" : "existing")
+                  }
+                />
+                {/* Picking a starting point doesn't collapse it, only a filled-in form does. */}
+                <SettingsSection
+                  key={formId}
+                  {...props}
+                  startCollapsed={!isEmpty({ ...state, start: null })}
+                />
+                <DiscsSection {...props} reviews={reviews} />
+                <MatchesSection
+                  {...props}
+                  {...{ matches, status, reviews, dismissed, setDismissed }}
+                />
+                <PerformersSection {...props} />
+              </>
+            ) : (
+              <LockedSteps />
+            )}
             <RunSection
               {...props}
               albumTracklist={albumTracklist}

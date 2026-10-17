@@ -344,6 +344,12 @@ export const SECOND_UNIT = "Q11574";
 export const MUSICBRAINZ = "Q14005";
 export const EP_CLASS = "Q169930";
 
+/** Set a new album's type. An EP isn't a studio album, so switching to EP drops that form. */
+export function setAlbumType(s: State, type: string) {
+  s.album.type = type;
+  if (type === EP_CLASS && s.album.form === STUDIO_ALBUM) s.album.form = "";
+}
+
 /** The `{type}` in an album's description: the form's label, or "album" or "EP" when
  * there's no form. An EP says "EP" in place of "album", and a studio EP is just "EP". */
 export const descTypeLabel = (type: string, form: string): string => {

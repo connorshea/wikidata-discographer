@@ -6,99 +6,105 @@ import {
   ALBUM_CLASSES,
   ALBUM_FORMS,
   ALBUM_TYPES,
-  EP_CLASS,
   QID,
   citesMb,
   loadedReleaseGroup,
-  STUDIO_ALBUM,
+  setAlbumType,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
-import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
+import { ALBUM_ID_FIELDS, CLASS_KINDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
-import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
+import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
+import type { ItemLookup } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
+
+/** The album's kind, from its classes on Wikidata: "EP" or "Album". */
+const kindOf = (classes: string[]) =>
+  classes.some((c) => CLASS_KINDS.some(([q, k]) => q === c && k === "ep")) ? "EP" : "Album";
 
 export default function AlbumSection({
   state,
   update,
   plan,
+  found,
   albumTracklist,
+  checked,
   releaseGroup,
   onLoadReleaseGroup,
+  onPickAnother,
 }: SectionProps & {
+  /** The existing album, as Wikidata describes it. */
+  found: ItemLookup | undefined;
   albumTracklist: AlbumTracklist | null;
+  /** Whether Wikidata was asked if the existing album has a tracklist. */
+  checked: boolean;
   /** The existing album's MusicBrainz release group, to suggest loading it. */
   releaseGroup: string | null;
   onLoadReleaseGroup: (mbid: string, album: string) => void;
+  /** Back to the starting-point picker, to pick another album. */
+  onPickAnother: () => void;
 }) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
   const errs = plan.fieldErrs;
-  const lookup = useItemSummaries([A.qid], state.settings.lang);
-  const found = A.mode === "existing" ? lookup(A.qid) : undefined;
   const notAlbum = albumProblem(A.qid, found);
+  const qid = A.qid.trim();
+  const problem = errs.albumQid || notAlbum;
+  const ok = found?.status === "ok" ? found : null;
   return (
     <section className="block" id="album">
-      <h2>Album</h2>
-      <p className="hint">
-        <Pids>
-          All discs belong to this one album. Its tracklist (P658) is added after the tracks are
-          created, along with P2635 number of tracks if an existing album has none, and singles
-          point to it with P13602.
-        </Pids>
-      </p>
-      <div className="row" role="radiogroup" aria-label="Album">
-        {(["existing", "create"] as const).map((mode) => (
-          <label className="c" key={mode}>
-            <input
-              type="radio"
-              name="albumMode"
-              checked={A.mode === mode}
-              onChange={() => update((s) => void (s.album.mode = mode))}
-            />{" "}
-            {mode === "existing" ? "Use an existing album" : "Create a new album"}
-          </label>
-        ))}
+      <div className="album-head">
+        <h2>
+          <span className="sw" style={{ background: "var(--disc-edge)" }} aria-hidden="true" />
+          Album
+        </h2>
+        <span className="sub">
+          {A.mode === "create"
+            ? "New album"
+            : state.start === "mb"
+              ? "Found on Wikidata through the MusicBrainz release group"
+              : "Existing album"}
+        </span>
       </div>
       {A.mode === "existing" ? (
-        <div style={{ marginTop: 12 }}>
-          <div className="grid">
-            <label className="f">
-              <span>
-                Album QID
-                {found?.status === "ok" && (
-                  <>
-                    {" · "}
-                    <a href={`${wikiBaseUrl}/wiki/${A.qid}`} target="_blank" rel="noreferrer">
-                      View {found.label ? `“${found.label}”` : A.qid} on Wikidata
-                    </a>
-                  </>
-                )}
-              </span>
-              <QidInput
-                id="albumQid"
-                placeholder="Q…"
-                value={A.qid}
-                aria-invalid={!!errs.albumQid || !!notAlbum}
-                onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
-              />
-              <span className="sub">
-                {found?.status === "ok" && found.description
-                  ? found.description
-                  : "Q-number or Wikidata URL"}
-              </span>
-              <FieldErr id="albumQid" msg={errs.albumQid ?? notAlbum ?? undefined} />
-            </label>
+        <>
+          <div className={`album-card${problem || albumTracklist ? " bad" : ""}`}>
+            <div className="album-card-text">
+              <div className="album-card-title">
+                {qid && <span className="qid-chip mono">{qid}</span>}
+                <b>{ok?.label ?? (found?.status === "loading" ? "Loading…" : "")}</b>
+              </div>
+              {ok?.description && <div className="muted">{ok.description}</div>}
+              {ok && !notAlbum && (
+                <ul className="pills" aria-label="About this album">
+                  <li className="pill">{kindOf(ok.classes)}</li>
+                  {checked && !albumTracklist && <li className="pill ok">No tracklist yet</li>}
+                </ul>
+              )}
+            </div>
+            {QID.test(qid) && (
+              <a
+                className="album-card-link"
+                href={`${wikiBaseUrl}/wiki/${qid}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open on Wikidata ↗
+              </a>
+            )}
           </div>
-          {albumTracklist && (
-            <p className="msg err">
-              <WikiLink base={wikiBaseUrl} qid={albumTracklist.qid} /> already has a tracklist with{" "}
-              {albumTracklist.tracks.length} track
-              {albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs
-              twice, so the run is disabled. Use an album without a tracklist.
+          {(problem || albumTracklist) && (
+            <p className="album-err" id="albumQid-err">
+              <span>
+                {albumTracklist
+                  ? `This album already has a tracklist with ${albumTracklist.tracks.length} track${albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs twice, so it can't be used.`
+                  : problem}{" "}
+                <button type="button" className="link" onClick={onPickAnother}>
+                  Pick a different album
+                </button>
+              </span>
             </p>
           )}
           {/* Not once it's loaded, but still if it was only typed in for a new album. */}
@@ -124,9 +130,9 @@ export default function AlbumSection({
               </button>
             </div>
           )}
-        </div>
+        </>
       ) : (
-        <div style={{ marginTop: 12 }}>
+        <div>
           <div className="grid">
             <label className="f">
               Title
@@ -146,14 +152,7 @@ export default function AlbumSection({
               <Pids>Instance of (P31)</Pids>
               <select
                 value={A.type}
-                onChange={(e) =>
-                  update((s) => {
-                    s.album.type = e.target.value;
-                    // An EP isn't a studio album, so switching to EP drops that form.
-                    if (s.album.type === EP_CLASS && s.album.form === STUDIO_ALBUM)
-                      s.album.form = "";
-                  })
-                }
+                onChange={(e) => update((s) => setAlbumType(s, e.target.value))}
               >
                 {ALBUM_TYPES.map(([q, l]) => (
                   <option key={q} value={q}>{`${l} (${q})`}</option>
@@ -304,6 +303,8 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
                 update((s) => {
                   s.album.mode = "existing";
                   s.album.qid = m.qid;
+                  // It isn't a new album any more.
+                  if (s.start === "new") s.start = "existing";
                 })
               }
             >
@@ -324,7 +325,7 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
  * A new album's artists, an input each. Focus goes to a row just added, or to
  * the row before one just removed.
  */
-function AlbumArtists({
+export function AlbumArtists({
   state,
   update,
   error,

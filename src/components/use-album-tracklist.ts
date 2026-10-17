@@ -12,6 +12,8 @@ export interface AlbumTracklist {
 }
 
 export interface ExistingAlbum {
+  /** Whether Wikidata was asked about the album's QID as it is now. */
+  checked: boolean;
   /** Set if the album already has a tracklist. */
   tracklist: AlbumTracklist | null;
   /**
@@ -21,7 +23,7 @@ export interface ExistingAlbum {
   releaseGroup: string | null;
 }
 
-const UNKNOWN: ExistingAlbum = { tracklist: null, releaseGroup: null };
+const UNKNOWN: ExistingAlbum = { checked: false, tracklist: null, releaseGroup: null };
 
 /**
  * Whether the existing album already has a tracklist, and its release group,
@@ -45,9 +47,10 @@ export function useAlbumTracklist(state: State): ExistingAlbum {
   }, [qid]);
   if (!qid || qid !== typed || result?.qid !== qid) return UNKNOWN;
   if (result.tracks.length)
-    return { tracklist: { qid, tracks: result.tracks }, releaseGroup: null };
+    return { checked: true, tracklist: { qid, tracks: result.tracks }, releaseGroup: null };
   // More than one is usually a mistake on the item: suggest none of them.
   return {
+    checked: true,
     tracklist: null,
     releaseGroup: result.releaseGroups.length === 1 ? result.releaseGroups[0] : null,
   };

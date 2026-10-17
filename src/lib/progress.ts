@@ -9,6 +9,7 @@ import {
   type Plan,
   QID,
   type Settings,
+  type StartingPoint,
   type State,
 } from "./plan.ts";
 
@@ -31,8 +32,6 @@ export interface RunningInfo {
 export interface ProgressInput {
   state: State;
   plan: Plan;
-  /** The form is as Clear leaves it. */
-  empty: boolean;
   /** Tracks with possible matches not yet used or dismissed. */
   unreviewed: number;
   /** The existing album already has a tracklist, so it can't be used. */
@@ -68,6 +67,57 @@ function albumSummary(state: State): string | null {
   return title ? `New · ${title}` : "New album";
 }
 
+/** What each starting point is called once the form is started from it. */
+export const START_NAMES: Record<StartingPoint, string> = {
+  mb: "MusicBrainz release",
+  existing: "Album QID",
+  search: "Search by name",
+  new: "Entered by hand",
+};
+
+export interface StartSummary {
+  /** Where the form was started from, e.g. "Started from MusicBrainz". */
+  from: string;
+  title: string;
+  /** The rest, in order: artists, discs, tracks and whether the album is new. */
+  details: string[];
+}
+
+/**
+ * The summary bar's line once a starting point is applied. `albumLabel` is
+ * the existing album's label on Wikidata, while it's known.
+ */
+export function startSummary(
+  state: State,
+  plan: Plan,
+  albumLabel: string | null,
+): StartSummary | null {
+  const { start, album: A } = state;
+  if (!start) return null;
+  const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
+  const discCount = plan.tracks.filter((rows) => rows.length).length;
+  const artists = albumArtists(state);
+  const from = {
+    mb: "Started from MusicBrainz",
+    existing: "Started from an album QID",
+    search: "Found by searching",
+    new: "New album from scratch",
+  }[start];
+  const title =
+    A.mode === "existing" ? (albumLabel ?? A.qid.trim()) || "No album picked" : A.title.trim();
+  return {
+    from,
+    title: title || "Untitled album",
+    details: [
+      ...(artists.length ? [artists.join(", ")] : []),
+      ...(trackCount ? [plural(discCount, "disc"), plural(trackCount, "track")] : []),
+      ...(start === "mb" && A.mode === "create"
+        ? ["not on Wikidata yet, so a new album will be created"]
+        : []),
+    ],
+  };
+}
+
 /** The label language's name, or its code when it isn't a listed one. */
 const labelLangName = (S: Settings) =>
   LABEL_LANGS.find(([c]) => c === S.lang.trim())?.[1] ?? S.lang.trim();
@@ -91,25 +141,22 @@ export function settingsPills(S: Settings): string[] {
 
 /** The rail's steps, in page order. */
 export function railSteps(p: ProgressInput): Step[] {
-  const { state, plan, empty, unreviewed, hasTracklist, running } = p;
+  const { state, plan, unreviewed, hasTracklist, running } = p;
   const S = state.settings;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const discCount = plan.tracks.filter((rows) => rows.length).length;
   const perf = linkedPerformers(state, plan);
   const album = albumSummary(state);
   const langName = labelLangName(S);
+  // Until a starting point is picked, the later steps are locked.
+  const locked = !state.start;
   const status = (attention: boolean, done: boolean): StepStatus =>
-    attention ? "attention" : done ? "done" : "pending";
+    locked ? "pending" : attention ? "attention" : done ? "done" : "pending";
 
   const steps: Step[] = [
-    empty
-      ? { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" }
-      : {
-          id: "start",
-          name: "Source",
-          summary: state.album.mb ? "MusicBrainz release" : "Entered by hand",
-          status: "done",
-        },
+    state.start
+      ? { id: "start", name: "Source", summary: START_NAMES[state.start], status: "done" }
+      : { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" },
     {
       id: "album",
       name: "Album",
@@ -124,8 +171,7 @@ export function railSteps(p: ProgressInput): Step[] {
         : langName
           ? `${langName} labels`
           : "No label language",
-      // An empty form's settings are the defaults: nothing to fix until it has an album.
-      status: empty ? "pending" : status(blockedAt(plan, "settings"), true),
+      status: status(blockedAt(plan, "settings"), true),
     },
     {
       id: "tracks",
@@ -165,6 +211,7 @@ export function railSteps(p: ProgressInput): Step[] {
 
 /** The first thing holding up the run, in a few words. */
 function createBlockedBy(p: ProgressInput, perf: { linked: number; total: number }): string {
+  if (!p.state.start) return "pick a starting point";
   if (p.hasTracklist) return "album has a tracklist";
   if (blockedAt(p.plan, "album")) return "album details";
   if (perf.linked < perf.total) return plural(perf.total - perf.linked, "performer");
@@ -257,16 +304,20 @@ export function runChecks(
         ? { ok: false, text: p.ineligible, at: null }
         : { ok: true, text: "Logged in and eligible to edit", at: null }
       : { ok: false, text: "Log in with your Wikimedia account", at: null, login: true },
-    albumBlocked
-      ? { ok: false, text: "Choose or create the album", at: "album" }
-      : hasTracklist
-        ? { ok: false, text: "Album already has a tracklist", at: "album" }
-        : {
-            ok: true,
-            text:
-              state.album.mode === "create" ? "New album filled in" : "Album has no tracklist yet",
-            at: null,
-          },
+    !state.start
+      ? { ok: false, text: "Pick a starting point", at: "start" }
+      : albumBlocked
+        ? { ok: false, text: "Choose or create the album", at: "album" }
+        : hasTracklist
+          ? { ok: false, text: "Album already has a tracklist", at: "album" }
+          : {
+              ok: true,
+              text:
+                state.album.mode === "create"
+                  ? "New album filled in"
+                  : "Album has no tracklist yet",
+              at: null,
+            },
     trackCount
       ? blockedAt(plan, "tracks")
         ? { ok: false, text: "Fix the errors in Tracks", at: "tracks" }
@@ -299,7 +350,8 @@ export function runChecks(
           ? { ok: false, text: "Looking for possible matches…", at: "matches" }
           : { ok: true, text: "All possible matches reviewed", at: null },
     );
-  if (!p.empty && blockedAt(plan, "settings"))
+  // Item settings stay locked, so they can't be fixed, until a starting point is picked.
+  if (state.start && blockedAt(plan, "settings"))
     checks.push({ ok: false, text: "Fix the errors in Item settings", at: "settings" });
   if (blockedAt(plan, "create"))
     checks.push({ ok: false, text: "Fix the problems under Create on Wikidata", at: "create" });

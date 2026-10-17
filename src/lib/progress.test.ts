@@ -7,13 +7,13 @@ import {
   railSteps,
   runChecks,
   settingsPills,
+  startSummary,
 } from "./progress.ts";
 import { EMPTY } from "./state.ts";
 
 const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput => ({
   state,
   plan: buildPlan(state),
-  empty: false,
   unreviewed: 0,
   hasTracklist: false,
   running: null,
@@ -33,7 +33,7 @@ describe("buildPlan blockers", () => {
 
 describe("railSteps", () => {
   it("leaves every step to do on an empty form", () => {
-    const steps = railSteps(input(EMPTY, { empty: true }));
+    const steps = railSteps(input(EMPTY));
     expect(steps.map((s) => s.status)).toEqual(Array(6).fill("pending"));
     expect(steps[0]).toMatchObject({ name: "Start", summary: "Pick a starting point" });
     expect(steps[5].summary).toBe("Nothing to create yet");
@@ -60,9 +60,39 @@ describe("railSteps", () => {
     expect(byId.create.summary).toBe("Blocked: 1 performer");
   });
 
+  it("locks the later steps until a starting point is picked", () => {
+    const steps = railSteps(input({ ...EXAMPLE, start: null }, { unreviewed: 2 }));
+    expect(steps.map((s) => s.status)).toEqual(Array(6).fill("pending"));
+    expect(steps[0].summary).toBe("Pick a starting point");
+    expect(steps[5].summary).toBe("Blocked: pick a starting point");
+    expect(railSteps(input(EXAMPLE))[0]).toMatchObject({ name: "Source", summary: "Album QID" });
+  });
+
   it("shows a run's progress", () => {
     const steps = railSteps(input(EXAMPLE, { running: { done: 3, total: 49 } }));
     expect(steps[5].summary).toBe("Running · 3 of 49");
+  });
+});
+
+describe("startSummary", () => {
+  it("sums up an existing album by its label", () => {
+    expect(startSummary(EXAMPLE, buildPlan(EXAMPLE), "Day and Night")).toEqual({
+      from: "Started from an album QID",
+      title: "Day and Night",
+      details: ["Carly Rae Jepsen", "2 discs", "24 tracks"],
+    });
+    expect(startSummary(EXAMPLE, buildPlan(EXAMPLE), null)?.title).toBe(EXAMPLE.album.qid);
+  });
+
+  it("says when an import's album will be created", () => {
+    const state: State = { ...EXAMPLE, start: "mb", album: { ...EXAMPLE.album, mode: "create" } };
+    expect(startSummary(state, buildPlan(state), null)?.details).toContain(
+      "not on Wikidata yet, so a new album will be created",
+    );
+  });
+
+  it("has nothing to say before a starting point is picked", () => {
+    expect(startSummary(EMPTY, buildPlan(EMPTY), null)).toBeNull();
   });
 });
 
@@ -77,10 +107,15 @@ describe("createCounts", () => {
 
 describe("runChecks", () => {
   it("links each unmet check to its section", () => {
-    const list = checks(input(EMPTY, { empty: true }));
+    const list = checks(input({ ...EMPTY, start: "new" }));
     expect(list.filter((c) => !c.ok).map((c) => c.at)).toEqual(
       expect.arrayContaining(["album", "start", "performers"]),
     );
+  });
+
+  it("asks for a starting point first", () => {
+    const list = checks(input({ ...EXAMPLE, start: null }));
+    expect(list.find((c) => !c.ok)).toMatchObject({ text: "Pick a starting point", at: "start" });
   });
 
   it("passes a ready form", () => {

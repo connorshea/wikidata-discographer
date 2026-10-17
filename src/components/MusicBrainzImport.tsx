@@ -22,15 +22,22 @@ export interface MusicBrainzImportHandle {
   loadReleaseGroup: (mbid: string, album: string) => void;
 }
 
-/** Loads a MusicBrainz release into the form, replacing what's there. */
+/**
+ * Loads a MusicBrainz release into the form, replacing what's there. It stays
+ * mounted once the form is started, to show what the last load found and to
+ * load a release group the album section suggests, but only shows its URL
+ * field while `showForm`.
+ */
 export default function MusicBrainzImport({
   state,
   needsConfirm,
+  showForm,
   onLoad,
   ref,
 }: {
   state: State;
   needsConfirm: boolean;
+  showForm: boolean;
   onLoad: (next: State) => void;
   ref?: Ref<MusicBrainzImportHandle>;
 }) {
@@ -54,7 +61,7 @@ export default function MusicBrainzImport({
   // What the last load found, until the next one.
   const [loaded, setLoaded] = useState<MbForm | null>(null);
   const pickId = useId();
-  const sectionRef = useRef<HTMLElement>(null);
+  const inputId = useId();
   // Set when a release group is loaded from elsewhere in the form, to move
   // focus to its releases once they're listed.
   const focusPick = useRef(false);
@@ -120,7 +127,6 @@ export default function MusicBrainzImport({
       setGroup(null);
       focusPick.current = true;
       albumFor.current = { album, releaseGroup: mbid.toLowerCase() };
-      sectionRef.current?.scrollIntoView({ block: "start" });
       void loadGroup(mbid);
     },
   }));
@@ -132,78 +138,81 @@ export default function MusicBrainzImport({
   }, [group, pickId]);
 
   return (
-    <section className="block" id="start" ref={sectionRef}>
-      <h2>Start from MusicBrainz</h2>
-      <p className="hint">
-        Paste a MusicBrainz release or release group to fill in the album, discs and performers. A
-        release group asks which of its releases has the tracklist you want. Artists, compositions
-        and tracks already on Wikidata with the same MusicBrainz IDs are filled in too. Check
-        everything before you run it.
-      </p>
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        <input
-          type="text"
-          spellCheck={false}
-          className="mb-input"
-          placeholder="https://musicbrainz.org/release-group/…"
-          aria-label="MusicBrainz release or release group URL"
-          aria-invalid={!!error}
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            setGroup(null);
-          }}
-        />
-        <button
-          type="submit"
-          className={group ? "ghost" : undefined}
-          disabled={busy || !input.trim()}
-        >
-          {busy && !group ? "Loading…" : "Load"}
-        </button>
-      </form>
-      {group && (
-        <form
-          className="mb-pick"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void loadRelease(group.picked);
-          }}
-        >
-          <label className="f" htmlFor={pickId}>
-            Release
-          </label>
-          <div className="row">
-            <select
-              id={pickId}
-              className="mb-input"
-              value={group.picked}
-              onChange={(e) => setGroup({ ...group, picked: e.target.value })}
+    <>
+      {showForm && (
+        <div className="start-panel">
+          <label htmlFor={inputId}>MusicBrainz release or release group URL</label>
+          <form
+            className="row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            <input
+              id={inputId}
+              type="text"
+              spellCheck={false}
+              className="mb-input mono"
+              placeholder="https://musicbrainz.org/release-group/…"
+              aria-invalid={!!error}
+              aria-describedby={`${inputId}-sub`}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setGroup(null);
+              }}
+            />
+            <button
+              type="submit"
+              className={group ? "ghost" : undefined}
+              disabled={busy || !input.trim()}
             >
-              {group.releases.map((r, i) => (
-                <option key={r.id} value={r.id}>
-                  {i === 0 ? `${r.label} (suggested)` : r.label}
-                </option>
-              ))}
-            </select>
-            <button type="submit" disabled={busy}>
-              {busy ? "Loading…" : "Load this release"}
+              {busy && !group ? "Loading…" : "Load"}
             </button>
-          </div>
-          <span className="sub">
-            {group.total > group.releases.length
-              ? `${group.releases.length} of ${group.total} releases. If yours isn't listed, paste its release URL.`
-              : `${group.total} release${group.total === 1 ? "" : "s"}. The suggestion is the earliest official plain edition, digital or CD if there is one.`}
+          </form>
+          <span className="sub" id={`${inputId}-sub`}>
+            Fills in the album, tracklist, performers and identifiers in one go. A release group
+            asks which of its releases has the tracklist you want.
           </span>
-        </form>
+          {group && (
+            <form
+              className="mb-pick"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void loadRelease(group.picked);
+              }}
+            >
+              <label className="f" htmlFor={pickId}>
+                Release
+              </label>
+              <div className="row">
+                <select
+                  id={pickId}
+                  className="mb-input"
+                  value={group.picked}
+                  onChange={(e) => setGroup({ ...group, picked: e.target.value })}
+                >
+                  {group.releases.map((r, i) => (
+                    <option key={r.id} value={r.id}>
+                      {i === 0 ? `${r.label} (suggested)` : r.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={busy}>
+                  {busy ? "Loading…" : "Load this release"}
+                </button>
+              </div>
+              <span className="sub">
+                {group.total > group.releases.length
+                  ? `${group.releases.length} of ${group.total} releases. If yours isn't listed, paste its release URL.`
+                  : `${group.total} release${group.total === 1 ? "" : "s"}. The suggestion is the earliest official plain edition, digital or CD if there is one.`}
+              </span>
+            </form>
+          )}
+          {error && <p className="msg err">{error}</p>}
+        </div>
       )}
-      {error && <p className="msg err">{error}</p>}
       {loaded && (
         <>
           <p className="msg ok">
@@ -227,6 +236,6 @@ export default function MusicBrainzImport({
         onConfirm={() => pending && apply(pending)}
         onClose={() => setPending(null)}
       />
-    </section>
+    </>
   );
 }

@@ -269,12 +269,14 @@ export default function RunSection({
   return (
     <section className="block" id="create" ref={sectionRef}>
       <h2>Create on Wikidata</h2>
-      {plan.messages.map(([kind, text], i) => (
-        // The summary is neutral: green stands for compositions elsewhere.
-        <p key={i} className={`msg ${kind === "ok" ? "summary" : kind}`}>
-          {text}
-        </p>
-      ))}
+      {/* Nothing to fix while the steps are locked: the checklist asks for a starting point. */}
+      {state.start &&
+        plan.messages.map(([kind, text], i) => (
+          // The summary is neutral: green stands for compositions elsewhere.
+          <p key={i} className={`msg ${kind === "ok" ? "summary" : kind}`}>
+            {text}
+          </p>
+        ))}
       {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
       {plan.ops.length > 0 && <PlanPreview plan={plan} state={state} />}
       <p className="hint">
@@ -298,6 +300,7 @@ export default function RunSection({
                         : "Make edits"
                 }
                 disabled={
+                  !state.start ||
                   !user ||
                   !user.eligibility.ok ||
                   !plan.ready ||
