@@ -193,6 +193,7 @@ export function releaseIds(release: MbRelease) {
     spotifyTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "spotify")))],
     appleMusicTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "appleMusic")))],
     deezerTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "deezer")))],
+    tidalTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "tidal")))],
   };
 }
 
@@ -213,6 +214,11 @@ const TRACK_LINKS = {
     fromUrl: /^https:\/\/www\.deezer\.com\/(?:[a-z]{2}\/)?track\/(\d+)$/,
     song: "Deezer track",
     label: "Deezer track ID",
+  },
+  tidal: {
+    fromUrl: /^https:\/\/(?:listen\.)?tidal\.com\/(?:browse\/)?track\/(\d+)$/,
+    song: "Tidal track",
+    label: "Tidal track ID",
   },
 } as const;
 type TrackLinkKey = keyof typeof TRACK_LINKS;
@@ -312,6 +318,8 @@ const SEVERAL_ALBUM_LINKS = {
   spotify: "Spotify albums",
   appleMusic: "Apple Music albums",
   deezer: "Deezer albums",
+  tidal: "Tidal albums",
+  allmusic: "AllMusic albums",
   discogs: "Discogs masters",
 } as const;
 
@@ -409,7 +417,12 @@ export function releaseToForm(
   let missingLength = 0;
   let comps = 0;
   let tracks = 0;
-  const many: Record<TrackLinkKey, number> = { spotify: 0, appleMusic: 0, deezer: 0 };
+  const many: Record<TrackLinkKey, number> = {
+    spotify: 0,
+    appleMusic: 0,
+    deezer: 0,
+    tidal: 0,
+  };
   const taken = new Set(lookups.taken);
   const misplaced = new Map<string, string>();
   const toAdd = {
@@ -419,6 +432,7 @@ export function releaseToForm(
     spotify: 0,
     appleMusic: 0,
     deezer: 0,
+    tidal: 0,
     durationRefs: 0,
   };
   const discs = media.map((m, i): Disc => {
@@ -449,6 +463,7 @@ export function releaseToForm(
           spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
           appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
           deezer: trackLinkOf(t, "deezer").filter((v) => !taken.has(v)),
+          tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
           source: { recording: t.recording.id, retrieved },
           length: t.length === null ? null : seconds(t.length),
         };
@@ -459,6 +474,7 @@ export function releaseToForm(
           ids.spotify.length ||
           ids.appleMusic.length ||
           ids.deezer.length ||
+          ids.tidal.length ||
           ids.length !== null
         ) {
           disc.mb[t.position] = ids;
@@ -468,6 +484,7 @@ export function releaseToForm(
             toAdd.spotify += ids.spotify.length;
             toAdd.appleMusic += ids.appleMusic.length;
             toAdd.deezer += ids.deezer.length;
+            toAdd.tidal += ids.tidal.length;
             for (const key of Object.keys(many) as TrackLinkKey[])
               if (trackLinks(t, key).length > 1) many[key]++;
             toAdd.durationRefs += ids.length !== null ? 1 : 0;
@@ -526,15 +543,17 @@ export function releaseToForm(
     musicbrainz: rg.id,
     appleMusic: "",
     deezer: "",
+    tidal: "",
+    allmusic: "",
     discogs: "",
   };
   // Each identifier is cited to the release or release group that links it.
   const citedIds: AlbumMb["ids"] = {};
   for (const f of ALBUM_ID_FIELDS) {
     if (f.key === "musicbrainz") continue;
-    // A Discogs master is the album as a whole, so MusicBrainz links it from
-    // the release group. A /release/ link on the release is one edition and is skipped.
-    const from = f.key === "discogs" ? "releaseGroup" : "release";
+    // A Discogs master or AllMusic album is the album as a whole, so MusicBrainz links it
+    // from the release group. A Discogs /release/ link on the release is one edition and is skipped.
+    const from = f.key === "discogs" || f.key === "allmusic" ? "releaseGroup" : "release";
     const relations = from === "releaseGroup" ? rg.relations : release.relations;
     const linked = [
       ...new Set(
@@ -628,6 +647,7 @@ function refsSummary(n: {
   spotify: number;
   appleMusic: number;
   deezer: number;
+  tidal: number;
   durationRefs: number;
 }) {
   const what = [
@@ -635,7 +655,7 @@ function refsSummary(n: {
     n.albumIds && "album IDs",
     n.durationRefs && "durations",
     n.isrcs && "ISRCs",
-    n.spotify + n.appleMusic + n.deezer && "track IDs",
+    n.spotify + n.appleMusic + n.deezer + n.tidal && "track IDs",
   ].filter(Boolean) as string[];
   if (!what.length) return "";
   return ` The imported ${joinList(what)} get a MusicBrainz reference, if that's on in Item settings.`;
@@ -649,6 +669,7 @@ function idsSummary(n: {
   spotify: number;
   appleMusic: number;
   deezer: number;
+  tidal: number;
 }) {
   const parts = [
     n.recordings && plural(n.recordings, "recording ID"),
@@ -656,6 +677,7 @@ function idsSummary(n: {
     n.spotify && plural(n.spotify, TRACK_LINKS.spotify.label),
     n.appleMusic && plural(n.appleMusic, TRACK_LINKS.appleMusic.label),
     n.deezer && plural(n.deezer, TRACK_LINKS.deezer.label),
+    n.tidal && plural(n.tidal, TRACK_LINKS.tidal.label),
   ].filter(Boolean) as string[];
   const tracks = parts.length ? `New tracks get ${joinList(parts)}` : "";
   const works = n.works

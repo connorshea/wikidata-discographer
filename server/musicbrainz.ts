@@ -208,15 +208,17 @@ export async function lookupRelease(
   album?: { qid: string; releaseGroup: string },
 ): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works, spotify, appleMusic, deezer] = await Promise.all([
-    lookup("P436", [ids.releaseGroup], ["album", "ep"]),
-    lookup("P434", ids.artists, ["artist"]),
-    lookup("P4404", ids.recordings, ["track"]),
-    lookup("P435", ids.works, ["work"]),
-    lookup("P2207", ids.spotifyTracks, ["track"]),
-    lookup("P10110", ids.appleMusicTracks, ["track"]),
-    lookup("P2724", ids.deezerTracks, ["track"]),
-  ]);
+  const [albums, artists, recordings, works, spotify, appleMusic, deezer, tidal] =
+    await Promise.all([
+      lookup("P436", [ids.releaseGroup], ["album", "ep"]),
+      lookup("P434", ids.artists, ["artist"]),
+      lookup("P4404", ids.recordings, ["track"]),
+      lookup("P435", ids.works, ["work"]),
+      lookup("P2207", ids.spotifyTracks, ["track"]),
+      lookup("P10110", ids.appleMusicTracks, ["track"]),
+      lookup("P2724", ids.deezerTracks, ["track"]),
+      lookup("P4578", ids.tidalTracks, ["track"]),
+    ]);
   // MusicBrainz's own Wikidata link names a wikidata.org item, which is
   // only right when that's where the edits go.
   const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
@@ -237,6 +239,7 @@ export async function lookupRelease(
       ...spotify.taken,
       ...appleMusic.taken,
       ...deezer.taken,
+      ...tidal.taken,
     ],
     misplacedWorks: works.elsewhere,
   };
