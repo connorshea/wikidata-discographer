@@ -16,8 +16,6 @@
   /* A done single's pill. */
   --rg-tint: #fbf1d3;
   --rg-ink: #5e4708;
-  --code-bg: #11132a;
-  --code-ink: #e6e8f7;
   /* Neutral fills: pills, the current page in the nav, a pending step. */
   --tint: #eef0f5;
   --hover: #e9ebf2;
@@ -74,7 +72,6 @@
     --rg-edge: #d9b23e;
     --rg-tint: #3a3115;
     --rg-ink: #f0d58a;
-    --code-bg: #0a0b17;
     --tint: #23263f;
     --hover: #272a47;
     --warn-tint: #3a2f12;
@@ -172,20 +169,6 @@ h2 {
   font-size: 1.15rem;
   margin: 0 0 4px;
   font-weight: 600;
-}
-h3.sub {
-  font-size: 0.95rem;
-  margin: 16px 0 8px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-h3.sub i {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
 }
 /* The form's three columns: the progress rail, the steps and the plan panel. They wrap
    into one column, rail first, on a narrow window. */
@@ -1168,23 +1151,11 @@ td.num {
   font-variant-numeric: tabular-nums;
   width: 3ch;
 }
-td.err {
-  color: var(--err);
-}
 td input[type="text"] {
   padding: 4px 6px;
   font-family: var(--mono);
   font-size: 0.8rem;
   min-width: 11ch;
-}
-/* Empty QID cells stay faint until hovered or focused. */
-td input.quiet:placeholder-shown:not(:hover, :focus) {
-  border-color: transparent;
-  background: transparent;
-}
-td input.quiet::placeholder {
-  color: var(--muted);
-  opacity: 0.6;
 }
 td.single-toggle {
   text-align: center;
@@ -1253,25 +1224,6 @@ a.match-flag:hover {
   min-height: 32px;
   display: flex;
   align-items: center;
-}
-.chip {
-  display: inline-block;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  padding: 0 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 14%, transparent);
-}
-.chip.warn {
-  color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 16%, transparent);
-}
-.chip.ok {
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  font-weight: 600;
 }
 button.link {
   border: 0;
@@ -1586,17 +1538,6 @@ button.ghost.quiet {
 }
 .field-err:empty {
   display: none;
-}
-pre.out {
-  background: var(--code-bg);
-  color: var(--code-ink);
-  font: 0.8rem/1.55 var(--mono);
-  padding: 14px;
-  border-radius: 8px;
-  overflow: auto;
-  max-height: 380px;
-  margin: 10px 0 0;
-  white-space: pre;
 }
 details summary {
   cursor: pointer;
@@ -2059,6 +2000,9 @@ section.block.create {
   flex-direction: column;
   gap: 16px;
 }
+section.block.create.locked-step {
+  flex-direction: row;
+}
 section.block.create > :not(dialog) {
   margin: 0;
 }
@@ -2214,7 +2158,7 @@ button.go circle + circle {
   border-bottom: 0;
 }
 .run-log-text {
-  flex: 1 1 200px;
+  flex: 1 1 140px;
   min-width: 0;
 }
 .run-log li.fail .run-log-text {

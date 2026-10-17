@@ -359,7 +359,12 @@ export default function RunSection({
   );
   return (
     <>
-      <section className="block create" id="create" ref={sectionRef}>
+      {/* Locked like the steps before it until a starting point is picked, unless a run is on show. */}
+      <section
+        className={`block create${!state.start && !run && !held ? " locked-step" : ""}`}
+        id="create"
+        ref={sectionRef}
+      >
         {running ? (
           <div className="create-head">
             <h2>Creating on Wikidata</h2>
@@ -387,9 +392,7 @@ export default function RunSection({
         {!running && (
           <>
             {/* Nothing to fix while the steps are locked: the checklist asks for a starting point. */}
-            {!state.start ? (
-              !run && <p className="hint">Pick a starting point to see what this run will make.</p>
-            ) : count === 0 ? (
+            {!state.start ? null : count === 0 ? (
               errors.length ? (
                 errors.map(([, text], i) => (
                   <p key={i} className="msg err">

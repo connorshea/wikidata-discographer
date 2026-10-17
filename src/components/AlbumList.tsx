@@ -9,7 +9,7 @@ import { api } from "../lib/client.ts";
 const STATUS: Record<AlbumRun["status"], { label: string; tone: string }> = {
   running: { label: "Running", tone: "" },
   done: { label: "Done", tone: "ok" },
-  failed: { label: "Failed", tone: "warn" },
+  failed: { label: "Failed", tone: "bad" },
   interrupted: { label: "Interrupted", tone: "warn" },
   unknown: { label: "Outcome unknown", tone: "warn" },
 };
@@ -127,7 +127,7 @@ function AlbumRow({ album }: { album: AlbumListEntry }) {
         <span className="muted">{album.qid}</span>
       </td>
       <td>
-        <span className="chip">{album.created ? "Created" : "Added to"}</span>
+        <span className="pill">{album.created ? "Created" : "Added to"}</span>
       </td>
       <td>
         <RunSummary run={latest} />
@@ -162,7 +162,7 @@ function RunSummary({ run }: { run: AlbumRun }) {
   const status = STATUS[run.status] ?? { label: run.status, tone: "" };
   return (
     <span className="run-summary">
-      <span className={`chip ${status.tone}`}>{status.label}</span>{" "}
+      <span className={`pill ${status.tone}`}>{status.label}</span>{" "}
       <span title={`${run.createdAt} UTC`}>{run.createdAt.slice(0, 10)}</span>{" "}
       <span className="muted">by {run.username}</span>
     </span>
