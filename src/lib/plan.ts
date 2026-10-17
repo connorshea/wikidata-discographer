@@ -1138,10 +1138,12 @@ export const KIND_NAMES: Record<string, string> = {
 /**
  * What an operation does, in a few words: the run log's line for it and the
  * preview's heading. A create's is what it makes, e.g. `track “Versailles”`.
+ * `sent` is how many of an addClaims' statements are actually added, for an
+ * edit summary when the item already has some of them.
  */
-export function describeOp(op: Op): string {
+export function describeOp(op: Op, sent?: number): string {
   if (op.op === "addClaims") {
-    const n = op.claims.length;
+    const n = sent ?? op.claims.length;
     return `Add ${n} statement${n === 1 ? "" : "s"} to ${op.what}`;
   }
   const label = Object.values(op.labels)[0] ?? "";
