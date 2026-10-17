@@ -90,7 +90,7 @@ export default function ProgressRail({
   steps: Step[];
   /** A run is in progress, so the form can't be cleared. */
   running: boolean;
-  /** The form is already as Clear leaves it. */
+  /** The form is already as Clear leaves it, with no run on show. */
   empty: boolean;
   clearConfirm: Confirm | null;
   onClear: () => void;
