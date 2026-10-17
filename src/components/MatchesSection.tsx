@@ -343,7 +343,6 @@ export default function MatchesSection({
               <CandidateItem
                 key={c.id}
                 c={c}
-                title={r.title}
                 // Used on its own here, it's undone on its own too.
                 withTrack={comesWithTrack(r, c) && !before.current.has(c.id)}
                 onUse={() => use(r, c)}
@@ -400,15 +399,12 @@ const Check = () => (
 
 function CandidateItem({
   c,
-  title,
   withTrack,
   onUse,
   onUndo,
   onDismiss,
 }: {
   c: Candidate;
-  /** The track's title, to say when the item's label differs. */
-  title: string;
   /** It was filled in by using the track, so it's undone with that. */
   withTrack: boolean;
   onUse: () => void;
@@ -433,16 +429,16 @@ function CandidateItem({
           <span className="mono">
             <WikiLink base={wikiBaseUrl} qid={m.qid} />
           </span>
-          <span>{m.description ?? m.label ?? "No label or description"}</span>
+          <span>
+            {m.label ?? "No label"}
+            {m.description && <span className="match-desc"> · {m.description}</span>}
+          </span>
           {tag && (
             <span className="match-tag" title={`Matched by ${m.reasons.join(", ")}`}>
               {tag}
             </span>
           )}
         </span>
-        {m.label && m.description && m.label.toLocaleLowerCase() !== title.toLocaleLowerCase() && (
-          <span className="match-note">Titled “{m.label}”</span>
-        )}
         {composition && !c.used && (
           <span className="match-note">Using it also uses its composition, {composition}</span>
         )}

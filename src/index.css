@@ -1514,6 +1514,9 @@ button.link.match-toggle {
 .match-label .mono {
   font-size: 13px;
 }
+.match-desc {
+  color: var(--muted);
+}
 .match-tag {
   font-size: 12px;
   font-weight: 600;
