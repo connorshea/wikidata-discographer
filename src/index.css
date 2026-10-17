@@ -1711,9 +1711,7 @@ button.wide {
   border: 1.25px solid var(--accent);
 }
 .info [role="tooltip"] {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
+  position: fixed;
   z-index: 10;
   width: min(340px, 80vw);
   background: var(--panel);
@@ -1725,20 +1723,18 @@ button.wide {
   font-weight: 400;
   line-height: 1.45;
   box-shadow: 0 6px 20px rgba(10, 12, 40, 0.18);
+  /* In a table header it would take the header's no-wrap line otherwise. */
+  white-space: normal;
+  text-align: left;
   /* Not laid out while hidden, so a tooltip past the edge of a narrow window
      doesn't make the page scroll sideways. */
   display: none;
-}
-.info.end [role="tooltip"] {
-  left: auto;
-  right: 0;
 }
 th .info {
   vertical-align: middle;
   margin-left: 4px;
 }
-.info:hover [role="tooltip"],
-.info button:focus + [role="tooltip"] {
+.info.shown [role="tooltip"] {
   display: block;
   animation: tip-in 0.12s;
 }
@@ -2453,8 +2449,7 @@ footer {
   text-align: center;
 }
 @media (prefers-reduced-motion: reduce) {
-  .info:hover [role="tooltip"],
-  .info button:focus + [role="tooltip"] {
+  .info.shown [role="tooltip"] {
     animation: none;
   }
   .turntable .record {
