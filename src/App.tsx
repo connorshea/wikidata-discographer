@@ -95,18 +95,9 @@ function LockedSteps() {
       </p>
       <section className="block locked-step" id="settings">
         <h2>Item settings</h2>
-        <button type="button" className="ghost" disabled>
-          Show all settings
-        </button>
       </section>
       <section className="block locked-step" id="tracks">
-        <h2>
-          <span className="sw" aria-hidden="true" />
-          Tracks
-        </h2>
-        <button type="button" className="link" disabled>
-          Add a tracklist →
-        </button>
+        <h2>Tracks</h2>
       </section>
       <section className="block locked-step" id="performers">
         <h2>Performers</h2>

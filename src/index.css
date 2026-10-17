@@ -2725,25 +2725,6 @@ section.block.locked-step {
   align-items: center;
   gap: 10px;
 }
-.locked-step h2 .sw {
-  width: 12px;
-  height: 12px;
-  background: var(--locked-edge);
-}
-.locked-step button {
-  margin-left: auto;
-  min-height: 40px;
-  color: var(--muted);
-  border-color: var(--locked-edge);
-}
-.locked-step button.link {
-  font-size: 15px;
-  font-weight: 600;
-  text-decoration: none;
-}
-.locked-step button:disabled {
-  opacity: 1;
-}
 
 /* The album: an existing one's card, or a new one's fields. */
 .album-head {
