@@ -75,6 +75,7 @@ export default function RunSection({
   matchesPending,
   formId,
   stale,
+  onFinished,
 }: SectionProps & {
   albumTracklist: AlbumTracklist | null;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
@@ -85,6 +86,8 @@ export default function RunSection({
   formId: string;
   /** Another tab changed the form since: this tab mustn't run it. */
   stale: boolean;
+  /** Clears the form once its run is done, ready for the next album. */
+  onFinished: () => void;
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
@@ -94,6 +97,13 @@ export default function RunSection({
   const [ownRun, setOwnRun] = useState(loadOwnRun);
   const ownRunRef = useRef(ownRun);
   const formIdRef = useRef(formId);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  // The form was cleared because its run is done: the run stays on show.
+  const [cleared, setCleared] = useState(false);
+  const keepRun = useRef(false);
   const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
   const [run, setRun] = useState<SubmissionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +117,11 @@ export default function RunSection({
   useEffect(() => {
     if (formIdRef.current === formId) return;
     formIdRef.current = formId;
+    if (keepRun.current) {
+      keepRun.current = false;
+      return;
+    }
+    setCleared(false);
     setRunId(null);
     setRun(null);
     setError(null);
@@ -136,9 +151,16 @@ export default function RunSection({
       const action = settleOwnRun(r, ownRunRef.current, formIdRef.current);
       if (action === "keep") return;
       followOwnRun(null);
-      if (action === "apply" && createdAny(r.edits)) update((s) => applyCreated(s, r.edits));
+      if (action !== "apply") return;
+      // A done run leaves nothing to make, so the form is cleared for the next
+      // album, unless it's been changed during the run.
+      if (r.status === "done" && formOfRun(stateRef.current, r) !== "other") {
+        keepRun.current = true;
+        setCleared(true);
+        onFinished();
+      } else if (createdAny(r.edits)) update((s) => applyCreated(s, r.edits));
     },
-    [followOwnRun, update],
+    [followOwnRun, update, onFinished],
   );
   // A run started in another tab on the same form: follow it here too, so its
   // QIDs are saved even if that tab is closed before the run ends.
@@ -199,6 +221,7 @@ export default function RunSection({
   const finished = run?.status === "done" && fit === "same";
   const start = (confirm?: Omit<SubmissionRequest, "state">) => {
     setStarting(true);
+    setCleared(false);
     setError(null);
     setUnknownRun(null);
     setRecreate(null);
@@ -265,6 +288,9 @@ export default function RunSection({
         {user && stale && (
           <span className="hint">The form was changed in another tab. Reload this page first.</span>
         )}
+        {user && cleared && !stale && (
+          <span className="hint">The run is done, so the form was cleared for the next album.</span>
+        )}
         {user && !stale && finished && (
           <span className="hint">This run is done. Start a new album to make more edits.</span>
         )}
@@ -319,7 +345,16 @@ export default function RunSection({
         />
       )}
       {run && <RunProgress run={run} />}
-      {user && <RecentRuns current={runId} onOpen={setRunId} refresh={run?.status} />}
+      {user && (
+        <RecentRuns
+          current={runId}
+          onOpen={(id) => {
+            setCleared(false);
+            setRunId(id);
+          }}
+          refresh={run?.status}
+        />
+      )}
     </section>
   );
 }
