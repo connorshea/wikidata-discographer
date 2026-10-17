@@ -3288,11 +3288,9 @@ button.mb-button[aria-expanded="true"] {
 @media (prefers-color-scheme: dark) {
   .rail-item[aria-current="step"] {
     background: var(--raised);
-    box-shadow: inset 3px 0 0 var(--accent);
   }
   .top-nav a[aria-current="page"] {
     background: var(--raised);
-    box-shadow: inset 0 -2px 0 var(--accent);
   }
   .run-slot > button:disabled {
     background: var(--tint);
