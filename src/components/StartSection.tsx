@@ -61,12 +61,10 @@ export default function StartSection({
   state,
   update,
   plan,
-  needsConfirm,
   albumLabel,
   onLoad,
   ref,
 }: SectionProps & {
-  needsConfirm: boolean;
   /** The existing album's label on Wikidata, while it's known. */
   albumLabel: string | null;
   onLoad: (next: State) => void;
@@ -196,7 +194,6 @@ export default function StartSection({
       <MusicBrainzImport
         ref={mbImport}
         state={state}
-        needsConfirm={needsConfirm}
         showForm={picking && card === "mb"}
         onLoad={onLoad}
       />

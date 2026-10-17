@@ -4,7 +4,6 @@ import { applyMbForm, type MbForm, parseMbInput, type ReleaseChoice } from "../l
 import type { State } from "../lib/plan.ts";
 import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Qids } from "./common.tsx";
 
 const message = (err: unknown, what: string) =>
@@ -30,13 +29,11 @@ export interface MusicBrainzImportHandle {
  */
 export default function MusicBrainzImport({
   state,
-  needsConfirm,
   showForm,
   onLoad,
   ref,
 }: {
   state: State;
-  needsConfirm: boolean;
   showForm: boolean;
   onLoad: (next: State) => void;
   ref?: Ref<MusicBrainzImportHandle>;
@@ -56,8 +53,6 @@ export default function MusicBrainzImport({
   // releases to list asks for the release's URL instead. The server only
   // honors it for a release in that group.
   const albumFor = useRef<{ album: string; releaseGroup: string } | null>(null);
-  // A release fetched and waiting on the user to confirm replacing the form.
-  const [pending, setPending] = useState<MbForm | null>(null);
   // What the last load found, until the next one.
   const [loaded, setLoaded] = useState<MbForm | null>(null);
   const pickId = useId();
@@ -69,7 +64,6 @@ export default function MusicBrainzImport({
   const apply = (form: MbForm) => {
     onLoad(applyMbForm(state, form));
     setLoaded(form);
-    setPending(null);
     setGroup(null);
     setInput("");
     albumFor.current = null;
@@ -99,8 +93,7 @@ export default function MusicBrainzImport({
       const query = albumFor.current ? `?${new URLSearchParams(albumFor.current)}` : "";
       const { form } = await api<MusicBrainzResponse>(`/api/musicbrainz/release/${id}${query}`);
       if (!current()) return;
-      if (needsConfirm) setPending(form);
-      else apply(form);
+      apply(form);
     });
 
   const loadGroup = (id: string) =>
@@ -234,17 +227,6 @@ export default function MusicBrainzImport({
           ))}
         </>
       )}
-      <ConfirmDialog
-        confirm={
-          pending && {
-            title: `Replace the form with “${pending.album.title}”?`,
-            body: "This replaces the album, tracklists and performers you've entered with the MusicBrainz release. Your item settings are kept, apart from the publication date and language. It can't be undone.",
-            action: "Replace",
-          }
-        }
-        onConfirm={() => pending && apply(pending)}
-        onClose={() => setPending(null)}
-      />
     </>
   );
 }

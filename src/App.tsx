@@ -313,7 +313,6 @@ function Form() {
               key={clears}
               ref={startRef}
               {...props}
-              needsConfirm={!empty}
               albumLabel={albumFound?.status === "ok" ? albumFound.label : null}
               onLoad={replace}
             />
