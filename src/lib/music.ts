@@ -122,6 +122,13 @@ export const ALBUM_ID_FIELDS = [
     fromUrl: /(?:music|itunes)\.apple\.com\/.*\/album\/(?:[^/?#]*\/)?(?:id)?(\d+)/,
   },
   {
+    key: "deezer",
+    property: "P2723",
+    label: "Deezer album ID",
+    pattern: /^\d+$/,
+    fromUrl: /deezer\.com\/(?:[a-z]{2}\/)?album\/(\d+)/,
+  },
+  {
     key: "discogs",
     property: "P1954",
     label: "Discogs master ID",

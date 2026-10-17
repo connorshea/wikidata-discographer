@@ -311,6 +311,7 @@ const LANGUAGES: Record<string, string> = {
 const SEVERAL_ALBUM_LINKS = {
   spotify: "Spotify albums",
   appleMusic: "Apple Music albums",
+  deezer: "Deezer albums",
   discogs: "Discogs masters",
 } as const;
 
@@ -520,7 +521,13 @@ export function releaseToForm(
       : STUDIO_ALBUM;
 
   const albumQid = lookups.albumQid;
-  const ids: AlbumState["ids"] = { spotify: "", musicbrainz: rg.id, appleMusic: "", discogs: "" };
+  const ids: AlbumState["ids"] = {
+    spotify: "",
+    musicbrainz: rg.id,
+    appleMusic: "",
+    deezer: "",
+    discogs: "",
+  };
   // Each identifier is cited to the release or release group that links it.
   const citedIds: AlbumMb["ids"] = {};
   for (const f of ALBUM_ID_FIELDS) {

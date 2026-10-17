@@ -296,6 +296,7 @@ describe("buildPlan", () => {
           spotify: "4aawyAB9vmqN3uQ7FjRGTy",
           musicbrainz: RG,
           appleMusic: "",
+          deezer: "",
           discogs: "4348311",
         },
         mb: {

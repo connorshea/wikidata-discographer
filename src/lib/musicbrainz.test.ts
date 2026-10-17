@@ -174,6 +174,7 @@ describe("releaseToForm", () => {
         spotify: "",
         musicbrainz: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
         appleMusic: "",
+        deezer: "1076048342",
         discogs: "4348311",
       },
       mb: {
@@ -181,7 +182,10 @@ describe("releaseToForm", () => {
         release: RELEASE.id,
         retrieved: "2026-10-04",
         date: { value: "2026-09-18", from: "releaseGroup" },
-        ids: { discogs: { value: "4348311", from: "releaseGroup" } },
+        ids: {
+          deezer: { value: "1076048342", from: "release" },
+          discogs: { value: "4348311", from: "releaseGroup" },
+        },
       },
     });
     expect(form.date).toBe("2026-09-18");
@@ -196,7 +200,7 @@ describe("releaseToForm", () => {
     );
     expect(form.notes).toEqual([]);
     expect(form.summary).toMatch(
-      /^Loaded 2 discs and 6 tracks\. The new album gets the Discogs master ID MusicBrainz links to\. Found nothing else/,
+      /^Loaded 2 discs and 6 tracks\. The new album gets the Deezer album ID and Discogs master ID MusicBrainz links to\. Found nothing else/,
     );
     expect(form.summary).toContain(
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
@@ -441,17 +445,24 @@ describe("releaseToForm", () => {
         "target-type": "url",
         url: { resource: "https://music.apple.com/gb/album/day-and-night/1820000000" },
       },
+      {
+        type: "free streaming",
+        "target-type": "url",
+        url: { resource: "https://www.deezer.com/album/790000000" },
+      },
     ];
     const { album } = releaseToForm(r, NONE);
     expect(album).toMatchObject({ type: "Q169930", form: "Q209939" });
     expect(album.ids).toMatchObject({
       spotify: "4aawyAB9vmqN3uQ7FjRGTy",
       appleMusic: "1820000000",
+      deezer: "790000000",
     });
     // Linked from the release, so they're cited to it.
     expect(album.mb?.ids).toMatchObject({
       spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
       appleMusic: { value: "1820000000", from: "release" },
+      deezer: { value: "790000000", from: "release" },
     });
   });
 
@@ -658,5 +669,13 @@ describe("normalizeAlbumId", () => {
       "https://itunes.apple.com/us/album/day-and-night/id1820000000?uo=4",
     ])
       expect(normalizeAlbumId("appleMusic", url)).toBe("1820000000");
+  });
+
+  it("reads a Deezer album ID from a Deezer URL", () => {
+    for (const url of [
+      "https://www.deezer.com/album/790000000",
+      "https://www.deezer.com/fr/album/790000000",
+    ])
+      expect(normalizeAlbumId("deezer", url)).toBe("790000000");
   });
 });
