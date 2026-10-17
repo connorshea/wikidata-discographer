@@ -1231,6 +1231,10 @@ a.match-flag:hover {
   color: var(--warn);
   font-size: 14px;
 }
+/* Under a disc's Part field, as far off it as the rows below are. */
+.disc-bar + .match-notice {
+  margin-top: 12px;
+}
 .match-notice span {
   flex: 1 1 260px;
 }
