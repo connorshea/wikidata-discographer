@@ -28,7 +28,7 @@ import type {
 } from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
-import PlanPreview from "./PlanPreview.tsx";
+import PlannedEdits from "./PlannedEdits.tsx";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 import { useStorageEvent } from "./use-storage-event.ts";
@@ -267,123 +267,126 @@ export default function RunSection({
 
   const edits = plan.ops.length;
   return (
-    <section className="block" id="create" ref={sectionRef}>
-      <h2>Create on Wikidata</h2>
-      {/* Nothing to fix while the steps are locked: the checklist asks for a starting point. */}
-      {state.start &&
-        plan.messages.map(([kind, text], i) => (
-          // The summary is neutral: green stands for compositions elsewhere.
-          <p key={i} className={`msg ${kind === "ok" ? "summary" : kind}`}>
-            {text}
-          </p>
-        ))}
-      {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
-      {plan.ops.length > 0 && <PlanPreview plan={plan} state={state} />}
-      <p className="hint">
-        Edits are made with your account and grouped in EditGroups, so the whole run can be reviewed
-        or undone together. They go out two or three seconds apart, so a long album takes a few
-        minutes. Statements an item already has are skipped, so a failed run can be started again.
-      </p>
-      {/* The run button sits in the plan panel, so it's in view wherever the form is scrolled. */}
-      {slot &&
-        createPortal(
-          <>
-            <div className="row">
-              <ConfirmRun
-                label={
-                  starting
-                    ? "Checking the QIDs…"
-                    : running
-                      ? "Running…"
-                      : edits
-                        ? `Make ${edits} edit${edits === 1 ? "" : "s"}`
-                        : "Make edits"
-                }
-                disabled={
-                  !state.start ||
-                  !user ||
-                  !user.eligibility.ok ||
-                  !plan.ready ||
-                  !!albumTracklist ||
-                  unreviewed > 0 ||
-                  matchesPending ||
-                  stale ||
-                  finished ||
-                  running ||
-                  starting
-                }
-                plan={plan}
-                state={state}
-                username={user?.username ?? "you"}
-                onConfirm={() => start()}
-              />
-              {/* The plan panel's checklist says what else holds the run up. */}
-              {user && stale && (
-                <span className="hint">
-                  The form was changed in another tab. Reload this page first.
-                </span>
+    <>
+      <section className="block" id="create" ref={sectionRef}>
+        <h2>Create on Wikidata</h2>
+        {/* Nothing to fix while the steps are locked: the checklist asks for a starting point. */}
+        {state.start &&
+          plan.messages.map(([kind, text], i) => (
+            // The summary is neutral: green stands for compositions elsewhere.
+            <p key={i} className={`msg ${kind === "ok" ? "summary" : kind}`}>
+              {text}
+            </p>
+          ))}
+        {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
+        <p className="hint">
+          Edits are made with your account and grouped in EditGroups, so the whole run can be
+          reviewed or undone together. They go out two or three seconds apart, so a long album takes
+          a few minutes. Statements an item already has are skipped, so a failed run can be started
+          again.
+        </p>
+        {/* The run button sits in the plan panel, so it's in view wherever the form is scrolled. */}
+        {slot &&
+          createPortal(
+            <>
+              <div className="row">
+                <ConfirmRun
+                  label={
+                    starting
+                      ? "Checking the QIDs…"
+                      : running
+                        ? "Running…"
+                        : edits
+                          ? `Make ${edits} edit${edits === 1 ? "" : "s"}`
+                          : "Make edits"
+                  }
+                  disabled={
+                    !state.start ||
+                    !user ||
+                    !user.eligibility.ok ||
+                    !plan.ready ||
+                    !!albumTracklist ||
+                    unreviewed > 0 ||
+                    matchesPending ||
+                    stale ||
+                    finished ||
+                    running ||
+                    starting
+                  }
+                  plan={plan}
+                  state={state}
+                  username={user?.username ?? "you"}
+                  onConfirm={() => start()}
+                />
+                {/* The plan panel's checklist says what else holds the run up. */}
+                {user && stale && (
+                  <span className="hint">
+                    The form was changed in another tab. Reload this page first.
+                  </span>
+                )}
+                {user && cleared && !stale && (
+                  <span className="hint">
+                    The run is done, so the form was cleared for the next album.
+                  </span>
+                )}
+                {user && !stale && finished && (
+                  <span className="hint">
+                    This run is done. Start a new album to make more edits.
+                  </span>
+                )}
+              </div>
+              {error && <p className="msg err">{error}</p>}
+              {unknownRun && (
+                <UnknownRunGuard
+                  run={unknownRun}
+                  disabled={starting}
+                  onUse={() => {
+                    const found = {
+                      op: "create" as const,
+                      ok: true,
+                      key: unknownRun.key,
+                      qid: unknownRun.qid,
+                    };
+                    update((s) => applyCreated(s, [found]));
+                    setUnknownRun(null);
+                  }}
+                  onConfirm={() => start({ confirmUnknown: unknownRun.id })}
+                />
               )}
-              {user && cleared && !stale && (
-                <span className="hint">
-                  The run is done, so the form was cleared for the next album.
-                </span>
+              {recreate && (
+                <RecreateGuard
+                  recreate={recreate}
+                  disabled={starting}
+                  onUse={() => {
+                    const found = recreate.created.map((c) => ({
+                      op: "create" as const,
+                      ok: true,
+                      key: c.key,
+                      qid: c.qid,
+                    }));
+                    update((s) => applyCreated(s, found));
+                    setRecreate(null);
+                  }}
+                  onConfirm={() => start({ confirmRecreate: recreate.id })}
+                />
               )}
-              {user && !stale && finished && (
-                <span className="hint">
-                  This run is done. Start a new album to make more edits.
-                </span>
-              )}
-            </div>
-            {error && <p className="msg err">{error}</p>}
-            {unknownRun && (
-              <UnknownRunGuard
-                run={unknownRun}
-                disabled={starting}
-                onUse={() => {
-                  const found = {
-                    op: "create" as const,
-                    ok: true,
-                    key: unknownRun.key,
-                    qid: unknownRun.qid,
-                  };
-                  update((s) => applyCreated(s, [found]));
-                  setUnknownRun(null);
-                }}
-                onConfirm={() => start({ confirmUnknown: unknownRun.id })}
-              />
-            )}
-            {recreate && (
-              <RecreateGuard
-                recreate={recreate}
-                disabled={starting}
-                onUse={() => {
-                  const found = recreate.created.map((c) => ({
-                    op: "create" as const,
-                    ok: true,
-                    key: c.key,
-                    qid: c.qid,
-                  }));
-                  update((s) => applyCreated(s, found));
-                  setRecreate(null);
-                }}
-                onConfirm={() => start({ confirmRecreate: recreate.id })}
-              />
-            )}
-          </>,
-          slot,
+            </>,
+            slot,
+          )}
+        {run && <RunProgress run={run} />}
+        {user && (
+          <RecentRuns
+            current={runId}
+            onOpen={(id) => {
+              setCleared(false);
+              setRunId(id);
+            }}
+            refresh={run?.status}
+          />
         )}
-      {run && <RunProgress run={run} />}
-      {user && (
-        <RecentRuns
-          current={runId}
-          onOpen={(id) => {
-            setCleared(false);
-            setRunId(id);
-          }}
-          refresh={run?.status}
-        />
-      )}
-    </section>
+      </section>
+      {plan.ops.length > 0 && <PlannedEdits plan={plan} state={state} />}
+    </>
   );
 }
 

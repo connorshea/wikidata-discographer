@@ -80,6 +80,30 @@ describe("previewPlan", () => {
     ]);
   });
 
+  it("says what item each edit is about, and the row it's for", () => {
+    const about = (e: (typeof edits)[number]) => [e.kind, e.creates, e.title, e.place];
+    const byGroup = (id: string) => groups.find((g) => g.id === id)!.edits;
+    expect(byGroup("album").map(about)).toEqual([
+      ["album", true, "Day and Night", null],
+      ["album", false, "Album tracklist", null],
+    ]);
+    expect(about(byGroup("track")[0])).toEqual(["track", true, "After All", { disc: 1, n: 1 }]);
+    expect(about(byGroup("single")[0])).toEqual([
+      "single",
+      true,
+      "Habits of Creatures",
+      { disc: 1, n: 2 },
+    ]);
+    // The reused composition, which only gains a performer.
+    const [reused] = byGroup("existing");
+    expect(about(reused)).toEqual(["comp", false, "After All", { disc: 1, n: 1 }]);
+    expect(reused.target).toEqual({
+      text: "composition “After All”",
+      qid: "Q140882264",
+      reused: true,
+    });
+  });
+
   it("leaves no ID without a label when the app knows one", () => {
     for (const e of edits)
       for (const s of e.statements)

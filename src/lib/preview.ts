@@ -49,11 +49,15 @@ const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map([
   ["mul", "multiple languages"],
 ]);
 
-/** A value as shown: `qid` links it to Wikidata; `isNew` marks an item this run creates. */
+/**
+ * A value as shown: `qid` links it to Wikidata; `isNew` marks an item this run
+ * creates, `reused` an existing composition, track or single the form links to.
+ */
 export interface PreviewValue {
   text: string;
   qid?: string;
   isNew?: boolean;
+  reused?: boolean;
 }
 
 export interface PreviewProperty {
@@ -72,9 +76,19 @@ export interface PreviewStatement {
   ifMissing?: true;
 }
 
+/** The kind of item an edit makes or changes, which sets its colour swatch. */
+export type PreviewKind = "album" | "comp" | "track" | "single";
+
 export interface PreviewEdit {
   /** Its place in the run, from 1. */
   n: number;
+  kind: PreviewKind;
+  /** Whether it creates the item, or adds statements to one that exists or was just made. */
+  creates: boolean;
+  /** The item's title, e.g. "After All", or "Album tracklist" for the tracklist edit. */
+  title: string;
+  /** The track row it's for: its disc (from 1) and position. */
+  place: { disc: number; n: number } | null;
   /** As the run log will describe it, e.g. `Create track “Versailles”`. */
   heading: string;
   /** The item a statements edit changes. */
@@ -135,6 +149,29 @@ export function formatDuration(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
+/** A composition, track or single the form reuses, by QID. */
+type ReusedItem = { kind: PreviewKind; title: string; disc: number; n: number };
+
+/** The compositions, tracks and singles the form's rows link to. */
+function reusedItems(state: State, tracks: Plan["tracks"]): Map<string, ReusedItem> {
+  const reused = new Map<string, ReusedItem>();
+  const add = (qid: string | undefined, item: ReusedItem) => {
+    const q = qid?.trim();
+    if (q && !reused.has(q)) reused.set(q, item);
+  };
+  tracks.forEach((rows, di) => {
+    const disc = state.discs[di];
+    if (!disc) return;
+    for (const r of rows) {
+      const at = { title: r.title, disc: di + 1, n: r.n };
+      add(disc.comp[r.n], { kind: "comp", ...at });
+      add(disc.track[r.n], { kind: "track", ...at });
+      add(disc.single[r.n]?.qid, { kind: "single", ...at });
+    }
+  });
+  return reused;
+}
+
 /** Names for the items the form knows: its fixed choices, performers and reused items. */
 function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
   const fixed: (readonly [string, string])[] = [
@@ -183,13 +220,45 @@ function groupOf(op: Op, albumQid: string | null): PreviewGroupId {
   return prefix === "comp" || prefix === "track" || prefix === "single" ? prefix : "album";
 }
 
+/** What an edit is about: the item's kind and title, and the track row it's for. */
+function aboutOp(
+  op: Op,
+  group: PreviewGroupId,
+  reused: ReadonlyMap<string, ReusedItem>,
+): Pick<PreviewEdit, "kind" | "creates" | "title" | "place"> {
+  if (op.op === "create") {
+    const [, di, n] = op.key.split(":");
+    const kind: PreviewKind = group === "existing" ? "album" : group;
+    return {
+      kind,
+      creates: true,
+      title: Object.values(op.labels)[0] ?? describeOp(op),
+      place: kind === "album" || n === undefined ? null : { disc: Number(di) + 1, n: Number(n) },
+    };
+  }
+  const found = "id" in op.target ? reused.get(op.target.id) : undefined;
+  if (found)
+    return {
+      kind: found.kind,
+      creates: false,
+      title: found.title,
+      place: { disc: found.disc, n: found.n },
+    };
+  return { kind: "album", creates: false, title: "Album tracklist", place: null };
+}
+
 /** The plan's operations as grouped, labelled edits. */
 export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewGroup[] {
   const names = itemNames(state, plan.tracks);
+  const reused = reusedItems(state, plan.tracks);
   const created = new Map<string, string>();
   for (const op of plan.ops) if (op.op === "create") created.set(op.key, `new ${describeOp(op)}`);
 
-  const item = (id: string): PreviewValue => ({ text: names.get(id) ?? id, qid: id });
+  const item = (id: string): PreviewValue => ({
+    text: names.get(id) ?? id,
+    qid: id,
+    ...(reused.has(id) ? { reused: true } : {}),
+  });
   const value = (property: string, v: Value): PreviewValue => {
     switch (v.type) {
       case "item":
@@ -219,10 +288,13 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
   const albumQid = state.album.mode === "existing" ? state.album.qid.trim() : null;
   const groups = new Map<PreviewGroupId, PreviewEdit[]>();
   plan.ops.forEach((op, i) => {
+    const g = groupOf(op, albumQid);
+    const about = aboutOp(op, g, reused);
     const edit: PreviewEdit =
       op.op === "create"
         ? {
             n: i + 1,
+            ...about,
             heading: `Create ${describeOp(op)}`,
             target: null,
             terms: [
@@ -241,12 +313,12 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
           }
         : {
             n: i + 1,
+            ...about,
             heading: describeOp(op),
             target: value("", { type: "item", ...op.target }),
             terms: [],
             statements: op.claims.map(statement),
           };
-    const g = groupOf(op, albumQid);
     const list = groups.get(g);
     if (list) list.push(edit);
     else groups.set(g, [edit]);
