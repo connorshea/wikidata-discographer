@@ -218,6 +218,7 @@ describe("releaseToForm", () => {
       title: "After All",
       recording: "263340e1-2f03-4b31-b404-a06a8acda193",
       work: "2bf1a377-686f-426a-ab5a-309466d201e9",
+      iswcs: [],
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
       appleMusic: [],
@@ -250,6 +251,7 @@ describe("releaseToForm", () => {
     expect(form.discs[0].mb["1"]).toMatchObject({
       recording: "",
       work: "",
+      iswcs: [],
       isrcs: ["USUM72604366"],
       spotify: [],
     });
@@ -320,6 +322,52 @@ describe("releaseToForm", () => {
         url: { resource: "https://music.apple.com/gb/music-video/1065973702" },
       };
       expect(releaseIds(withApple(video)).appleMusicTracks).toEqual([]);
+    });
+  });
+
+  describe("ISWCs", () => {
+    const withIswcs = (...iswcs: string[]) => {
+      const r = release();
+      r.media[0].tracks![0].recording.relations!.find((x) => x.work)!.work!.iswcs = iswcs;
+      return r;
+    };
+    const work = RELEASE.media[0].tracks![0].recording.relations!.find((x) => x.work)!.work!.id;
+
+    it("adds the one the composition has, and counts it in the summary", () => {
+      const r = withIswcs("T-345.246.800-1", "not an ISWC");
+      expect(releaseIds(r).iswcs).toEqual(["T-345.246.800-1"]);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].iswcs).toEqual(["T-345.246.800-1"]);
+      expect(form.discs[0].mb["2"].iswcs).toEqual([]);
+      expect(form.notes).toEqual([]);
+      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWC,/);
+      expect(form.summary).toContain("ISRCs, ISWCs and track IDs get a MusicBrainz reference");
+    });
+
+    it("adds none when the composition has more than one", () => {
+      const r = withIswcs("T-345.246.800-1", "T-345.246.801-2");
+      expect(releaseIds(r).iswcs).toEqual([]);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].iswcs).toEqual([]);
+      expect(form.notes).toEqual([
+        "1 track's composition has more than one ISWC on MusicBrainz, so it gets no ISWC.",
+      ]);
+    });
+
+    it("leaves out one an item already has", () => {
+      const form = releaseToForm(withIswcs("T-345.246.800-1"), {
+        ...NONE,
+        taken: ["T-345.246.800-1"],
+      });
+      expect(form.discs[0].mb["1"].iswcs).toEqual([]);
+    });
+
+    it("finds the composition by it when none has the work ID", () => {
+      const r = withIswcs("T-345.246.800-1");
+      const byIswc = { ...NONE, iswcs: { "T-345.246.800-1": "Q30" } };
+      expect(releaseToForm(r, byIswc).discs[0].comp).toEqual({ "1": "Q30" });
+      const both = { ...byIswc, works: { [work]: "Q20" } };
+      expect(releaseToForm(r, both).discs[0].comp).toEqual({ "1": "Q20" });
     });
   });
 

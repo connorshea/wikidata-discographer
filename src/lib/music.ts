@@ -60,6 +60,7 @@ export const ID_PROPERTIES: Readonly<Record<string, string>> = {
   P4577: "Tidal album ID",
   P1729: "AllMusic album ID",
   P435: "MusicBrainz work ID",
+  P1827: "ISWC",
   P4404: "MusicBrainz recording ID",
   P2207: "Spotify track ID",
   P10110: "Apple Music track ID",
@@ -96,6 +97,7 @@ export function kindOf(
 /** The formats of the identifiers a MusicBrainz import adds to new tracks and compositions. */
 export const MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
+export const ISWC_PATTERN = /^T-\d{3}\.\d{3}\.\d{3}-\d$/;
 export const SPOTIFY_TRACK_PATTERN = /^[0-9A-Za-z]{22}$/;
 export const APPLE_MUSIC_TRACK_PATTERN = /^\d+$/;
 export const DEEZER_TRACK_PATTERN = /^\d+$/;

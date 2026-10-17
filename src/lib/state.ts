@@ -7,6 +7,7 @@ import {
   DEEZER_TRACK_PATTERN,
   TIDAL_TRACK_PATTERN,
   ISRC_PATTERN,
+  ISWC_PATTERN,
   MBID_PATTERN,
   SPOTIFY_TRACK_PATTERN,
 } from "./music.ts";
@@ -90,6 +91,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     title: str(ids.title),
     recording: matching(ids.recording, MBID_PATTERN),
     work: matching(ids.work, MBID_PATTERN),
+    iswcs: strList(ids.iswcs, ISWC_PATTERN),
     isrcs: strList(ids.isrcs, ISRC_PATTERN),
     spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
     appleMusic: strList(ids.appleMusic, APPLE_MUSIC_TRACK_PATTERN),

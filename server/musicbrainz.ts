@@ -208,12 +208,13 @@ export async function lookupRelease(
   album?: { qid: string; releaseGroup: string },
 ): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works, spotify, appleMusic, deezer, tidal] =
+  const [albums, artists, recordings, works, iswcs, spotify, appleMusic, deezer, tidal] =
     await Promise.all([
       lookup("P436", [ids.releaseGroup], ["album", "ep"]),
       lookup("P434", ids.artists, ["artist"]),
       lookup("P4404", ids.recordings, ["track"]),
       lookup("P435", ids.works, ["work"]),
+      lookup("P1827", ids.iswcs, ["work"]),
       lookup("P2207", ids.spotifyTracks, ["track"]),
       lookup("P10110", ids.appleMusicTracks, ["track"]),
       lookup("P2724", ids.deezerTracks, ["track"]),
@@ -231,11 +232,13 @@ export async function lookupRelease(
     artists: artists.unique,
     recordings: recordings.unique,
     works: works.unique,
+    iswcs: iswcs.unique,
     // A work ID belongs on the composition, so one held only by a single or
     // another item that isn't a composition is still added to the new one.
     taken: [
       ...recordings.taken,
       ...works.held,
+      ...iswcs.taken,
       ...spotify.taken,
       ...appleMusic.taken,
       ...deezer.taken,

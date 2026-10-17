@@ -16,7 +16,7 @@ import {
   STUDIO_ALBUM,
 } from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, State } from "./plan.ts";
-import { ALBUM_ID_FIELDS, ISRC_PATTERN, type MusicKind } from "./music.ts";
+import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
 const MBID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
@@ -147,7 +147,7 @@ export interface MbRelation {
   type: string;
   "target-type": string;
   url?: { resource: string };
-  work?: { id: string; title: string };
+  work?: { id: string; title: string; iswcs?: string[] };
 }
 
 export interface MbTrack {
@@ -190,6 +190,7 @@ export function releaseIds(release: MbRelease) {
     artists: [...new Set(credits.map((c) => c.artist.id))],
     recordings: [...new Set(tracks.map((t) => t.recording.id))],
     works: [...new Set(tracks.flatMap((t) => workOf(t) ?? []))],
+    iswcs: [...new Set(tracks.flatMap((t) => iswcOf(t)))],
     spotifyTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "spotify")))],
     appleMusicTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "appleMusic")))],
     deezerTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "deezer")))],
@@ -251,8 +252,10 @@ export interface MbLookups {
   recordings: Record<string, string>;
   /** P435 work ID → composition. */
   works: Record<string, string>;
+  /** P1827 ISWC → composition, for a work no composition has the work ID of. */
+  iswcs?: Record<string, string>;
   /**
-   * Recording, work and streaming track IDs some item in the mirror already
+   * Recording, work and streaming track IDs and ISWCs some item in the mirror already
    * has, however many. They aren't added to new items, which would duplicate them.
    * A work ID only counts when a composition has it.
    */
@@ -347,6 +350,23 @@ function workOf(t: MbTrack): string | undefined {
   return works.length === 1 ? works[0].work!.id : undefined;
 }
 
+/** The ISWCs MusicBrainz has for a track's composition, as `workOf` picks it. */
+function iswcsOf(t: MbTrack): string[] {
+  const work = (t.recording.relations ?? []).find(
+    (r) => r["target-type"] === "work" && r.type === "performance" && r.work?.id === workOf(t),
+  )?.work;
+  return [...new Set((work?.iswcs ?? []).filter((v) => ISWC_PATTERN.test(v)))];
+}
+
+/**
+ * A track's composition's ISWC, if MusicBrainz has exactly one. Some works
+ * have been given several, and there's no telling which is right.
+ */
+function iswcOf(t: MbTrack): string[] {
+  const iswcs = iswcsOf(t);
+  return iswcs.length === 1 ? iswcs : [];
+}
+
 /**
  * An artist credit written so the tracklist parser splits it back into the
  * same artists: MusicBrainz's join phrases where the parser understands them
@@ -423,11 +443,13 @@ export function releaseToForm(
     deezer: 0,
     tidal: 0,
   };
+  let manyIswcs = 0;
   const taken = new Set(lookups.taken);
   const misplaced = new Map<string, string>();
   const toAdd = {
     recordings: 0,
     works: 0,
+    iswcs: 0,
     isrcs: 0,
     spotify: 0,
     appleMusic: 0,
@@ -447,8 +469,11 @@ export function releaseToForm(
         const work = workOf(t);
         if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
           misplaced.set(work, t.title.trim());
-        if (work && lookups.works[work]) {
-          disc.comp[t.position] = lookups.works[work];
+        const [iswc] = iswcOf(t);
+        // A composition found by its ISWC is only used when none has the work ID.
+        const comp = (work && lookups.works[work]) || (iswc && lookups.iswcs?.[iswc]);
+        if (comp) {
+          disc.comp[t.position] = comp;
           comps++;
         }
         if (lookups.recordings[t.recording.id]) {
@@ -459,6 +484,7 @@ export function releaseToForm(
           title: t.title.trim(),
           recording: taken.has(t.recording.id) ? "" : t.recording.id,
           work: work && !taken.has(work) ? work : "",
+          iswcs: iswc && !taken.has(iswc) ? [iswc] : [],
           isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
           spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
           appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
@@ -470,6 +496,7 @@ export function releaseToForm(
         if (
           ids.recording ||
           ids.work ||
+          ids.iswcs.length ||
           ids.isrcs.length ||
           ids.spotify.length ||
           ids.appleMusic.length ||
@@ -489,7 +516,11 @@ export function releaseToForm(
               if (trackLinks(t, key).length > 1) many[key]++;
             toAdd.durationRefs += ids.length !== null ? 1 : 0;
           }
-          if (!disc.comp[t.position]) toAdd.works += ids.work ? 1 : 0;
+          if (!disc.comp[t.position]) {
+            toAdd.works += ids.work ? 1 : 0;
+            toAdd.iswcs += ids.iswcs.length;
+            if (iswcsOf(t).length > 1) manyIswcs++;
+          }
         }
         if (t.length === null) missingLength++;
         const len = t.length === null ? "" : ` (${duration(t.length)})`;
@@ -510,6 +541,10 @@ export function releaseToForm(
       `${which} ${one ? "has" : "have"} the work ID for “${title}”. Only a composition should have one. Remove it from ${one ? `the ${KIND_NOUNS[holders[0].kind]}` : "them"}.${instead}`,
     );
   }
+  if (manyIswcs)
+    notes.push(
+      `${plural(manyIswcs, "track's composition has", "tracks' compositions have")} more than one ISWC on MusicBrainz, so ${manyIswcs === 1 ? "it gets" : "they get"} no ISWC.`,
+    );
   if (missingLength)
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,
@@ -639,11 +674,12 @@ export function releaseToForm(
   };
 }
 
-/** Which of the new album's and tracks' statements get a MusicBrainz reference, as a sentence. */
+/** Which of the new album's, tracks' and compositions' statements get a MusicBrainz reference, as a sentence. */
 function refsSummary(n: {
   date: boolean;
   albumIds: number;
   isrcs: number;
+  iswcs: number;
   spotify: number;
   appleMusic: number;
   deezer: number;
@@ -655,6 +691,7 @@ function refsSummary(n: {
     n.albumIds && "album IDs",
     n.durationRefs && "durations",
     n.isrcs && "ISRCs",
+    n.iswcs && "ISWCs",
     n.spotify + n.appleMusic + n.deezer + n.tidal && "track IDs",
   ].filter(Boolean) as string[];
   if (!what.length) return "";
@@ -665,6 +702,7 @@ function refsSummary(n: {
 function idsSummary(n: {
   recordings: number;
   works: number;
+  iswcs: number;
   isrcs: number;
   spotify: number;
   appleMusic: number;
@@ -680,9 +718,16 @@ function idsSummary(n: {
     n.tidal && plural(n.tidal, TRACK_LINKS.tidal.label),
   ].filter(Boolean) as string[];
   const tracks = parts.length ? `New tracks get ${joinList(parts)}` : "";
-  const works = n.works
-    ? `${plural(n.works, "new composition")} ${n.works === 1 ? "gets its" : "get their"} work ID`
-    : "";
+  const gets = (k: number) => (k === 1 ? "gets its" : "get their");
+  const works = [
+    n.works && `${plural(n.works, "new composition")} ${gets(n.works)} work ID`,
+    n.iswcs &&
+      (n.works
+        ? `${n.iswcs} ${gets(n.iswcs)} ISWC`
+        : `${plural(n.iswcs, "new composition")} ${gets(n.iswcs)} ISWC`),
+  ]
+    .filter(Boolean)
+    .join(" and ");
   if (!tracks && !works) return "";
   return ` ${[tracks, works].filter(Boolean).join(", and ")}, if adding identifiers is on in Item settings.`;
 }
