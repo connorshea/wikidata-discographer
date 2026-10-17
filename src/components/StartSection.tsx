@@ -273,7 +273,7 @@ function SearchPanel({
 }) {
   const id = useId();
   const { wikiBaseUrl } = useAuth();
-  const q = useDebounced(query.trim(), 300);
+  const q = useDebounced(query.trim(), 600);
   const [result, setResult] = useState<SearchResult | null>(null);
   useEffect(() => {
     if (!q) return;

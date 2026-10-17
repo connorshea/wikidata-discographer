@@ -1225,10 +1225,6 @@ td.single-toggle input {
   height: 16px;
   cursor: pointer;
 }
-/* A single's rows carry the singles colour down their left edge. */
-tr.is-single td:first-child {
-  box-shadow: inset 4px 0 0 var(--rg-edge);
-}
 /* A track's single sits on its own row under the track. */
 tr.has-sub td {
   border-bottom: none;
@@ -1513,6 +1509,9 @@ button.link.match-toggle {
 }
 .match-label .mono {
   font-size: 13px;
+}
+.match-desc {
+  color: var(--muted);
 }
 .match-tag {
   font-size: 12px;
