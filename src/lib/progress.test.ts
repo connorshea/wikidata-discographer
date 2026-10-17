@@ -16,6 +16,7 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
   plan: buildPlan(state),
   unreviewed: 0,
   hasTracklist: false,
+  notAlbum: false,
   running: null,
   ...more,
 });
@@ -58,6 +59,14 @@ describe("railSteps", () => {
     expect(byId.tracks.summary).toContain("2 to review");
     expect(byId.performers).toMatchObject({ summary: "0 of 1 linked", status: "attention" });
     expect(byId.create.summary).toBe("Blocked: 1 performer");
+  });
+
+  it("flags an existing album QID that isn't an album or EP", () => {
+    const p = input(EXAMPLE, { notAlbum: true });
+    const byId = Object.fromEntries(railSteps(p).map((s) => [s.id, s]));
+    expect(byId.album).toMatchObject({ status: "attention" });
+    expect(byId.create.summary).toBe("Blocked: album QID");
+    expect(checks(p)[1]).toMatchObject({ ok: false, at: "album" });
   });
 
   it("locks the later steps until a starting point is picked", () => {

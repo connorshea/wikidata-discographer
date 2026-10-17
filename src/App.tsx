@@ -19,7 +19,7 @@ import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import ProgressRail from "./components/ProgressRail.tsx";
 import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
-import { useItemSummaries } from "./components/use-item-summaries.ts";
+import { albumProblem, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
 
 /**
@@ -281,6 +281,7 @@ function Form() {
     empty,
     unreviewed,
     hasTracklist: !!albumTracklist,
+    notAlbum: !!albumProblem(existingQid, albumFound),
     running,
   };
   return (

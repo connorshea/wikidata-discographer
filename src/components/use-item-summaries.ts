@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
-import { QID } from "../lib/plan.ts";
+import { ALBUM_CLASSES, QID } from "../lib/plan.ts";
 import type { DescribeResponse, ItemSummary } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
 
@@ -60,4 +60,18 @@ export function useItemSummaries(
     const k = keyOf(lang, qid);
     return known[k] ?? (failed.has(k) ? { status: "failed" } : { status: "loading" });
   };
+}
+
+/**
+ * Why an existing album's QID can't be used, or null if it's fine or still
+ * being looked up. The run checks this again before it starts.
+ */
+export function albumProblem(qid: string, found: ItemLookup | undefined): string | null {
+  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
+  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
+  if (found?.status !== "ok" || found.classes.some((c) => ALBUM_CLASSES.has(c))) return null;
+  const name = found.label ? `${qid} (${found.label})` : qid;
+  return found.classes.length === 0
+    ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
+    : `${name} isn't an album or EP. Check the QID.`;
 }

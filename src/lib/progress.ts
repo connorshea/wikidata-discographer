@@ -36,6 +36,8 @@ export interface ProgressInput {
   unreviewed: number;
   /** The existing album already has a tracklist, so it can't be used. */
   hasTracklist: boolean;
+  /** The existing album's QID can't be used: it doesn't exist, redirects, or isn't an album or EP. */
+  notAlbum: boolean;
   running: RunningInfo | null;
 }
 
@@ -141,7 +143,7 @@ export function settingsPills(S: Settings): string[] {
 
 /** The rail's steps, in page order. */
 export function railSteps(p: ProgressInput): Step[] {
-  const { state, plan, unreviewed, hasTracklist, running } = p;
+  const { state, plan, unreviewed, hasTracklist, notAlbum, running } = p;
   const S = state.settings;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const discCount = plan.tracks.filter((rows) => rows.length).length;
@@ -161,7 +163,9 @@ export function railSteps(p: ProgressInput): Step[] {
       id: "album",
       name: "Album",
       summary: album ?? "Not set",
-      status: album ? status(blockedAt(plan, "album") || hasTracklist, true) : "pending",
+      status: album
+        ? status(blockedAt(plan, "album") || hasTracklist || notAlbum, true)
+        : "pending",
     },
     {
       id: "settings",
@@ -200,7 +204,7 @@ export function railSteps(p: ProgressInput): Step[] {
           : "Running"
         : !trackCount
           ? "Nothing to create yet"
-          : plan.ready && !unreviewed && !hasTracklist
+          : plan.ready && !unreviewed && !hasTracklist && !notAlbum
             ? `Ready · ${plural(plan.ops.length, "edit")}`
             : `Blocked: ${createBlockedBy(p, perf)}`,
       status: "pending",
@@ -212,6 +216,7 @@ export function railSteps(p: ProgressInput): Step[] {
 /** The first thing holding up the run, in a few words. */
 function createBlockedBy(p: ProgressInput, perf: { linked: number; total: number }): string {
   if (!p.state.start) return "pick a starting point";
+  if (p.notAlbum) return "album QID";
   if (p.hasTracklist) return "album has a tracklist";
   if (blockedAt(p.plan, "album")) return "album details";
   if (perf.linked < perf.total) return plural(perf.total - perf.linked, "performer");
@@ -297,7 +302,7 @@ export function runChecks(
   const { state, plan, unreviewed, hasTracklist } = p;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const perf = linkedPerformers(state, plan);
-  const albumBlocked = blockedAt(plan, "album") || albumSummary(state) === null;
+  const albumBlocked = blockedAt(plan, "album") || p.notAlbum || albumSummary(state) === null;
   const checks: Check[] = [
     p.loggedIn
       ? p.ineligible

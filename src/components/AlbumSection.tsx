@@ -3,7 +3,6 @@ import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
   albumArtists,
-  ALBUM_CLASSES,
   ALBUM_FORMS,
   ALBUM_TYPES,
   QID,
@@ -16,7 +15,7 @@ import { ALBUM_ID_FIELDS, CLASS_KINDS, normalizeAlbumId } from "../lib/music.ts"
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import type { ItemLookup } from "./use-item-summaries.ts";
+import { albumProblem, type ItemLookup } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
@@ -234,20 +233,6 @@ export default function AlbumSection({
       )}
     </section>
   );
-}
-
-/**
- * Why an existing album's QID can't be used, or null if it's fine or still
- * being looked up. The run checks this again before it starts.
- */
-function albumProblem(qid: string, found: ItemLookup | undefined): string | null {
-  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
-  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
-  if (found?.status !== "ok" || found.classes.some((c) => ALBUM_CLASSES.has(c))) return null;
-  const name = found.label ? `${qid} (${found.label})` : qid;
-  return found.classes.length === 0
-    ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
-    : `${name} isn't an album or EP. Check the QID.`;
 }
 
 /**
