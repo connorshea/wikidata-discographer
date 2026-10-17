@@ -1763,6 +1763,22 @@ details summary {
   background: var(--ink);
   color: var(--panel);
 }
+.planned-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin: -6px 0 8px;
+}
+.planned-tools button.link {
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  min-height: 32px;
+}
+.planned-tools button.link:disabled {
+  color: var(--muted);
+  cursor: default;
+}
 .planned-list {
   list-style: none;
   margin: 0;

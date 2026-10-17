@@ -23,6 +23,8 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] }) {
   const [filter, setFilter] = useState<PreviewKind | "all">("all");
   const [more, setMore] = useState(false);
+  // The open cards, by edit number, so Expand all and Collapse all reach every one.
+  const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
   const count = (kind: PreviewKind) => edits.filter((e) => e.kind === kind).length;
   // Singles only get a filter when there are any.
   const filters = KINDS.filter((k) => k.kind !== "single" || count("single") > 0);
@@ -30,6 +32,21 @@ export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] 
   const active = filter !== "all" && count(filter) ? filter : "all";
   const list = active === "all" ? edits : edits.filter((e) => e.kind === active);
   const shown = more ? list : list.slice(0, FIRST);
+  const anyOpen = list.some((e) => opened.has(e.n));
+  const allOpen = list.every((e) => opened.has(e.n));
+  // Opening every card also shows the ones past "Show N more".
+  const expandAll = () => {
+    setOpened(new Set(edits.map((e) => e.n)));
+    setMore(true);
+  };
+  const setOpen = (n: number, open: boolean) =>
+    setOpened((prev) => {
+      if (prev.has(n) === open) return prev;
+      const next = new Set(prev);
+      if (open) next.add(n);
+      else next.delete(n);
+      return next;
+    });
   const pick = (f: PreviewKind | "all") => {
     setFilter(f);
     setMore(false);
@@ -56,9 +73,22 @@ export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] 
           ))}
         </div>
       </div>
+      <div className="planned-tools">
+        <button type="button" className="link" disabled={allOpen} onClick={expandAll}>
+          Expand all
+        </button>
+        <button
+          type="button"
+          className="link"
+          disabled={!anyOpen}
+          onClick={() => setOpened(new Set())}
+        >
+          Collapse all
+        </button>
+      </div>
       <ul className="planned-list">
         {shown.map((e) => (
-          <EditCard key={e.n} edit={e} />
+          <EditCard key={e.n} edit={e} open={opened.has(e.n)} onToggle={(o) => setOpen(e.n, o)} />
         ))}
       </ul>
       {shown.length < list.length && (
@@ -77,14 +107,22 @@ function action(edit: PreviewEdit): string {
   return edit.kind === "album" ? "Adds statements" : `Reused ${name}`;
 }
 
-function EditCard({ edit }: { edit: PreviewEdit }) {
-  const [open, setOpen] = useState(false);
+function EditCard({
+  edit,
+  open,
+  onToggle,
+}: {
+  edit: PreviewEdit;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
   const n = edit.statements.length;
   return (
     <li>
       <details
         className="planned-card"
-        onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+        open={open}
+        onToggle={(e) => onToggle((e.currentTarget as HTMLDetailsElement).open)}
       >
         <summary>
           <i
