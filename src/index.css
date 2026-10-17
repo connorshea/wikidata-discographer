@@ -900,6 +900,11 @@ td.title-col .cell-err {
   font-size: 13px;
   color: var(--muted);
 }
+/* The comma before a later group sits against the chip before it. */
+.who .who-sep {
+  margin-left: -6px;
+  white-space: pre;
+}
 .who.editing {
   flex-direction: column;
   align-items: stretch;
@@ -2524,4 +2529,123 @@ button.link.ids-more {
 .dupes-foot {
   font-size: 13px;
   color: var(--muted);
+}
+/* A track row's MB badge, and the popover it opens with what the import adds. */
+button.mb-button {
+  flex: none;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 0;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+}
+button.mb-button:hover,
+button.mb-button[aria-expanded="true"] {
+  background: var(--mb-ink);
+  color: var(--panel);
+}
+.mb-pop {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow:
+    0 12px 32px rgb(20 23 31 / 16%),
+    0 2px 6px rgb(20 23 31 / 8%);
+  font-size: 13px;
+}
+.mb-pop:focus {
+  outline: none;
+}
+.mb-pop:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.mb-pop-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mb-pop-head > .mb-badge {
+  margin-top: 2px;
+}
+.mb-pop-head > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.mb-pop-head b {
+  font-size: 14px;
+}
+.mb-pop-head .muted {
+  font-size: 12.5px;
+}
+.mb-pop-head button.rm {
+  margin: -6px -6px 0 0;
+}
+.mb-pop-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.mb-pop-head + .mb-pop-section {
+  padding-top: 0;
+  border-top: 0;
+}
+.mb-pop-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mb-pop-section .sw.track {
+  background: var(--trk-edge);
+}
+.mb-pop-section .sw.comp {
+  background: var(--cmp-edge);
+}
+.mb-pop-section p {
+  margin: 0;
+}
+.mb-pop .kv {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+}
+.mb-pop .kv dt {
+  color: var(--muted);
+}
+.mb-pop .kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.mb-pop .kv dd.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.mb-pop-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.mb-pop-foot a {
+  font-weight: 600;
 }

@@ -207,7 +207,10 @@ function DiscBlock({
     const p = rowPerformers({ artists: r.artists, feat: featOf(i) }, base);
     return p.only.length + p.with.length + p.feat.length > 0;
   });
-  const anyMb = rows.some((r) => r.mb);
+  const linkedTo = (k: "comp" | "track", n: number) => QID.test((d[k][n] ?? "").trim());
+  const mbOf = (i: number) =>
+    mbFacts(d.tracks[i], state.settings, linkedTo("comp", rows[i].n), linkedTo("track", rows[i].n));
+  const anyMb = rows.some((_, i) => mbOf(i));
 
   // A key for each row that follows it when rows move, so React moves the row's
   // inputs (and the focus in them) along with it.
@@ -483,7 +486,7 @@ function DiscBlock({
                             }}
                           />
                           {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
-                          <MbChip track={r} settings={state.settings} />
+                          <MbBadge n={r.n} title={r.title} facts={mbOf(i)} />
                           <RowArtists
                             n={r.n}
                             track={t}
@@ -810,7 +813,7 @@ function RowArtists({
           {groups.map(([label, names], g) => (
             <Fragment key={label}>
               {(label || g > 0) && (
-                <span>
+                <span className={g > 0 ? "who-sep" : undefined}>
                   {g > 0 ? ", " : ""}
                   {label}
                 </span>
@@ -1076,42 +1079,221 @@ function SingleRow({
   );
 }
 
-/** A warning icon on a track with possible matches to review, linked to them. */
-/** Marks a row with identifiers from a MusicBrainz import, listing them on hover. */
-function MbChip({ track, settings: S }: { track: Track; settings: Settings }) {
-  const ids = track.mb;
+/** What a row's MB badge lists: its imported values, for the track and for the composition. */
+interface MbFacts {
+  track: [string, string][];
+  comp: [string, string][];
+  /** Why a section adds nothing: the row links an existing item. */
+  linked: { track: boolean; comp: boolean };
+  /** Whether the values get a MusicBrainz reference. */
+  cited: boolean;
+  recording: string;
+}
+
+/**
+ * The MusicBrainz values a row adds if it creates its track and composition,
+ * or null when the import gave it none. `raw` is the row as stored, with the
+ * length as imported.
+ */
+function mbFacts(
+  raw: Track,
+  S: Settings,
+  linkedComp: boolean,
+  linkedTrack: boolean,
+): MbFacts | null {
+  const ids = raw.mb;
   if (!ids) return null;
-  const lines = [
+  const many = (label: string, vs: string[]) => vs.map((v): [string, string] => [label, v]);
+  const track: [string, string][] = [
+    ...(S.mbIds && ids.recording ? [["Recording ID", ids.recording] as [string, string]] : []),
+    ...(S.mbIds ? many("ISRC", ids.isrcs) : []),
+    ...(raw.seconds !== null ? [["Duration", durationNote(raw)] as [string, string]] : []),
     ...(S.mbIds
       ? [
-          ids.recording && `Recording ID (P4404) ${ids.recording}`,
-          ids.work && `Work ID (P435), for the composition, ${ids.work}`,
-          ...ids.iswcs.map((v) => `ISWC (P1827), for the composition, ${v}`),
-          ...ids.isrcs.map((v) => `ISRC (P1243) ${v}`),
-          ...ids.spotify.map((v) => `Spotify track ID (P2207) ${v}`),
-          ...ids.appleMusic.map((v) => `Apple Music track ID (P10110) ${v}`),
-          ...ids.deezer.map((v) => `Deezer track ID (P2724) ${v}`),
-          ...ids.tidal.map((v) => `Tidal track ID (P4578) ${v}`),
+          ...many("Spotify", ids.spotify),
+          ...many("Apple Music", ids.appleMusic),
+          ...many("Deezer", ids.deezer),
+          ...many("Tidal", ids.tidal),
         ]
       : []),
-    S.mbIds &&
-      ids.source &&
-      ids.isrcs.length +
-        ids.iswcs.length +
-        ids.spotify.length +
-        ids.appleMusic.length +
-        ids.deezer.length +
-        ids.tidal.length >
-        0 &&
-      `A reference for the ISRCs, ISWCs and track IDs, stated in MusicBrainz`,
-    ids.source && track.seconds !== null && `A reference for the duration, stated in MusicBrainz`,
-  ].filter(Boolean);
-  if (!lines.length) return null;
-  const text = `From MusicBrainz, added if this row creates the item:\n${lines.join("\n")}`;
+  ];
+  const comp: [string, string][] = S.mbIds
+    ? [...(ids.work ? [["Work ID", ids.work] as [string, string]] : []), ...many("ISWC", ids.iswcs)]
+    : [];
+  if (!track.length && !comp.length) return null;
+  return {
+    track,
+    comp,
+    linked: { track: linkedTrack, comp: linkedComp },
+    cited: !!ids.source,
+    recording: ids.recording || ids.source?.recording || "",
+  };
+}
+
+/** The imported duration, and whether the tracklist still has it. */
+function durationNote(raw: Track): string {
+  const mb = formatLength(raw.seconds);
+  if (raw.length === undefined) return `${mb}, matches the tracklist`;
+  const typed = parseLength(raw.length);
+  if (!typed.ok) return `${mb}. The length typed in the tracklist is used instead, once it's valid`;
+  if (typed.seconds === null) return `${mb}. The tracklist's length was cleared, so none is added`;
+  return `${mb}. The tracklist's ${formatLength(typed.seconds)} is used instead, without a reference`;
+}
+
+/**
+ * A row's MB badge: a button that opens what the import adds to the row's
+ * items. Escape, a click outside or moving focus out closes it.
+ */
+function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts | null }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const button = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) button.current?.focus();
+  };
+
+  // Placed under the badge, or over it when there's no room below, inside the window. It's
+  // fixed so the table's scrolling box doesn't clip it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const b = button.current?.getBoundingClientRect();
+      const el = dialog.current;
+      if (!b || !el) return;
+      const w = Math.min(400, window.innerWidth - 32);
+      const h = el.offsetHeight;
+      const below = b.bottom + 6;
+      const top = below + h > window.innerHeight && b.top - h - 6 > 0 ? b.top - h - 6 : below;
+      el.style.width = `${w}px`;
+      el.style.left = `${Math.max(16, Math.min(b.left, window.innerWidth - w - 16))}px`;
+      el.style.top = `${top}px`;
+    };
+    place();
+    dialog.current?.focus();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: Event) => {
+      const t = e.target as Node;
+      if (!dialog.current?.contains(t) && !button.current?.contains(t)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      close(true);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  if (!facts) return null;
+  const section = (
+    kind: "track" | "comp",
+    name: string,
+    rows: [string, string][],
+    linkedNote: string,
+  ) =>
+    rows.length > 0 && (
+      <div className="mb-pop-section">
+        <h4>
+          <span className={`sw ${kind}`} aria-hidden="true" />
+          {name}
+        </h4>
+        {facts.linked[kind] ? (
+          <p className="muted">{linkedNote}</p>
+        ) : (
+          <dl className="kv">
+            {rows.map(([k, v], i) => (
+              <Fragment key={i}>
+                <dt>{k}</dt>
+                <dd className={k === "Duration" ? undefined : "mono"}>{v}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        )}
+      </div>
+    );
   return (
-    <span className="chip" title={text} aria-label={text.replace(/\n/g, ". ")}>
-      MB
-    </span>
+    <>
+      <button
+        ref={button}
+        type="button"
+        className="mb-badge mb-button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-pop` : undefined}
+        aria-label={`MusicBrainz data for track ${n}`}
+        onClick={() => setOpen(!open)}
+      >
+        MB
+      </button>
+      {open && (
+        <div
+          ref={dialog}
+          id={`${id}-pop`}
+          className="mb-pop"
+          role="dialog"
+          aria-labelledby={`${id}-head`}
+          tabIndex={-1}
+        >
+          <div className="mb-pop-head">
+            <span className="mb-badge" aria-hidden="true">
+              MB
+            </span>
+            <div>
+              <b id={`${id}-head`}>
+                From MusicBrainz
+                <span className="visually-hidden">, {title || `track ${n}`}</span>
+              </b>
+              <span className="muted">Added only if this row creates the item</span>
+            </div>
+            <button type="button" className="rm" aria-label="Close" onClick={() => close(true)}>
+              ×
+            </button>
+          </div>
+          {section(
+            "track",
+            "Track",
+            facts.track,
+            "This row links an existing track, so these aren't added.",
+          )}
+          {section(
+            "comp",
+            "Composition",
+            facts.comp,
+            "This row links an existing composition, so these aren't added.",
+          )}
+          <div className="mb-pop-foot">
+            <span className="muted">
+              {facts.cited ? "Referenced as stated in MusicBrainz" : ""}
+            </span>
+            {facts.recording && (
+              <a
+                href={`https://musicbrainz.org/recording/${facts.recording}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open recording ↗
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
