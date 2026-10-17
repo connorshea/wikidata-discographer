@@ -3023,6 +3023,49 @@ section.block.locked-step {
   font-size: inherit;
   font-weight: 600;
 }
+/* An existing album's MusicBrainz release group, offered to load. */
+.album-mb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--mb-ink) 30%, transparent);
+  background: var(--mb-tint);
+}
+.album-mb > .mb-badge {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 11.5px;
+  padding: 3px 6px;
+  background: var(--mb-ink);
+  color: var(--mb-tint);
+}
+.album-mb-text {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+.album-mb-text b {
+  font-size: 15px;
+  color: var(--ink);
+}
+.album-mb-text b a {
+  color: var(--mb-ink);
+}
+.album-mb-text span {
+  color: var(--muted);
+}
+.album-mb > button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-weight: 600;
+}
 
 /* Search by name: the field, its state line and the results. */
 .search-field {
