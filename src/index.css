@@ -1412,6 +1412,10 @@ button.link.match-toggle {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* A group with every candidate dismissed is its header alone. */
+.match-head:only-child {
+  padding-bottom: 12px;
+}
 .match-head > button:first-of-type {
   margin-left: auto;
 }
@@ -1421,6 +1425,8 @@ button.link.match-toggle {
   text-decoration: none;
   color: var(--muted);
   padding: 4px;
+  /* Its padding is for the hit area, so it doesn't make the header taller. */
+  margin-block: -4px;
 }
 .match-head button.link:hover {
   color: var(--ink);
