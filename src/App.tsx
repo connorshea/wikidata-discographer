@@ -135,19 +135,43 @@ function NavLink({ href, children }: { href: string; children: string }) {
   );
 }
 
-/** The page's title, with the links between pages and the login control. */
+/** A record, for the wordmark. */
+function RecordIcon() {
+  return (
+    <svg className="record-icon" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+      <circle className="vinyl" cx="14" cy="14" r="13" />
+      <circle className="groove" cx="14" cy="14" r="8.5" />
+      <circle className="label" cx="14" cy="14" r="4.5" />
+      <circle className="hole" cx="14" cy="14" r="1.4" />
+    </svg>
+  );
+}
+
+/** The wordmark, with the links between pages and the login control. */
 function Header() {
   return (
     <header className="top">
-      <div>
-        <h1>Wikidata Discographer</h1>
-        <p className="lede">Turn an album's tracklist into Wikidata items.</p>
-      </div>
-      <nav className="top-nav">
-        <NavLink href="/">Add an album</NavLink>
-        <NavLink href="/albums">Albums</NavLink>
+      <div className="top-inner">
+        <h1 className="wordmark">
+          <Link href="/">
+            <RecordIcon />
+            <span className="name">Discographer</span> <span className="for">for Wikidata</span>
+          </Link>
+        </h1>
+        <nav className="top-nav" aria-label="Pages">
+          <NavLink href="/">New album</NavLink>
+          <NavLink href="/albums">Albums</NavLink>
+          <a
+            href={RECENT_CHANGES_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="Edits made with this tool in the last 30 days"
+          >
+            Recent edits ↗
+          </a>
+        </nav>
         <AuthBar />
-      </nav>
+      </div>
     </header>
   );
 }
@@ -171,15 +195,15 @@ export default function App() {
         <Form />
       </Route>
       <Route path="/albums">
-        <main>
-          <Header />
+        <Header />
+        <main className="page">
           <AlbumList />
           <Footer />
         </main>
       </Route>
       <Route>
-        <main>
-          <Header />
+        <Header />
+        <main className="page">
           <section className="block">
             <h2>Page not found</h2>
             <p className="hint">
@@ -254,63 +278,65 @@ function Form() {
   const reviews = reviewTracks(state.discs, plan.tracks, matches, dismissed);
   const props = { state, update, plan };
   return (
-    <main>
+    <>
       <Header />
-      {stale && (
-        <div className="msg warn row">
-          <span>
-            The form was changed in another tab. Reload to get those changes. Until then this tab
-            can't run, and what you change here isn't saved.
-          </span>
-          <button type="button" onClick={() => location.reload()}>
-            Reload
-          </button>
-        </div>
-      )}
-      <ItemModel />
-      <MusicBrainzImport
-        key={clears}
-        ref={mbImport}
-        state={state}
-        needsConfirm={!isEmpty(state)}
-        onLoad={replace}
-      />
-      <AlbumSection
-        {...props}
-        albumTracklist={albumTracklist}
-        releaseGroup={releaseGroup}
-        onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
-      />
-      <SettingsSection {...props} />
-      <DiscsSection {...props} reviews={reviews} />
-      <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
-      <PerformersSection {...props} />
-      <RunSection
-        {...props}
-        albumTracklist={albumTracklist}
-        unreviewed={reviews.filter((r) => !r.reviewed).length}
-        matchesPending={status === "pending"}
-        formId={formId}
-        stale={stale}
-        onFinished={clear}
-      />
-      <div className="row" style={{ marginBottom: 24 }}>
-        <ConfirmButton
-          className="danger"
-          label="Clear the form"
-          confirm={
-            isEmpty(state)
-              ? null
-              : {
-                  title: "Clear the form?",
-                  body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
-                  action: "Clear the form",
-                }
-          }
-          onConfirm={clear}
+      <main className="page">
+        {stale && (
+          <div className="msg warn row">
+            <span>
+              The form was changed in another tab. Reload to get those changes. Until then this tab
+              can't run, and what you change here isn't saved.
+            </span>
+            <button type="button" onClick={() => location.reload()}>
+              Reload
+            </button>
+          </div>
+        )}
+        <ItemModel />
+        <MusicBrainzImport
+          key={clears}
+          ref={mbImport}
+          state={state}
+          needsConfirm={!isEmpty(state)}
+          onLoad={replace}
         />
-      </div>
-      <Footer />
-    </main>
+        <AlbumSection
+          {...props}
+          albumTracklist={albumTracklist}
+          releaseGroup={releaseGroup}
+          onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
+        />
+        <SettingsSection {...props} />
+        <DiscsSection {...props} reviews={reviews} />
+        <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
+        <PerformersSection {...props} />
+        <RunSection
+          {...props}
+          albumTracklist={albumTracklist}
+          unreviewed={reviews.filter((r) => !r.reviewed).length}
+          matchesPending={status === "pending"}
+          formId={formId}
+          stale={stale}
+          onFinished={clear}
+        />
+        <div className="row" style={{ marginBottom: 24 }}>
+          <ConfirmButton
+            className="danger"
+            label="Clear the form"
+            confirm={
+              isEmpty(state)
+                ? null
+                : {
+                    title: "Clear the form?",
+                    body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
+                    action: "Clear the form",
+                  }
+            }
+            onConfirm={clear}
+          />
+        </div>
+        <Footer />
+      </main>
+    </>
   );
 }

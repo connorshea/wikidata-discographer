@@ -15,6 +15,14 @@
   --rg-edge: #c99a1c;
   --code-bg: #11132a;
   --code-ink: #e6e8f7;
+  /* Neutral fills: pills, the current page in the nav, a pending step. */
+  --tint: #eef0f5;
+  --hover: #e9ebf2;
+  /* Needs attention: an amber dot or pill. */
+  --warn-tint: #fff1d6;
+  --warn-edge: #c98a00;
+  --ok-tint: #e8f4ec;
+  --danger-edge: #e8b4b0;
   /* System fonts only: the CSP allows no third-party requests. */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -37,6 +45,12 @@
     --cmp-edge: #6cc48f;
     --rg-edge: #d9b23e;
     --code-bg: #0a0b17;
+    --tint: #23263f;
+    --hover: #272a47;
+    --warn-tint: #3a2f12;
+    --warn-edge: #c99a2e;
+    --ok-tint: #17301f;
+    --danger-edge: #7a3a36;
   }
 }
 *,
@@ -53,24 +67,58 @@ body {
 a {
   color: var(--accent);
 }
-main {
-  max-width: 1280px;
+.page {
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 28px 18px 64px;
+  padding: 28px 24px 64px;
 }
 header.top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
-h1 {
-  font-size: clamp(1.6rem, 3.4vw, 2.2rem);
-  line-height: 1.15;
-  margin: 0 0 6px;
-  font-weight: 700;
+.top-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 24px;
+  min-height: 64px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
+}
+h1.wordmark {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+}
+.wordmark a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.wordmark .name {
+  font-weight: 750;
   letter-spacing: -0.01em;
+}
+.wordmark .for {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.record-icon .vinyl {
+  fill: #15171f;
+}
+.record-icon .groove {
+  fill: none;
+  stroke: #3a3e4c;
+}
+.record-icon .label {
+  fill: var(--accent);
+}
+.record-icon .hole {
+  fill: #ffffff;
 }
 h2 {
   font-size: 1.15rem;
@@ -90,11 +138,6 @@ h3.sub i {
   height: 10px;
   border-radius: 2px;
   display: inline-block;
-}
-p.lede {
-  color: var(--muted);
-  margin: 0 0 14px;
-  max-width: 72ch;
 }
 .flow {
   list-style: none;
@@ -746,20 +789,35 @@ table.performers th .count {
   color: var(--muted);
 }
 .auth-bar {
+  margin-left: auto;
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.auth-bar .user {
+  font-weight: 600;
 }
 .top-nav {
   display: flex;
-  gap: 16px;
-  align-items: center;
+  gap: 4px;
   flex-wrap: wrap;
+}
+.top-nav a {
+  padding: 10px 12px;
+  border-radius: 7px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--muted);
+}
+.top-nav a:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 .top-nav a[aria-current="page"] {
   color: var(--ink);
-  font-weight: 600;
-  text-decoration: none;
+  background: var(--tint);
 }
 /* The album list: an album per row, its earlier runs folded under the latest. */
 table.album-list td {
@@ -1049,8 +1107,11 @@ footer {
   }
 }
 @media (max-width: 560px) {
-  main {
-    padding: 18px 12px 48px;
+  .page {
+    padding: 18px 16px 48px;
+  }
+  .top-inner {
+    padding: 8px 16px;
   }
   section.block {
     padding: 14px;
