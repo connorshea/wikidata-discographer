@@ -102,9 +102,16 @@ export default function PlanPanel({
           <div className="card">
             <div className="kicker">This will create…</div>
             {nothing ? (
-              <p className="hint">
-                Nothing yet. Pick an album and add a tracklist to see what will be created.
-              </p>
+              <div className="plan-empty">
+                <svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true">
+                  <circle className="disc" cx="28" cy="28" r="26" />
+                  <circle className="groove" cx="28" cy="28" r="18" />
+                  <circle className="groove" cx="28" cy="28" r="12" />
+                  <circle className="label" cx="28" cy="28" r="6" />
+                  <circle className="hole" cx="28" cy="28" r="1.6" />
+                </svg>
+                <p>Nothing yet. Pick an album and add a tracklist to see what will be created.</p>
+              </div>
             ) : (
               <ul className="counts">
                 {counts.map((c) => (
