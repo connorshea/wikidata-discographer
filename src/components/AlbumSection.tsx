@@ -110,23 +110,24 @@ export default function AlbumSection({
           )}
           {/* Not once it's loaded, but still if it was only typed in for a new album. */}
           {releaseGroup && !loadedReleaseGroup(state, releaseGroup) && (
-            <div className="msg summary row">
-              <span>
-                This album is on{" "}
-                <a
-                  href={`https://musicbrainz.org/release-group/${releaseGroup}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  MusicBrainz
-                </a>
-                . Load it from there to fill in the tracklist, performers and IDs.
+            <div className="album-mb" role="region" aria-labelledby="album-mb-head">
+              <span className="mb-badge" aria-hidden="true">
+                MB
               </span>
-              <button
-                type="button"
-                className="small"
-                onClick={() => onLoadReleaseGroup(releaseGroup, A.qid)}
-              >
+              <div className="album-mb-text">
+                <b id="album-mb-head">
+                  This album is on{" "}
+                  <a
+                    href={`https://musicbrainz.org/release-group/${releaseGroup}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    MusicBrainz ↗
+                  </a>
+                </b>
+                <span>Load it to fill in the tracklist, performers and identifiers.</span>
+              </div>
+              <button type="button" onClick={() => onLoadReleaseGroup(releaseGroup, A.qid)}>
                 Load from MusicBrainz
               </button>
             </div>
