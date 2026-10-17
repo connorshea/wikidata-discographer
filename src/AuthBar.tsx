@@ -31,6 +31,7 @@ export default function AuthBar() {
     return (
       <div className="auth-bar">
         <a
+          className="user"
           href={`${wikiBaseUrl}/wiki/User:${encodeURIComponent(user.username)}`}
           target="_blank"
           rel="noreferrer"

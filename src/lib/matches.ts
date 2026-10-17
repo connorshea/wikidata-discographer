@@ -221,15 +221,14 @@ export interface TrackReview {
   /** The candidates not dismissed. */
   candidates: Candidate[];
   dismissed: number;
-  /** A candidate is used, or none is left to decide on. */
+  /** Every candidate left is used, or its field already holds something else. */
   reviewed: boolean;
 }
 
 /**
- * Each track's candidates and whether it's been reviewed: a candidate is
- * used, or every one is dismissed or has its field filled with something else.
- * A used track's own composition must also be used or dismissed, since the
- * run links the track to the composition field.
+ * Each track's candidates and whether it's been reviewed: every candidate is
+ * used, dismissed or has its field filled with something else. Using one
+ * doesn't settle the rest, so a reused single still leaves its composition open.
  */
 export function reviewTracks(
   discs: readonly Disc[],
@@ -260,19 +259,13 @@ export function reviewTracks(
       );
       if (!all.length) continue;
       const candidates = all.filter((c) => !dismissed.has(c.id));
-      const recorded = (
-        all.find((c) => c.slot === "track" && c.used)?.match as TrackMatch | undefined
-      )?.composition;
-      const compOpen = candidates.some(
-        (c) => c.slot === "comp" && c.match.qid === recorded && !c.used,
-      );
       out.push({
         di,
         n: r.n,
         title: r.title,
         candidates,
         dismissed: all.length - candidates.length,
-        reviewed: !compOpen && (all.some((c) => c.used) || candidates.every((c) => c.taken)),
+        reviewed: candidates.every((c) => c.used || c.taken),
       });
     }
   });
@@ -296,4 +289,125 @@ export function withoutDismissed(
     };
   }
   return out;
+}
+
+/** Where a row went, as its disc index and track number, or null if it's gone. */
+export type RowMove = (di: number, n: number) => readonly [number, number] | null;
+
+/** The rows of disc `di` were renumbered, `moved` mapping old track numbers to new. */
+export const renumberedRows =
+  (di: number, moved: ReadonlyMap<number, number>): RowMove =>
+  (d, n) => {
+    if (d !== di) return [d, n];
+    const to = moved.get(n);
+    return to === undefined ? null : [d, to];
+  };
+
+/** Disc `di` was removed, so the discs after it move down one. */
+export const removedDisc =
+  (di: number): RowMove =>
+  (d, n) =>
+    d < di ? [d, n] : d === di ? null : [d - 1, n];
+
+/**
+ * An id that starts with its row's disc index and track number ("0:3:comp:Q1",
+ * "0:3"), following the row, or null if the row is gone.
+ */
+export function moveRowId(id: string, move: RowMove): string | null {
+  const [d, n, ...rest] = id.split(":");
+  const to = move(Number(d), Number(n));
+  return to && [...to, ...rest].join(":");
+}
+
+/** Ids kept by row (see `moveRowId`), following their rows. Those of rows that are gone are dropped. */
+export function moveRowIds(ids: Iterable<string>, move: RowMove): Set<string> {
+  const next = new Set<string>();
+  for (const id of ids) {
+    const to = moveRowId(id, move);
+    if (to !== null) next.add(to);
+  }
+  return next;
+}
+
+/**
+ * The candidates "Dismiss all" takes out of a track's group: every one left
+ * that isn't used.
+ */
+export const dismissAllIds = (r: TrackReview): string[] =>
+  r.candidates.filter((c) => !c.used).map((c) => c.id);
+
+/** How the review stands, for the Possible matches header and its collapsed summary. */
+export interface ReviewSummary {
+  tracks: number;
+  reviewed: number;
+  /** Candidates used. */
+  reused: number;
+  /** Candidates dismissed. */
+  dismissed: number;
+}
+
+export function reviewSummary(reviews: readonly TrackReview[]): ReviewSummary {
+  return {
+    tracks: reviews.length,
+    reviewed: reviews.filter((r) => r.reviewed).length,
+    reused: reviews.reduce((sum, r) => sum + r.candidates.filter((c) => c.used).length, 0),
+    dismissed: reviews.reduce((sum, r) => sum + r.dismissed, 0),
+  };
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const andList = (xs: string[]) =>
+  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+
+// The order a reviewed track names what it uses: the track brings the rest along.
+const SLOT_NAMES: [Slot, string][] = [
+  ["track", "track"],
+  ["comp", "composition"],
+  ["single", "single"],
+];
+
+/**
+ * Whether a used candidate was filled in by using the track that records it,
+ * so it's undone with the track rather than on its own.
+ */
+export function comesWithTrack(r: TrackReview, c: Candidate): boolean {
+  if (!c.used || c.slot === "track") return false;
+  return r.candidates.some((t) => {
+    if (t.slot !== "track" || !t.used) return false;
+    const m = t.match as TrackMatch;
+    return c.slot === "comp" ? m.composition === c.match.qid : m.singles.includes(c.match.qid);
+  });
+}
+
+/**
+ * A reviewed track's outcome in a line, e.g. "Using the single, Q3962408" or
+ * "1 dismissed, creating new".
+ */
+export function reviewedLine(r: TrackReview): string {
+  const used = SLOT_NAMES.flatMap(([slot, name]) =>
+    r.candidates.filter((c) => c.slot === slot && c.used).map((c) => ({ name, qid: c.match.qid })),
+  );
+  const dismissed = r.dismissed > 0 ? `${r.dismissed} dismissed` : "";
+  if (used.length) {
+    const what =
+      used.length === 1
+        ? `Using the ${used[0].name}, ${used[0].qid}`
+        : `Using the ${andList(used.map((u) => u.name))}`;
+    return [what, dismissed].filter(Boolean).join(", ");
+  }
+  // Nothing used, so whatever's left has another QID in its field.
+  if (!dismissed) return "Other QIDs are filled in";
+  return `${dismissed}, ${r.candidates.length ? "other QIDs filled in" : "creating new"}`;
+}
+
+/** The review folded into a line, once every track is reviewed, e.g. "Using 4 items, 3 dismissed". */
+export function summaryLine(sum: ReviewSummary): string {
+  return (
+    [
+      sum.reused > 0 && `Using ${plural(sum.reused, "item")}`,
+      sum.dismissed > 0 && `${sum.dismissed} dismissed`,
+    ]
+      .filter(Boolean)
+      .join(", ") || "Other QIDs are filled in"
+  );
 }

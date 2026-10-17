@@ -371,6 +371,22 @@ const creditNames = (credit: MbArtistCredit[]) => [
   ...new Set(credit.map((c) => c.name.trim()).filter(Boolean)),
 ];
 
+const FEATURING = /\b(?:feat|ft)\b\.?|\bfeaturing\b/i;
+
+/**
+ * The names an artist credit lists after "feat.", which credits every name
+ * after it as featured.
+ */
+function creditFeatured(credit: MbArtistCredit[]): string[] {
+  const names = creditNames(credit);
+  const at = credit.findIndex((c) => FEATURING.test(c.joinphrase));
+  if (at === -1) return [];
+  const feat = new Set(credit.slice(at + 1).map((c) => c.name.trim()));
+  // A name credited both before and after it isn't only featured.
+  for (const c of credit.slice(0, at + 1)) feat.delete(c.name.trim());
+  return names.filter((n) => feat.has(n));
+}
+
 /** A MusicBrainz length in milliseconds as whole seconds. */
 const seconds = (ms: number) => Math.round(ms / 1000);
 
@@ -485,10 +501,12 @@ export function releaseToForm(
         if (iswcsOf(t).length > 1) manyIswcs++;
       }
       if (t.length === null) missingLength++;
+      const feat = creditFeatured(t["artist-credit"]);
       return {
         n: t.position,
         title: t.title.trim(),
         artists: creditNames(t["artist-credit"]),
+        ...(feat.length ? { feat } : {}),
         seconds: t.length === null ? null : seconds(t.length),
         mb: ids,
       };
@@ -700,6 +718,7 @@ const joinList = (xs: string[]) =>
 /** The form filled from `form`, keeping the settings other than the date and language. */
 export function applyMbForm(state: State, form: MbForm): State {
   return coerceState({
+    start: "mb",
     settings: { ...state.settings, date: form.date, p407: form.p407, p407Custom: false },
     album: form.album,
     artists: form.artists,

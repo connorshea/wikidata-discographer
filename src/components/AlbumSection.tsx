@@ -1,104 +1,111 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
   albumArtists,
-  ALBUM_CLASSES,
+  albumDescPreview,
   ALBUM_FORMS,
   ALBUM_TYPES,
-  EP_CLASS,
   QID,
   citesMb,
+  EP_CLASS,
   loadedReleaseGroup,
-  STUDIO_ALBUM,
+  setAlbumType,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
-import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
+import { ALBUM_ID_FIELDS, type AlbumIdKey, CLASS_KINDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
-import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
+import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
+import { albumProblem, type ItemLookup } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
+
+/** The album's kind, from its classes on Wikidata: "EP" or "Album". */
+const kindOf = (classes: string[]) =>
+  classes.some((c) => CLASS_KINDS.some(([q, k]) => q === c && k === "ep")) ? "EP" : "Album";
 
 export default function AlbumSection({
   state,
   update,
   plan,
+  found,
   albumTracklist,
+  checked,
   releaseGroup,
   onLoadReleaseGroup,
+  onPickAnother,
 }: SectionProps & {
+  /** The existing album, as Wikidata describes it. */
+  found: ItemLookup | undefined;
   albumTracklist: AlbumTracklist | null;
+  /** Whether Wikidata was asked if the existing album has a tracklist. */
+  checked: boolean;
   /** The existing album's MusicBrainz release group, to suggest loading it. */
   releaseGroup: string | null;
   onLoadReleaseGroup: (mbid: string, album: string) => void;
+  /** Back to the starting-point picker, to pick another album. */
+  onPickAnother: () => void;
 }) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
   const errs = plan.fieldErrs;
-  const lookup = useItemSummaries([A.qid], state.settings.lang);
-  const found = A.mode === "existing" ? lookup(A.qid) : undefined;
   const notAlbum = albumProblem(A.qid, found);
+  const qid = A.qid.trim();
+  const problem = errs.albumQid || notAlbum;
+  const ok = found?.status === "ok" ? found : null;
   return (
-    <section className="block">
-      <h2>Album</h2>
-      <p className="hint">
-        <Pids>
-          All discs belong to this one album. Its tracklist (P658) is added after the tracks are
-          created, along with P2635 number of tracks if an existing album has none, and singles
-          point to it with P13602.
-        </Pids>
-      </p>
-      <div className="row" role="radiogroup" aria-label="Album">
-        {(["existing", "create"] as const).map((mode) => (
-          <label className="c" key={mode}>
-            <input
-              type="radio"
-              name="albumMode"
-              checked={A.mode === mode}
-              onChange={() => update((s) => void (s.album.mode = mode))}
-            />{" "}
-            {mode === "existing" ? "Use an existing album" : "Create a new album"}
-          </label>
-        ))}
+    <section className="block" id="album">
+      <div className="album-head">
+        <h2>
+          <span className="sw" style={{ background: "var(--disc-edge)" }} aria-hidden="true" />
+          Album
+        </h2>
+        <span className="sub">
+          {A.mode === "create"
+            ? "New album"
+            : state.start === "mb"
+              ? "Found on Wikidata through the MusicBrainz release group"
+              : "Existing album"}
+        </span>
       </div>
       {A.mode === "existing" ? (
-        <div style={{ marginTop: 12 }}>
-          <div className="grid">
-            <label className="f">
-              <span>
-                Album QID
-                {found?.status === "ok" && (
-                  <>
-                    {" · "}
-                    <a href={`${wikiBaseUrl}/wiki/${A.qid}`} target="_blank" rel="noreferrer">
-                      View {found.label ? `“${found.label}”` : A.qid} on Wikidata
-                    </a>
-                  </>
-                )}
-              </span>
-              <QidInput
-                id="albumQid"
-                placeholder="Q…"
-                value={A.qid}
-                aria-invalid={!!errs.albumQid || !!notAlbum}
-                onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
-              />
-              <span className="sub">
-                {found?.status === "ok" && found.description
-                  ? found.description
-                  : "Q-number or Wikidata URL"}
-              </span>
-              <FieldErr id="albumQid" msg={errs.albumQid ?? notAlbum ?? undefined} />
-            </label>
+        <>
+          <div className={`album-card${problem || albumTracklist ? " bad" : ""}`}>
+            <div className="album-card-text">
+              <div className="album-card-title">
+                {qid && <span className="qid-chip mono">{qid}</span>}
+                <b>{ok?.label ?? (found?.status === "loading" ? "Loading…" : "")}</b>
+              </div>
+              {ok?.description && <div className="muted">{ok.description}</div>}
+              {ok && !notAlbum && (
+                <ul className="pills" aria-label="About this album">
+                  <li className="pill">{kindOf(ok.classes)}</li>
+                  {checked && !albumTracklist && <li className="pill ok">No tracklist yet</li>}
+                </ul>
+              )}
+            </div>
+            {QID.test(qid) && (
+              <a
+                className="album-card-link"
+                href={`${wikiBaseUrl}/wiki/${qid}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open on Wikidata ↗
+              </a>
+            )}
           </div>
-          {albumTracklist && (
-            <p className="msg err">
-              <WikiLink base={wikiBaseUrl} qid={albumTracklist.qid} /> already has a tracklist with{" "}
-              {albumTracklist.tracks.length} track
-              {albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs
-              twice, so the run is disabled. Use an album without a tracklist.
+          {(problem || albumTracklist) && (
+            <p className="album-err" id="albumQid-err">
+              <span>
+                {albumTracklist
+                  ? `This album already has a tracklist with ${albumTracklist.tracks.length} track${albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs twice, so it can't be used.`
+                  : problem}{" "}
+                <button type="button" className="link" onClick={onPickAnother}>
+                  Pick a different album
+                </button>
+              </span>
             </p>
           )}
           {/* Not once it's loaded, but still if it was only typed in for a new album. */}
@@ -124,9 +131,10 @@ export default function AlbumSection({
               </button>
             </div>
           )}
-        </div>
+        </>
       ) : (
-        <div style={{ marginTop: 12 }}>
+        <div className="album-new">
+          <Duplicates state={state} update={update} />
           <div className="grid">
             <label className="f">
               Title
@@ -134,127 +142,178 @@ export default function AlbumSection({
                 type="text"
                 value={A.title}
                 aria-invalid={!!errs.albumTitle}
+                aria-describedby="albumTitle-err"
                 onChange={(e) => update((s) => void (s.album.title = e.target.value))}
               />
-              <span className="sub">
-                <Pids>Label and P1476</Pids>
-              </span>
               <FieldErr id="albumTitle" msg={errs.albumTitle} />
             </label>
-            <AlbumArtists state={state} update={update} error={errs.albumArtists} />
+            <ArtistChips state={state} update={update} error={errs.albumArtists} />
+            <AlbumTypeSelect state={state} update={update} />
             <label className="f">
-              <Pids>Instance of (P31)</Pids>
-              <select
-                value={A.type}
-                onChange={(e) =>
-                  update((s) => {
-                    s.album.type = e.target.value;
-                    // An EP isn't a studio album, so switching to EP drops that form.
-                    if (s.album.type === EP_CLASS && s.album.form === STUDIO_ALBUM)
-                      s.album.form = "";
-                  })
-                }
-              >
-                {ALBUM_TYPES.map(([q, l]) => (
-                  <option key={q} value={q}>{`${l} (${q})`}</option>
-                ))}
-              </select>
-            </label>
-            <label className="f">
-              <Pids>Form of creative work (P7937)</Pids>
+              Form
               <select
                 value={A.form}
                 onChange={(e) => update((s) => void (s.album.form = e.target.value))}
               >
                 <option value="">None</option>
                 {ALBUM_FORMS.map(([q, l]) => (
-                  <option key={q} value={q}>{`${l} (${q})`}</option>
+                  <option key={q} value={q}>
+                    {l[0].toUpperCase() + l.slice(1)}
+                  </option>
                 ))}
               </select>
             </label>
-            <div className="f">
-              <div className="f-head">
-                <label htmlFor="albumDesc">Description template</label>
-                <InfoTip id="albumDesc">
-                  Write the description as plain text. Anything else in braces is an error.
-                  <dl>
-                    <dt>{"{year}"}</dt>
-                    <dd>
-                      Year of the publication date in Item settings. Needs a publication date.
-                    </dd>
-                    <dt>{"{type}"}</dt>
-                    <dd>
-                      The form, e.g. “studio album”, or “album” or “EP” when there's no form. An EP
-                      says “EP” in place of “album”, e.g. “live EP”.
-                    </dd>
-                    <dt>{"{artists}"}</dt>
-                    <dd>The album artists, joined like “A, B and C”.</dd>
-                  </dl>
-                </InfoTip>
-              </div>
-              <input
-                id="albumDesc"
-                type="text"
-                value={state.settings.albumDesc}
-                onChange={(e) => update((s) => void (s.settings.albumDesc = e.target.value))}
-              />
-              <FieldErr id="albumDesc" msg={errs.albumDesc} />
-            </div>
-            {ALBUM_ID_FIELDS.map((f) => (
-              <label className="f" key={f.key}>
-                <Pids>{`${f.label} (${f.property})`}</Pids>
-                <input
-                  type="text"
-                  spellCheck={false}
-                  value={A.ids[f.key]}
-                  aria-invalid={!!errs[`albumId-${f.key}`]}
-                  onChange={(e) =>
-                    update(
-                      (s) => void (s.album.ids[f.key] = normalizeAlbumId(f.key, e.target.value)),
-                    )
-                  }
-                />
-                <span className="sub">
-                  Optional. ID or URL, checked for duplicates.
-                  {citesMb(state, A.mb?.ids[f.key], A.ids[f.key].trim()) &&
-                    " From MusicBrainz, so it gets a MusicBrainz reference while it stays the same."}
-                </span>
-                <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
-              </label>
-            ))}
           </div>
-          <p className="hint" style={{ marginTop: 10 }}>
+          <div className="f">
+            <div className="f-head">
+              <label htmlFor="albumDesc">Description</label>
+              <InfoTip id="albumDesc">
+                Write the description as plain text. Anything else in braces is an error.
+                <dl>
+                  <dt>{"{year}"}</dt>
+                  <dd>Year of the publication date in Item settings. Needs a publication date.</dd>
+                  <dt>{"{type}"}</dt>
+                  <dd>
+                    The form, e.g. “studio album”, or “album” or “EP” when there's no form. An EP
+                    says “EP” in place of “album”, e.g. “live EP”.
+                  </dd>
+                  <dt>{"{artists}"}</dt>
+                  <dd>The album artists, joined like “A, B and C”.</dd>
+                </dl>
+              </InfoTip>
+            </div>
+            <div className="album-desc">
+              <div>
+                <input
+                  id="albumDesc"
+                  type="text"
+                  className="mono"
+                  value={state.settings.albumDesc}
+                  aria-invalid={!!errs.albumDesc}
+                  aria-describedby="albumDesc-preview albumDesc-err"
+                  onChange={(e) => update((s) => void (s.settings.albumDesc = e.target.value))}
+                />
+                <FieldErr id="albumDesc" msg={errs.albumDesc} />
+              </div>
+              <span className="desc-preview" id="albumDesc-preview">
+                <span className="visually-hidden">Preview: </span>
+                {albumDescPreview(state)}
+              </span>
+            </div>
+          </div>
+          <AlbumIds state={state} update={update} plan={plan} />
+          <p className="hint">
             <Pids>
               The album is created first with P31, P7937, P1476, P175, P577 (publication date),
               P407, the identifiers above, and P2635 number of tracks: one statement per disc
               qualified with its part when every disc has a part, otherwise one total.
             </Pids>
           </p>
-          <Duplicates state={state} update={update} />
         </div>
       )}
     </section>
   );
 }
 
-/**
- * Why an existing album's QID can't be used, or null if it's fine or still
- * being looked up. The run checks this again before it starts.
- */
-function albumProblem(qid: string, found: ItemLookup | undefined): string | null {
-  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
-  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
-  if (found?.status !== "ok" || found.classes.some((c) => ALBUM_CLASSES.has(c))) return null;
-  const name = found.label ? `${qid} (${found.label})` : qid;
-  return found.classes.length === 0
-    ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
-    : `${name} isn't an album or EP. Check the QID.`;
+/** A new album's type, Album or EP. */
+export function AlbumTypeSelect({ state, update }: Pick<SectionProps, "state" | "update">) {
+  return (
+    <label className="f">
+      Type
+      <select
+        value={state.album.type}
+        onChange={(e) => update((s) => setAlbumType(s, e.target.value))}
+      >
+        {ALBUM_TYPES.map(([q]) => (
+          <option key={q} value={q}>
+            {q === EP_CLASS ? "EP" : "Album"}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 /**
+ * A new album's identifiers. The ones a MusicBrainz import filled in show
+ * first, with an MB badge while they still get a MusicBrainz reference. The
+ * rest wait behind "+ N more", unless one of them already has a value.
+ */
+function AlbumIds({ state, update, plan }: SectionProps) {
+  const A = state.album;
+  const errs = plan.fieldErrs;
+  const imported = (key: AlbumIdKey) => !!A.mb && (key === "musicbrainz" || !!A.mb.ids[key]);
+  const [open, setOpen] = useState(() =>
+    ALBUM_ID_FIELDS.some((f) => !imported(f.key) && A.ids[f.key].trim()),
+  );
+  const shown = ALBUM_ID_FIELDS.filter((f) => open || imported(f.key));
+  const more = ALBUM_ID_FIELDS.filter((f) => !shown.includes(f));
+  const fromMb = (key: AlbumIdKey) => {
+    const v = A.ids[key].trim();
+    return key === "musicbrainz"
+      ? A.mode === "create" && !!A.mb && normalizeAlbumId("musicbrainz", v) === A.mb.releaseGroup
+      : citesMb(state, A.mb?.ids[key], v);
+  };
+  const short = (label: string) => label.replace(/ (album|release group|master) ID$/, "");
+  return (
+    <div className="album-ids">
+      <h3 className="kicker">Identifiers</h3>
+      {shown.length > 0 && (
+        <div className="grid">
+          {shown.map((f) => (
+            <label className="f" key={f.key}>
+              <span className="with-badge">
+                {f.label.replace(/ ID$/, "")}
+                {fromMb(f.key) && (
+                  <span
+                    className="mb-badge"
+                    title="From MusicBrainz. Gets a MusicBrainz reference while it stays the same."
+                  >
+                    MB
+                  </span>
+                )}
+              </span>
+              <input
+                type="text"
+                className="mono"
+                spellCheck={false}
+                value={A.ids[f.key]}
+                aria-invalid={!!errs[`albumId-${f.key}`]}
+                aria-describedby={`albumId-${f.key}-err album-ids-sub`}
+                onChange={(e) =>
+                  update((s) => void (s.album.ids[f.key] = normalizeAlbumId(f.key, e.target.value)))
+                }
+              />
+              <FieldErr id={`albumId-${f.key}`} msg={errs[`albumId-${f.key}`]} />
+            </label>
+          ))}
+        </div>
+      )}
+      {more.length > 0 && (
+        <button
+          type="button"
+          className="link ids-more"
+          aria-expanded={false}
+          onClick={() => setOpen(true)}
+        >
+          {shown.length ? `+ ${more.length} more` : "+ Add identifiers"}:{" "}
+          {more.map((f) => short(f.label)).join(", ")}
+        </button>
+      )}
+      <span className="sub" id="album-ids-sub">
+        Optional. Paste an ID or a link. Each one is checked against Wikidata for duplicates.
+      </span>
+    </div>
+  );
+}
+
+const sentence = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+/**
  * Albums in the mirror that share an identifier or the title with the one being
- * created. Once the album artists have QIDs, same-title albums by someone else
- * are left out.
+ * created, strongest first. Once the album artists have QIDs, same-title albums
+ * by someone else are left out. Any identifier match makes it red, and the
+ * first such album gets the primary button.
  */
 function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
   const { wikiBaseUrl } = useAuth();
@@ -286,99 +345,140 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
   }, [key, empty]);
   const matches = !empty && result?.key === key ? result.matches : [];
   if (!matches.length) return null;
-  const byId = matches.some((m) => m.reasons.some(isIdReason));
+  const byId = matches.filter((m) => m.reasons.some(isIdReason)).length;
+  const byTitle = matches.length - byId;
+  const items = (n: number) => (n === 1 ? "1 item has" : `${n} items have`);
   return (
-    <div>
-      <p className={`msg ${byId ? "err" : "warn"}`}>
-        {byId
-          ? "This album is already on Wikidata: an item has the same identifier."
-          : "Albums with this title are already on Wikidata. Check they're not this one."}
-      </p>
-      <ul className="matches">
-        {matches.map((m) => (
-          <li key={m.qid}>
-            <button
-              type="button"
-              className="ghost small"
-              onClick={() =>
-                update((s) => {
-                  s.album.mode = "existing";
-                  s.album.qid = m.qid;
-                })
-              }
-            >
-              Use this album
-            </button>
-            <WikiLink base={wikiBaseUrl} qid={m.qid} />
-            <span>{m.label ?? "(no label)"}</span>
-            <span className="muted">{m.description}</span>
-            <span className="muted">({m.reasons.join(", ")})</span>
-          </li>
-        ))}
+    <div className={`dupes ${byId ? "err" : "warn"}`} role="region" aria-labelledby="dupes-head">
+      <div className="dupes-head">
+        <b id="dupes-head">
+          {byId
+            ? "This album looks like it's already on Wikidata."
+            : matches.length === 1
+              ? "An album with this title is already on Wikidata."
+              : "Albums with this title are already on Wikidata."}
+        </b>
+        <span>
+          {byId
+            ? `${items(byId)} the same identifier${byTitle ? ` and ${byTitle} more ${byTitle === 1 ? "has" : "have"} the same title` : ""}. Use one of these instead of creating a duplicate.`
+            : `Check ${matches.length === 1 ? "it isn't" : "they aren't"} this one before creating a new album.`}
+        </span>
+      </div>
+      <ul className="dupes-list">
+        {matches.map((m, i) => {
+          const id = m.reasons.some(isIdReason);
+          const label = m.label ?? "(no label)";
+          return (
+            <li key={m.qid} className={id ? "dupe id" : "dupe"}>
+              <span className="dupe-text">
+                <span className="dupe-title">
+                  <WikiLink base={wikiBaseUrl} qid={m.qid} />
+                  <b>{label}</b>
+                </span>
+                {m.description && <span className="muted">{m.description}</span>}
+                <ul className="pills" aria-label="Why it matched">
+                  {m.reasons.map((r) => (
+                    <li key={r} className={isIdReason(r) ? "pill bad" : "pill"}>
+                      {sentence(r)}
+                    </li>
+                  ))}
+                </ul>
+              </span>
+              <button
+                type="button"
+                // Ranked strongest first, so an identifier match is always the first one.
+                className={id && i === 0 ? undefined : "ghost"}
+                aria-label={`Use ${label} (${m.qid})`}
+                onClick={() =>
+                  update((s) => {
+                    s.album.mode = "existing";
+                    s.album.qid = m.qid;
+                    // It isn't a new album any more.
+                    if (s.start === "new") s.start = "existing";
+                  })
+                }
+              >
+                Use this album
+              </button>
+            </li>
+          );
+        })}
       </ul>
+      <span className="dupes-foot">None of these? Keep going and a new album will be created.</span>
     </div>
   );
 }
 
 /**
- * A new album's artists, an input each. Focus goes to a row just added, or to
- * the row before one just removed.
+ * A new album's artists as removable chips, then an input that adds one on
+ * Enter (or when it loses focus, so a name typed in isn't lost).
  */
-function AlbumArtists({
+export function ArtistChips({
   state,
   update,
   error,
 }: Pick<SectionProps, "state" | "update"> & { error?: string }) {
-  const rows = state.album.artists.length ? state.album.artists : [""];
-  const listRef = useRef<HTMLDivElement>(null);
-  const focusRow = useRef<number | null>(null);
-  useEffect(() => {
-    if (focusRow.current === null) return;
-    listRef.current?.querySelectorAll("input")[focusRow.current]?.focus();
-    focusRow.current = null;
-  });
+  const id = useId();
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const names = state.album.artists
+    .map((name, i) => ({ name: name.trim(), i }))
+    .filter((a) => a.name);
+  const add = () => {
+    const name = draft.trim();
+    setDraft("");
+    if (!name) return;
+    update((s) => {
+      const kept = s.album.artists.map((a) => a.trim()).filter(Boolean);
+      s.album.artists = kept.includes(name) ? kept : [...kept, name];
+    });
+  };
   return (
-    <div className="f" ref={listRef}>
-      <Pids>Album artists (P175)</Pids>
-      {rows.map((name, i) => (
-        <div className="artist-row" key={i}>
-          <input
-            type="text"
-            value={name}
-            aria-label={`Album artist ${i + 1}`}
-            aria-invalid={!!error}
-            onChange={(e) => update((s) => void (s.album.artists[i] = e.target.value))}
-          />
-          {rows.length > 1 && (
-            <button
-              type="button"
-              className="ghost quiet small"
-              aria-label={`Remove album artist ${i + 1}`}
-              onClick={() => {
-                focusRow.current = Math.max(0, i - 1);
-                update((s) => void s.album.artists.splice(i, 1));
-              }}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
-      <button
-        type="button"
-        className="link add-artist"
-        onClick={() => {
-          focusRow.current = rows.length;
-          update((s) => {
-            // The one input shown for an empty list stands for its first row.
-            if (!s.album.artists.length) s.album.artists.push("");
-            s.album.artists.push("");
-          });
-        }}
+    <div className="f">
+      <label htmlFor={id}>Album artists</label>
+      <div
+        className={`chips${error ? " invalid" : ""}`}
+        onClick={(e) => e.target === e.currentTarget && inputRef.current?.focus()}
       >
-        Add an artist
-      </button>
-      <span className="sub">One name per artist, mapped in Performers</span>
+        {names.length > 0 && (
+          <ul aria-label="Album artists">
+            {names.map(({ name, i }) => (
+              <li className="chip" key={`${i}-${name}`}>
+                {name}
+                <button
+                  type="button"
+                  aria-label={`Remove ${name}`}
+                  onClick={() => {
+                    update((s) => void s.album.artists.splice(i, 1));
+                    inputRef.current?.focus();
+                  }}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <input
+          id={id}
+          ref={inputRef}
+          type="text"
+          value={draft}
+          placeholder={names.length ? "Add another…" : "Add an artist…"}
+          aria-invalid={!!error && !names.length}
+          aria-describedby={`${id}-sub albumArtists-err`}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            add();
+          }}
+          onBlur={add}
+        />
+      </div>
+      <span className="sub" id={`${id}-sub`}>
+        Press Enter to add each one. Linked to Wikidata in Performers.
+      </span>
       <FieldErr id="albumArtists" msg={error} />
     </div>
   );

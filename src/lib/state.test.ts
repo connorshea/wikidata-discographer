@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { coerceState, EMPTY } from "./state.ts";
+import { artistsText, coerceState, EMPTY, parseArtists } from "./state.ts";
 import { EXAMPLE } from "./example.fixture.ts";
 
 describe("coerceState", () => {
@@ -15,6 +15,35 @@ describe("coerceState", () => {
     const s = coerceState(JSON.parse(JSON.stringify(EXAMPLE)));
     expect(s.discs.map((d) => d.tracks)).toEqual(EXAMPLE.discs.map((d) => d.tracks));
     expect(s.artists).toEqual(EXAMPLE.artists);
+  });
+
+  it("ignores the saved settings that are now always on", () => {
+    const s = coerceState({ settings: { duration: false, mbRefs: false, splitArtists: true } });
+    expect(s.settings).toEqual(coerceState(null).settings);
+    expect(s.settings).not.toHaveProperty("duration");
+    expect(s.settings).not.toHaveProperty("mbRefs");
+    expect(s.settings).not.toHaveProperty("splitArtists");
+  });
+
+  it("keeps the starting point, or none when it's mistyped", () => {
+    expect(coerceState({ start: "search" }).start).toBe("search");
+    expect(coerceState({ start: null }).start).toBeNull();
+    expect(coerceState({ start: "nope", album: { qid: "Q1" } }).start).toBeNull();
+  });
+
+  it("gives a form saved before starting points the one it looks started from", () => {
+    expect(coerceState({}).start).toBeNull();
+    expect(coerceState({ album: { qid: "Q1" } }).start).toBe("existing");
+    expect(coerceState({ album: { mode: "create", title: "A" } }).start).toBe("new");
+    expect(coerceState({ settings: { date: "2020-01-01" } }).start).toBe("new");
+    const { start: _, ...saved } = EXAMPLE;
+    expect(coerceState(JSON.parse(JSON.stringify(saved))).start).toBe("existing");
+    const mb = {
+      releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+      release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+      retrieved: "2026-10-04",
+    };
+    expect(coerceState({ album: { qid: "Q1", mb } }).start).toBe("mb");
   });
 
   it("drops mistyped values", () => {
@@ -68,6 +97,24 @@ describe("coerceState", () => {
     for (const bad of [{ release: "x" }, { releaseGroup: 5 }, { retrieved: "2026-02-30" }])
       expect(coerceState({ album: { mb: { ...mb, ...bad } } }).album.mb).toBeNull();
     expect(coerceState({ album: {} }).album.mb).toBeNull();
+  });
+
+  it("keeps featured artists that are among the row's artists", () => {
+    const track = (feat: unknown) =>
+      coerceState({ discs: [{ tracks: [{ n: 1, title: "Song", artists: ["A", "B"], feat }] }] })
+        .discs[0].tracks[0];
+    expect(track(["B", "C", 5]).feat).toEqual(["B"]);
+    expect(track(["C"])).not.toHaveProperty("feat");
+    expect(track("B")).not.toHaveProperty("feat");
+  });
+
+  it("keeps a length typed by hand, even one that isn't valid yet", () => {
+    const tracks = (length: unknown) =>
+      coerceState({
+        discs: [{ tracks: [{ n: 1, title: "Song", artists: [], seconds: 177, length }] }],
+      }).discs[0].tracks;
+    expect(tracks("3:2")[0]).toMatchObject({ seconds: 177, length: "3:2" });
+    expect(tracks(5)[0]).not.toHaveProperty("length");
   });
 
   it("keeps only well-formed tracks and imported identifiers", () => {
@@ -153,7 +200,7 @@ describe("coerceState", () => {
     };
     expect(coerceState({ discs: [disc] }).discs[0].tracks).toEqual([
       { n: 1, title: "Song", artists: ["A", "B"], seconds: 177, mb },
-      { n: 2, title: "Other", artists: ["C", "D"], seconds: null, mb },
+      { n: 2, title: "Other", artists: ["C", "D"], feat: ["D"], seconds: null, mb },
       // Its identifiers were for another title.
       { n: 3, title: "Renamed", artists: ["A"], seconds: 3723, mb: null },
     ]);
@@ -175,5 +222,30 @@ describe("coerceState", () => {
     expect(album(" A & B ", { splitArtists: false })).toEqual(["A & B"]);
     expect(album("")).toEqual([]);
     expect(coerceState({ album: { artists: ["A", 5, ""] } }).album.artists).toEqual(["A", ""]);
+  });
+});
+
+describe("parseArtists", () => {
+  it("splits the names, and keeps those after feat. as featured", () => {
+    expect(parseArtists("A & B")).toEqual({ artists: ["A", "B"] });
+    expect(parseArtists("A, B feat. C & D")).toEqual({
+      artists: ["A", "B", "C", "D"],
+      feat: ["C", "D"],
+    });
+    expect(parseArtists("A ft. B")).toEqual({ artists: ["A", "B"], feat: ["B"] });
+    expect(parseArtists("A featuring A")).toEqual({ artists: ["A"] });
+    expect(parseArtists("Tyler, the Creator feat. B", ["Tyler, the Creator"])).toEqual({
+      artists: ["Tyler, the Creator", "B"],
+      feat: ["B"],
+    });
+    expect(parseArtists("")).toEqual({ artists: [] });
+  });
+
+  it("reads back what artistsText writes", () => {
+    for (const t of [{ artists: ["A", "B"] }, { artists: ["A", "C", "B"], feat: ["C"] }])
+      expect(parseArtists(artistsText(t))).toEqual(
+        t.feat ? { artists: ["A", "B", "C"], feat: ["C"] } : t,
+      );
+    expect(artistsText({ artists: [] })).toBe("");
   });
 });

@@ -39,8 +39,20 @@ export interface MirrorItem {
   description: string | null;
 }
 
+/** A search result. Albums and EPs also say what the mirror knows of their tracklist. */
+export interface SearchItem extends MirrorItem {
+  album?: AlbumFacts;
+}
+
+export interface AlbumFacts {
+  /** How many tracks its tracklist (P658) lists, as of the mirror. */
+  tracks: number;
+  /** Whether it has a MusicBrainz release group ID (P436). */
+  musicBrainz: boolean;
+}
+
 export interface SearchResponse {
-  items: MirrorItem[];
+  items: SearchItem[];
 }
 
 /** Body of POST /api/items/duplicates. */

@@ -122,7 +122,7 @@ async function fail(user: EditUser, err: { code: string; text: string }): Promis
     await deleteTokens(user.id);
     throw new WikidataEditError(
       err.code,
-      "Wikidata no longer accepts this app's authorization for your account; log in again.",
+      "Wikidata no longer accepts this app's authorization for your account. Log in again.",
     );
   }
   // Wikidata is the authority on blocks: one placed since login shows up here
@@ -212,7 +212,7 @@ export async function editRequest(
     if (err instanceof TokenError)
       throw new WikidataEditError(
         "login-required",
-        "Your Wikimedia login has expired or was revoked; log in again to edit.",
+        "Your Wikimedia login has expired or was revoked. Log in again to edit.",
       );
     throw err;
   }
