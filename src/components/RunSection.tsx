@@ -156,6 +156,14 @@ export default function RunSection({
   // The run would create items the last run already made, e.g. it was run
   // from another browser: what the server wants done before it goes on.
   const [recreate, setRecreate] = useState<Recreate | null>(null);
+  const closeRun = useCallback(() => {
+    setCleared(false);
+    setRunId(null);
+    setRun(null);
+    setError(null);
+    setUnknownRun(null);
+    setRecreate(null);
+  }, []);
   // A cleared or replaced form starts with no run on show. A run still going
   // is followed in the background, like any own run.
   useEffect(() => {
@@ -165,13 +173,16 @@ export default function RunSection({
       keepRun.current = false;
       return;
     }
-    setCleared(false);
-    setRunId(null);
-    setRun(null);
-    setError(null);
-    setUnknownRun(null);
-    setRecreate(null);
-  }, [formId]);
+    closeRun();
+  }, [formId, closeRun]);
+  // Picking a starting point begins the next album, so a finished run on show
+  // closes. A MusicBrainz import replaces the form, which closes it above.
+  const startRef = useRef(state.start);
+  useEffect(() => {
+    const was = startRef.current;
+    startRef.current = state.start;
+    if (was === null && state.start !== null && run && run.status !== "running") closeRun();
+  }, [state.start, run, closeRun]);
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!new URLSearchParams(search).has("run")) return;
