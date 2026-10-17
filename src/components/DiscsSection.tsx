@@ -60,10 +60,9 @@ export default function DiscsSection({
       <p className="hint">
         One tracklist per disc or side, a line per track: <code>1. Title - Artist (3:45)</code>. The
         length is optional. Fill in a composition or track QID to reuse an existing item instead of
-        creating one. Items already on Wikidata with a track's title are listed under Possible
-        matches. A row marked MB has identifiers from a MusicBrainz import, kept while its title
-        stays the same. Its ISRCs, ISWCs and track IDs get a MusicBrainz reference, and so does its
-        duration while its length stays the same too.
+        creating one. Items already on Wikidata with a track's title are listed under "Possible
+        matches". A row marked "MB" has identifiers from a MusicBrainz import, kept while its title
+        stays the same.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
@@ -185,7 +184,7 @@ function DiscBlock({
                     item, an instance of single (Q134556) with the track’s title and artists, that
                     lists the track and is taken from the album. Its Edit button sets the new
                     single’s release date, or an existing single’s QID to link that one instead, and
-                    its Discogs master ID. Untick it to remove the single.
+                    its Discogs master ID. Currently, you can only create singles with one track.
                   </InfoTip>
                 </th>
               </tr>
