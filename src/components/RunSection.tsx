@@ -35,6 +35,7 @@ import {
   type EditShare,
   entryKind,
   KIND_EDGES,
+  plannedEdits,
   runEdits,
   runProgress,
   startedAt,
@@ -897,7 +898,10 @@ function RunProgress({
   onClose: () => void;
 }) {
   const { wikiBaseUrl } = useAuth();
-  const info = useMemo(() => runProgress(run), [run]);
+  // Each poll brings a new `run`, but a run's form never changes, so its edits are built once.
+  const [planned, setPlanned] = useState(() => ({ id: run.id, edits: plannedEdits(run) }));
+  if (planned.id !== run.id) setPlanned({ id: run.id, edits: plannedEdits(run) });
+  const info = runProgress(run, planned.id === run.id ? planned.edits : undefined);
   const [all, setAll] = useState(false);
   const done = run.edits.length;
   const running = run.status === "running";

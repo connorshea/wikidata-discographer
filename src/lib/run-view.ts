@@ -91,13 +91,24 @@ const CREATE_SECONDS = 4;
 const EDIT_SECONDS = 3;
 
 /**
+ * The edits a run makes, from the plan built from its form, or null if that
+ * plan isn't the one the server is running. A run's form never changes, so
+ * this needs building once per run, not on every poll.
+ */
+export function plannedEdits(run: Pick<SubmissionInfo, "input" | "total">): PreviewEdit[] | null {
+  const plan = buildPlan(run.input);
+  return plan.ops.length === run.total ? runEdits(plan, run.input) : null;
+}
+
+/**
  * A run's progress by item type. The server's total is the plan built from the
  * run's form (server/submissions.ts), and its log has one entry per operation
  * in order, so the same plan built here says what each entry was and what's next.
  */
-export function runProgress(run: SubmissionInfo): RunProgressInfo {
-  const plan = buildPlan(run.input);
-  const edits = plan.ops.length === run.total ? runEdits(plan, run.input) : null;
+export function runProgress(
+  run: SubmissionInfo,
+  edits: PreviewEdit[] | null = plannedEdits(run),
+): RunProgressInfo {
   const done = run.edits.length;
   const kinds = edits
     ? ORDER.flatMap((kind) => {
