@@ -1946,181 +1946,150 @@ th .info {
 .info dd {
   margin: 0;
 }
-/* Performers: a row per name, its QID, then what that QID points at or what could fit. */
+/* Performers: a row per name, unlinked ones open with a QID input, linked ones a line each. */
 .perf-top {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: center;
+  gap: 8px 12px;
 }
 .perf-top h2 {
   margin: 0;
 }
-.perf-count {
-  font-size: 14px;
+button.perf-add {
+  margin-left: auto;
 }
-.perf-bar {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--tint);
-  overflow: hidden;
-}
-.perf-bar > div {
-  height: 100%;
-  background: var(--ok);
-}
-.perf-rows {
-  margin-top: 6px;
-}
-.perf-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(150px, 190px) minmax(240px, 2fr);
-  gap: 12px 18px;
-  align-items: start;
-  padding: 16px 0;
-  border-top: 1px solid var(--tint);
-}
-@media (max-width: 720px) {
-  .perf-row {
-    grid-template-columns: 1fr;
-  }
-}
-.perf-name {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.perf-name b {
-  font-size: 16px;
-}
-label.perf-qid {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--muted);
-}
-label.perf-qid input {
-  width: 100%;
-  font-size: 15px;
-  color: var(--ink);
-}
-/* Lined up with the QID input, under its label. */
-.perf-result {
-  min-width: 0;
-  padding-top: 21px;
-}
-@media (max-width: 720px) {
-  .perf-result {
-    padding-top: 0;
-  }
-}
-.perf-result > p {
+.perf-added {
   margin: 0;
   font-size: 14px;
 }
-.perf-state {
+.perf-rows > div + div {
+  border-top: 1px solid var(--tint);
+}
+.perf-row {
+  display: grid;
+  grid-template-columns: 18px minmax(150px, 1fr) minmax(0, 2.2fr);
+  gap: 12px 14px;
+  align-items: start;
+  padding: 14px 0;
+}
+.perf-row.linked {
+  gap: 4px 14px;
+  align-items: center;
   padding: 10px 0;
 }
-.perf-linked {
+@media (max-width: 720px) {
+  .perf-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .perf-row > :nth-child(3) {
+    grid-column: 2;
+  }
+}
+.perf-icon {
+  margin-top: 3px;
+}
+.perf-row.linked .perf-icon {
+  margin-top: 0;
+}
+/* A linked row's item, with Change at the end. */
+.perf-line {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: var(--ok-tint);
+  align-items: center;
+  gap: 4px 14px;
+  min-width: 0;
 }
-.perf-linked svg {
-  flex: none;
-  margin-top: 2px;
+.perf-line > :first-child {
+  flex: 1 1 auto;
 }
-.perf-linked circle {
+.perf-line > p {
+  margin: 0;
+}
+.perf-icon .todo {
+  fill: none;
+  stroke: var(--warn-edge);
+  stroke-width: 1.6;
+}
+.perf-icon .done {
   fill: var(--ok);
 }
-.perf-linked path {
+.perf-icon path {
   fill: none;
   stroke: var(--panel);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.perf-linked-text {
+.perf-name {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
-.perf-linked-text a {
+.perf-name b {
   font-weight: 600;
 }
-.perf-linked-text span {
+.perf-name .muted,
+.perf-note {
   font-size: 13px;
-  color: var(--cmp-ink);
 }
-.perf-suggest {
+.perf-pick {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
-.perf-suggest > p {
+.perf-pick input {
+  width: 100%;
+  min-height: 38px;
+  font-size: 14px;
+}
+.perf-pick > p {
   margin: 0;
+}
+.perf-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.perf-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: 14px;
+}
+.perf-item a {
+  font-weight: 600;
+}
+.perf-item .mono {
+  font-size: 12.5px;
+}
+.perf-item > .muted:last-child {
   font-size: 13px;
 }
-.perf-suggest ul {
+.perf-suggest {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .perf-suggest li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 14px;
-  padding: 10px 12px;
+  gap: 6px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
 }
-.perf-suggest-text {
-  flex: 1 1 200px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+.perf-suggest .perf-item {
+  flex: 1 1 240px;
 }
-.perf-suggest-text a {
-  font-weight: 600;
-}
-.perf-suggest-text .mono {
-  font-size: 12.5px;
-}
-.perf-suggest-text > .muted {
-  font-size: 13px;
-}
-.perf-result > p.perf-none {
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: var(--soft-bg);
-  border: 1px dashed var(--line);
-}
-.perf-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--tint);
-}
-.perf-foot p {
-  flex: 1 1 260px;
-  margin: 0;
-  font-size: 14px;
-}
-.perf-none button.link {
+.perf-note button.link {
   font-size: inherit;
 }
 .perf-empty {

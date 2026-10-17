@@ -791,12 +791,15 @@ function CellErr({ id, children }: { id: string; children: string }) {
   );
 }
 
-/** Scroll to a performer's row in Performers and focus its QID. False if it isn't there. */
+/**
+ * Scroll to a performer's row in Performers and focus its QID, or its Change button once it's
+ * linked. False if it isn't there.
+ */
 function goToPerformer(name: string): boolean {
   const row = [...document.querySelectorAll<HTMLElement>("#performers [data-performer]")].find(
     (el) => el.dataset.performer === name,
   );
-  const input = row?.querySelector<HTMLInputElement>("input");
+  const input = row?.querySelector<HTMLElement>("input, .perf-change");
   if (!row || !input) return false;
   row.scrollIntoView({ block: "center" });
   input.focus({ preventScroll: true });
