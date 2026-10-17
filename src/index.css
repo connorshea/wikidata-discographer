@@ -803,20 +803,52 @@ table.album-list td.count {
 }
 .turntable-row {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
   margin-top: 10px;
 }
-.turntable-row .hint {
+.run-status {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.run-status .hint {
   margin: 0;
+}
+.log.recent {
+  margin-top: 6px;
+  max-height: none;
+  overflow: visible;
+}
+.log.recent li {
+  transition: opacity 0.4s ease-out;
+}
+/* Newest first, at the top, and each older one fainter. */
+.log.recent li:nth-child(2) {
+  opacity: 0.75;
+}
+.log.recent li:nth-child(3) {
+  opacity: 0.5;
+}
+.log.recent li:nth-child(4) {
+  opacity: 0.25;
+}
+.log.recent li:first-child {
+  animation: log-in 0.4s ease-out;
+}
+@keyframes log-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 .turntable {
   position: relative;
   flex: none;
-  width: 108px;
+  width: 162px;
   /* Leaves room for the front, which hangs below the tilted top. */
-  padding-bottom: 14px;
-  perspective: 420px;
+  padding-bottom: 21px;
+  perspective: 630px;
 }
 .turntable .deck {
   position: relative;
@@ -826,8 +858,8 @@ table.album-list td.count {
 }
 .turntable svg {
   display: block;
-  width: 108px;
-  height: 90px;
+  width: 162px;
+  height: 135px;
   overflow: visible;
 }
 .turntable .plinth {
@@ -838,20 +870,20 @@ table.album-list td.count {
   top: 100%;
   left: 0;
   right: 0;
-  height: 26px;
+  height: 39px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 18px;
   background: color-mix(in srgb, var(--accent) 38%, var(--panel));
-  border-radius: 0 0 6px 6px;
-  box-shadow: 0 10px 12px -4px rgb(0 0 0 / 0.45);
+  border-radius: 0 0 9px 9px;
+  box-shadow: 0 15px 18px -6px rgb(0 0 0 / 0.45);
   transform-origin: top;
   transform: rotateX(-90deg);
 }
 .turntable .bar {
   flex: 1;
-  height: 5px;
-  border-radius: 3px;
+  height: 7px;
+  border-radius: 4px;
   background: var(--bg);
   overflow: hidden;
 }
@@ -943,20 +975,20 @@ table.album-list td.count {
 }
 .turntable .notes span {
   position: absolute;
-  top: 30px;
-  left: 44px;
+  top: 45px;
+  left: 66px;
   color: var(--accent);
-  font-size: 16px;
+  font-size: 22px;
   opacity: 0;
   pointer-events: none;
   animation: turntable-note 2.4s ease-out infinite;
 }
 .turntable .notes span:nth-child(2) {
-  left: 58px;
+  left: 87px;
   animation-delay: 0.8s;
 }
 .turntable .notes span:nth-child(3) {
-  left: 36px;
+  left: 54px;
   animation-delay: 1.6s;
 }
 @keyframes turntable-spin {
@@ -984,7 +1016,7 @@ table.album-list td.count {
     opacity: 1;
   }
   to {
-    transform: translate(14px, -46px) rotate(15deg);
+    transform: translate(21px, -69px) rotate(15deg);
     opacity: 0;
   }
 }
@@ -1008,6 +1040,10 @@ footer {
   }
   .turntable .bar-fill {
     transition: none;
+  }
+  .log.recent li {
+    transition: none;
+    animation: none;
   }
   .turntable .notes {
     display: none;
