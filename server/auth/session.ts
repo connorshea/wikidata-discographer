@@ -4,7 +4,7 @@
 // `c.get("user")`; `requireUser` gates individual routes.
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { and, eq, lt, notExists } from "drizzle-orm";
+import { and, eq, lt, lte, notExists, or } from "drizzle-orm";
 import { db } from "../db.ts";
 import { oauthTokens, sessions, users } from "../../db/schema.ts";
 import { cookiesSecure } from "./config.ts";
@@ -102,14 +102,21 @@ export async function deleteTokensIfLoggedOut(userId: number): Promise<void> {
 }
 
 /**
- * Remove every session past its absolute expiry, then every OAuth token row
- * whose user has no session left (which also catches sessions that idled out
- * without their cookie ever coming back). Returns the counts.
+ * Remove every session past its absolute expiry or idle for too long (one
+ * whose cookie never came back to be turned away), then every OAuth token row
+ * whose user has no session left. Returns the counts.
  */
 export async function pruneExpiredSessions(
   now = new Date(),
 ): Promise<{ sessions: number; tokens: number }> {
-  const [pruned] = await db.delete(sessions).where(lt(sessions.expiresAt, toSqlDatetime(now)));
+  const [pruned] = await db
+    .delete(sessions)
+    .where(
+      or(
+        lt(sessions.expiresAt, toSqlDatetime(now)),
+        lte(sessions.lastSeenAt, toSqlDatetime(addSeconds(now, -SESSION_IDLE_SECONDS))),
+      ),
+    );
   const [orphaned] = await db
     .delete(oauthTokens)
     .where(
