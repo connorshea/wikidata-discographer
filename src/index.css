@@ -801,9 +801,75 @@ table.album-list td.count {
 .log li.fail {
   color: var(--err);
 }
-progress {
-  width: 100%;
+.turntable-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin-top: 10px;
+}
+.turntable-row .hint {
+  margin: 0;
+}
+.turntable {
+  flex: none;
+  width: 108px;
+  height: 90px;
+}
+.turntable .plinth {
+  fill: color-mix(in srgb, var(--muted) 10%, var(--panel));
+  stroke: var(--line);
+}
+.turntable .record {
+  transform-box: view-box;
+  transform-origin: 50px 52px;
+  /* 33⅓ rpm is one turn every 1.8 seconds. */
+  animation: turntable-spin 1.8s linear infinite;
+}
+.turntable .vinyl {
+  fill: #14151c;
+}
+.turntable .groove {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.09;
+  stroke-width: 0.6;
+}
+.turntable .sheen {
+  fill: #ffffff;
+  fill-opacity: 0.07;
+}
+.turntable .label {
+  fill: var(--accent);
+}
+.turntable .label-mark {
+  fill: var(--accent-ink);
+  fill-opacity: 0.7;
+}
+.turntable .spindle {
+  fill: var(--panel);
+}
+.turntable .tonearm {
+  transform-box: view-box;
+  transform-origin: 106px 10px;
+  transition: transform 0.6s ease-out;
+}
+.turntable .tonearm line {
+  stroke: var(--muted);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.turntable .headshell {
+  fill: var(--muted);
+}
+.turntable .pivot {
+  fill: var(--panel);
+  stroke: var(--muted);
+  stroke-width: 2;
+}
+@keyframes turntable-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 footer {
   color: var(--muted);
@@ -812,6 +878,12 @@ footer {
 }
 @media (prefers-reduced-motion: reduce) {
   .info [role="tooltip"] {
+    transition: none;
+  }
+  .turntable .record {
+    animation: none;
+  }
+  .turntable .tonearm {
     transition: none;
   }
 }

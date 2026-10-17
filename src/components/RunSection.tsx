@@ -532,13 +532,52 @@ function RecreateGuard({
   );
 }
 
+/**
+ * A record spinning while the run goes. The tonearm tracks progress, starting at
+ * the outer groove and reaching the label as the last edit is made.
+ */
+function Turntable({ done, total }: { done: number; total: number }) {
+  const fraction = total > 0 ? Math.min(done / total, 1) : 0;
+  // Arm angles that put the needle on the outer groove and next to the label.
+  const angle = 20 + fraction * 18;
+  return (
+    <svg
+      className="turntable"
+      viewBox="0 0 120 100"
+      role="progressbar"
+      aria-label="Edits made"
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuenow={done}
+      aria-valuetext={`${done} of ${total}`}
+    >
+      <rect className="plinth" x="1" y="1" width="118" height="98" rx="8" />
+      <g className="record">
+        <circle className="vinyl" cx="50" cy="52" r="42" />
+        {[38, 33, 28, 23].map((r) => (
+          <circle key={r} className="groove" cx="50" cy="52" r={r} />
+        ))}
+        <path className="sheen" d="M50 52 L50 12 A40 40 0 0 1 78 24 Z" />
+        <circle className="label" cx="50" cy="52" r="13" />
+        <circle className="label-mark" cx="50" cy="44" r="2" />
+        <circle className="spindle" cx="50" cy="52" r="1.5" />
+      </g>
+      <g className="tonearm" style={{ transform: `rotate(${angle}deg)` }}>
+        <line x1="106" y1="10" x2="106" y2="70" />
+        <rect className="headshell" x="102.5" y="68" width="7" height="9" rx="1.5" />
+      </g>
+      <circle className="pivot" cx="106" cy="10" r="5" />
+    </svg>
+  );
+}
+
 function RunProgress({ run }: { run: SubmissionInfo }) {
   const { wikiBaseUrl } = useAuth();
   const done = run.edits.length;
   return (
     <div>
       <h3 className="sub">
-        {run.title} —{" "}
+        {run.title} ·{" "}
         {run.status === "running"
           ? `${done} of ${run.total}`
           : run.status === "done"
@@ -549,13 +588,15 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
                 ? "stopped, outcome unknown"
                 : "interrupted"}
       </h3>
-      {run.status === "running" && <progress max={run.total} value={done} />}
       {run.status === "running" && (
-        <p className="hint">
-          {run.waitingUntil
-            ? "Waiting a moment before the next edit, so they go out at a steady pace."
-            : "Making the next edit…"}
-        </p>
+        <div className="turntable-row">
+          <Turntable done={done} total={run.total} />
+          <p className="hint">
+            {run.waitingUntil
+              ? "Waiting a moment before the next edit, so they go out at a steady pace."
+              : "Making the next edit…"}
+          </p>
+        </div>
       )}
       {run.error && (
         <p className={`msg ${run.status === "unknown" ? "warn" : "err"}`}>{run.error}</p>
