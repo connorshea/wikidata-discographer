@@ -61,6 +61,33 @@ describe("labelSearchKey", () => {
     expect(key(a)).not.toBe(key(b));
   });
 
+  describe("disambiguators", () => {
+    it.each([
+      ["Coming of Age (song)", "Coming of Age"],
+      ["Pseudologia Fantastica (Song)", "Pseudologia Fantastica"],
+      ["Supermodel (album)", "Supermodel"],
+      ["Torches (Foster the People album)", "Torches"],
+      ["Houdini (2014 song)", "Houdini"],
+      ["Houdini (single)", "Houdini"],
+      ["Cool (EP)", "Cool"],
+      ["Spiegel im Spiegel (composition)", "Spiegel im Spiegel"],
+    ])("drops the one in %j", (a, b) => {
+      expect(key(a)).toBe(key(b));
+    });
+    it("keeps a real title parenthetical", () => {
+      expect(key("Bad Romance (Ra Ra Ra)")).toBe("bad romance ra ra ra");
+      expect(key("Houdini (Elegant Too Remix)")).toBe("houdini elegant too remix");
+      expect(key("Songs (Singles)")).toBe("songs singles");
+    });
+    it("only drops a trailing one, and never the whole title", () => {
+      expect(key("Album (song) Remix")).toBe("album song remix");
+      expect(key("(Song)")).toBe("song");
+    });
+    it("still makes them a similar title, not the same title", () => {
+      expect(sameTitle("Coming of Age (song)", "Coming of Age")).toBe(false);
+    });
+  });
+
   describe("titles that are mostly punctuation", () => {
     it("never fold to an empty key", () => {
       expect(foldTitle("?")).toBe("");

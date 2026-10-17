@@ -39,7 +39,10 @@ describe("assembleMatches", () => {
         singles: ["Q30"],
       },
     ]);
-    expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([["Q20", ["recorded as Q10"]]]);
+    // The composition is also a similar title, but it's reached through a same-title track.
+    expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q20", ["no artist set", "recorded as Q10"]],
+    ]);
     // The single has the title but no artist, and is also on the track.
     expect(rows["0:1"].single.map((m) => [m.qid, m.reasons])).toEqual([
       ["Q30", ["same title", "no artist set", "has Q10 on it"]],
@@ -106,6 +109,23 @@ describe("assembleMatches", () => {
     ]);
     // "Breakup" is a different word, not a folded "Break-Up".
     expect(rows["0:1"].single).toEqual([]);
+  });
+
+  it("matches an item whose label has a disambiguator as a similar title", () => {
+    const items = mapOf(
+      facts("Q15646391", "work", "Coming of Age (song)", { P175: ["Q61113"] }),
+      facts("Q16610295", "single", "Coming of Age (Foster the People song)", { P175: ["Q61113"] }),
+    );
+    const { rows } = assembleMatches([row("Coming of Age", ["Q61113"])], {
+      items,
+      albumTracks: new Set(),
+    });
+    expect(rows["0:1"].comp.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q15646391", ["similar title", "same performer"]],
+    ]);
+    expect(rows["0:1"].single.map((m) => [m.qid, m.reasons])).toEqual([
+      ["Q16610295", ["similar title", "same performer"]],
+    ]);
   });
 
   it("drops the similar title from an item also reached through the same title", () => {
