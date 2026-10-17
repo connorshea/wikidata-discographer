@@ -15,6 +15,7 @@ import {
   type Plan,
   type RowErrs,
   type Settings,
+  type SingleState,
   type Track,
 } from "../lib/plan.ts";
 import { artistsText, emptyDisc, parseArtists } from "../lib/state.ts";
@@ -218,6 +219,30 @@ function DiscBlock({
   if (keys.length !== d.tracks.length)
     setKeys([...keys.slice(0, d.tracks.length), ...d.tracks.slice(keys.length).map(newKey)]);
 
+  // The rows (by key) whose single's fields are open. They open when Single is ticked or
+  // Edit is clicked, and stay open while something is wrong with them.
+  const [singlesOpen, setSinglesOpen] = useState<ReadonlySet<number>>(new Set());
+  const openSingle = (key: number, isOpen: boolean) =>
+    setSinglesOpen((was) => {
+      const next = new Set(was);
+      if (isOpen) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  const singleIssue = (n: number) => {
+    const qid = d.single[n].qid.trim();
+    return [
+      plan.singleErrs[`${di}:${n}`],
+      singleProblem(qid, QID.test(qid) ? lookup(qid) : undefined),
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+  const stuck = rows.findIndex(
+    (r, i) => d.single[r.n] && !singlesOpen.has(keys[i]) && singleIssue(r.n),
+  );
+  if (stuck !== -1) setSinglesOpen(new Set([...singlesOpen, keys[stuck]]));
+
   const table = useRef<HTMLTableElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   // The cell to focus once the rows have changed.
@@ -419,13 +444,15 @@ function DiscBlock({
                   },
                 });
                 const dragging = drag && drag.from !== drag.to;
+                const single = d.single[r.n];
+                const singleOpen = !!single && singlesOpen.has(keys[i]);
                 return (
                   <Fragment key={keys[i]}>
                     <tr
                       data-row={i}
                       className={cls(
-                        d.single[r.n] && "has-sub",
-                        d.single[r.n] && "is-single",
+                        singleOpen && "has-sub",
+                        single && "is-single",
                         dragging && drag.from === i && "dragging",
                         dragging &&
                           drag.to === i &&
@@ -487,6 +514,16 @@ function DiscBlock({
                           />
                           {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
                           <MbBadge n={r.n} title={r.title} facts={mbOf(i)} />
+                          {single && !singleOpen && (
+                            <SinglePill
+                              n={r.n}
+                              single={single}
+                              found={
+                                QID.test(single.qid.trim()) ? lookup(single.qid.trim()) : undefined
+                              }
+                              onEdit={() => openSingle(keys[i], true)}
+                            />
+                          )}
                           <RowArtists
                             n={r.n}
                             track={t}
@@ -539,15 +576,16 @@ function DiscBlock({
                         <input
                           type="checkbox"
                           aria-label={`Track ${r.n} is a single`}
-                          checked={!!d.single[r.n]}
-                          onChange={(e) =>
+                          checked={!!single}
+                          onChange={(e) => {
+                            const ticked = e.target.checked;
                             update((s) => {
                               const disc = s.discs[di];
-                              if (e.target.checked)
-                                disc.single[r.n] = { date: "", qid: "", discogs: "" };
+                              if (ticked) disc.single[r.n] = { date: "", qid: "", discogs: "" };
                               else delete disc.single[r.n];
-                            })
-                          }
+                            });
+                            openSingle(keys[i], ticked);
+                          }}
                         />
                       </td>
                       {manual && (
@@ -564,11 +602,24 @@ function DiscBlock({
                         </td>
                       )}
                     </tr>
-                    {d.single[r.n] && (
+                    {singleOpen && (
                       <tr className="sub-row is-single">
                         <td colSpan={manual ? 2 : 1} />
                         <td colSpan={cols - (manual ? 2 : 1)}>
-                          <SingleRow di={di} n={r.n} {...{ lookup, state, update, plan }} />
+                          <SinglePanel
+                            di={di}
+                            n={r.n}
+                            title={r.title}
+                            issue={singleIssue(r.n)}
+                            found={
+                              QID.test(single.qid.trim()) ? lookup(single.qid.trim()) : undefined
+                            }
+                            onDone={() => {
+                              openSingle(keys[i], false);
+                              setFocusNext({ row: i, col: "single-edit" });
+                            }}
+                            {...{ state, update }}
+                          />
                         </td>
                       </tr>
                     )}
@@ -933,148 +984,180 @@ function LinksCell({
   );
 }
 
+/** A track's single once its fields are done: "Single · date", or the single it reuses, and Edit. */
+function SinglePill({
+  n,
+  single: sg,
+  found,
+  onEdit,
+}: {
+  n: number;
+  single: SingleState;
+  found: ItemLookup | undefined;
+  onEdit: () => void;
+}) {
+  const { wikiBaseUrl } = useAuth();
+  const qid = sg.qid.trim();
+  return (
+    <span className="single-pill">
+      <i aria-hidden="true" />
+      {QID.test(qid) ? (
+        <span>
+          Single · <WikiLink base={wikiBaseUrl} qid={qid} />
+          {found?.status === "ok" && found.label && ` ${found.label}`}
+          {found?.status === "loading" && <span className="muted"> · looking it up…</span>}
+          {found?.status === "failed" && (
+            <span className="muted"> · couldn’t look it up on Wikidata</span>
+          )}
+        </span>
+      ) : (
+        <span>Single · {sg.date.trim()}</span>
+      )}
+      <button
+        type="button"
+        className="link"
+        data-col="single-edit"
+        aria-label={`Edit single for track ${n}`}
+        onClick={onEdit}
+      >
+        Edit
+      </button>
+    </span>
+  );
+}
+
 /**
- * A track's single, on its own row under the track: a one-line summary, or
- * its fields once Edit is clicked. The fields stay open while something is
- * wrong with them, and Done only closes them once nothing is.
+ * A track's single's fields, on their own row under the track: a release
+ * date for a new single or an existing single's QID, and its Discogs master
+ * ID. Done only closes them once nothing is wrong with them.
  */
-function SingleRow({
+function SinglePanel({
   di,
   n,
-  lookup,
+  title,
+  issue,
+  found,
+  onDone,
   state,
   update,
-  plan,
-}: SectionProps & { di: number; n: number; lookup: Lookup }) {
-  const { wikiBaseUrl } = useAuth();
+}: Pick<SectionProps, "state" | "update"> & {
+  di: number;
+  n: number;
+  title: string;
+  /** What's wrong with the fields, or "". */
+  issue: string;
+  found: ItemLookup | undefined;
+  onDone: () => void;
+}) {
   const sg = state.discs[di].single[n];
   const qid = sg.qid.trim();
   const date = sg.date.trim();
   const discogs = sg.discogs.trim();
-  const found = QID.test(qid) ? lookup(qid) : undefined;
-  const notSingle = singleProblem(qid, found);
-  const problem = [plan.singleErrs[`${di}:${n}`], notSingle].filter(Boolean).join(" ");
-  const [editing, setEditing] = useState(false);
-  if (problem && !editing) setEditing(true);
-  const open = editing || !!problem;
-
-  const editRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const wasOpen = useRef(open);
+  const ids = useId();
+  const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (open === wasOpen.current) return;
-    wasOpen.current = open;
-    // Focus follows Edit and Done, not a problem opening the fields.
-    if (open && editing)
-      panelRef.current?.querySelector<HTMLInputElement>("input:enabled")?.focus();
-    if (!open) editRef.current?.focus();
-  }, [open, editing]);
+    panel.current?.querySelector<HTMLInputElement>("input:enabled")?.focus();
+  }, []);
+  const blank = qid === "" && date === "" && discogs === "";
+  const existing = QID.test(qid);
 
-  const discogsNote = discogs && <span className="muted"> · Discogs master {discogs}</span>;
-  if (!open)
-    return (
-      <div className="single-summary">
-        <span className="single-label">
-          <i />
-          Single
-        </span>
-        {QID.test(qid) ? (
+  return (
+    <div className="single-panel" ref={panel}>
+      <div className="single-head">
+        <span className="sw" aria-hidden="true" />
+        {existing ? (
           <span>
-            Reusing <WikiLink base={wikiBaseUrl} qid={qid} />
-            {found?.status === "ok" && found.label && (
-              <>
-                {" "}
-                <b>{found.label}</b>
-              </>
-            )}
-            {found?.status === "ok" && found.description && (
-              <span className="muted"> · {found.description}</span>
-            )}
-            {found?.status === "loading" && <span className="muted"> · looking it up…</span>}
-            {found?.status === "failed" && (
-              <span className="muted"> · couldn’t look it up on Wikidata</span>
-            )}
-            {discogsNote}
+            Existing single{found?.status === "ok" && found.label ? ` · ${found.label}` : ""}
           </span>
         ) : (
-          <span>
-            New single <span className="muted">· released {date}</span>
-            {discogsNote}
-          </span>
+          <span>New single{title ? ` · ${title}` : ""}</span>
         )}
-        <button
-          ref={editRef}
-          type="button"
-          className="link"
-          aria-label={`Edit single for track ${n}`}
-          onClick={() => setEditing(true)}
-        >
-          Edit
-        </button>
+        <span className="muted">· lists this track, taken from the album</span>
       </div>
-    );
-  return (
-    <div className="single-panel" ref={panelRef}>
-      <label className="f">
-        <Pids>Release date (P577)</Pids>
-        <input
-          type="text"
-          className="date"
-          spellCheck={false}
-          placeholder={qid ? "Not for an existing single" : "YYYY-MM-DD"}
-          aria-invalid={date !== "" && !parseDate(date).ok}
-          disabled={qid !== "" && date === ""}
-          value={sg.date}
-          onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
-          onBlur={(e) =>
-            update((s) => void (s.discs[di].single[n].date = normalizeDate(e.target.value)))
-          }
-        />
-      </label>
-      <label className="f">
-        Existing single
-        <QidInput
-          placeholder={date ? "Clear the date to reuse one" : "Q… to reuse one"}
-          aria-invalid={(qid !== "" && !QID.test(qid)) || !!notSingle}
-          disabled={date !== "" && qid === ""}
-          value={sg.qid}
-          onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
-        />
-      </label>
-      <label className="f">
-        <Pids>{`${DISCOGS_FIELD.label} (${DISCOGS_FIELD.property})`}</Pids>
-        <input
-          type="text"
-          className="ext-id"
-          spellCheck={false}
-          placeholder="Optional, ID or URL"
-          aria-invalid={discogs !== "" && !DISCOGS_FIELD.pattern.test(discogs)}
-          value={sg.discogs}
-          onChange={(e) =>
-            update(
-              (s) =>
-                void (s.discs[di].single[n].discogs = normalizeAlbumId("discogs", e.target.value)),
-            )
-          }
-        />
-      </label>
-      <button
-        type="button"
-        className="ghost small"
-        aria-label={`Done editing single for track ${n}`}
-        onClick={() => !problem && setEditing(false)}
-      >
-        Done
-      </button>
+      <div className="single-fields">
+        <label className="f">
+          Release date
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder={qid ? "Not for an existing single" : "YYYY-MM-DD"}
+            aria-invalid={date !== "" && !parseDate(date).ok}
+            aria-describedby={issue && !blank ? `${ids}-err` : undefined}
+            disabled={qid !== "" && date === ""}
+            value={sg.date}
+            onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
+            onBlur={(e) =>
+              update((s) => void (s.discs[di].single[n].date = normalizeDate(e.target.value)))
+            }
+          />
+        </label>
+        <label className="f">
+          Or an existing single
+          <QidInput
+            className="qid"
+            placeholder={date ? "Clear the date to reuse one" : "Q… to reuse one"}
+            aria-invalid={(qid !== "" && !QID.test(qid)) || found?.status === "missing"}
+            aria-describedby={issue && !blank ? `${ids}-err` : undefined}
+            disabled={date !== "" && qid === ""}
+            value={sg.qid}
+            onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
+          />
+        </label>
+        <label className="f">
+          {DISCOGS_FIELD.label}
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="Optional, ID or URL"
+            aria-invalid={discogs !== "" && !DISCOGS_FIELD.pattern.test(discogs)}
+            value={sg.discogs}
+            onChange={(e) =>
+              update(
+                (s) =>
+                  void (s.discs[di].single[n].discogs = normalizeAlbumId(
+                    "discogs",
+                    e.target.value,
+                  )),
+              )
+            }
+          />
+        </label>
+      </div>
       {/* Just ticked: say what to fill in rather than show an error. */}
-      {qid === "" && date === "" && discogs === "" && (
+      {blank && (
         <p className="single-hint muted">Enter its release date, or an existing single's QID.</p>
       )}
-      {problem && (qid !== "" || date !== "" || discogs !== "") && (
-        <p className="field-err" aria-live="polite">
-          {problem}
+      {issue && !blank && (
+        <p className="field-err" id={`${ids}-err`} aria-live="polite">
+          {issue}
         </p>
       )}
+      <div className="single-foot">
+        <span className="single-note">
+          {!existing && "Uses the track's title and artists."}
+          <span className="warn-note">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M7 3.8v3.6M7 9.6v.2"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+            Singles can only have one track for now.
+          </span>
+        </span>
+        <button
+          type="button"
+          className="ghost small"
+          aria-label={`Done editing single for track ${n}`}
+          aria-disabled={!!issue}
+          onClick={() => !issue && onDone()}
+        >
+          Done
+        </button>
+      </div>
     </div>
   );
 }

@@ -13,6 +13,9 @@
   --trk-edge: #4553c4;
   --cmp-edge: #2e8150;
   --rg-edge: #c99a1c;
+  /* A done single's pill. */
+  --rg-tint: #fbf1d3;
+  --rg-ink: #5e4708;
   --code-bg: #11132a;
   --code-ink: #e6e8f7;
   /* Neutral fills: pills, the current page in the nav, a pending step. */
@@ -65,6 +68,8 @@
     --trk-edge: #8c98f2;
     --cmp-edge: #6cc48f;
     --rg-edge: #d9b23e;
+    --rg-tint: #3a3115;
+    --rg-ink: #f0d58a;
     --code-bg: #0a0b17;
     --tint: #23263f;
     --hover: #272a47;
@@ -930,16 +935,14 @@ button.link.who-edit {
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
-  opacity: 0;
 }
-tr:hover button.who-edit,
-button.who-edit:focus-visible,
-button.who-edit.shown {
-  opacity: 1;
-}
-@media (hover: none) {
-  button.link.who-edit {
-    opacity: 1;
+/* Folded away, but still in the tab order, until its row is hovered or has focus. */
+@media (hover: hover) {
+  tr:not(:hover, :focus-within) button.link.who-edit:not(.shown) {
+    max-width: 0;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
   }
 }
 a.who-chip {
@@ -1317,62 +1320,112 @@ button.ghost.quiet {
   color: var(--muted);
   border-color: var(--line);
 }
-/* A single's one-line summary, and its fields once Edit is clicked. */
-.single-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  align-items: center;
-}
-.single-label {
+/* A track's single: a pill by its title once it's done, and its fields under the row. */
+.single-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
+  background: var(--rg-tint);
+  color: var(--rg-ink);
+  font-size: 12.5px;
   font-weight: 600;
 }
-.single-label i {
-  width: 9px;
-  height: 9px;
+.single-pill i {
+  flex: none;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
   background: var(--rg-edge);
 }
-.single-summary a {
+.single-pill a {
+  color: inherit;
   font-family: var(--mono);
+}
+.single-pill button.link {
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
 }
 .single-panel {
   display: flex;
-  width: fit-content;
+  flex-direction: column;
+  gap: 12px;
   max-width: 100%;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  align-items: flex-end;
-  margin-bottom: 6px;
-  padding: 10px 12px;
+  margin-bottom: 8px;
+  padding: 14px 16px;
   background: var(--panel);
   border: 1px solid color-mix(in srgb, var(--rg-edge) 45%, var(--line));
   border-radius: 8px;
 }
-.single-panel input[type="text"] {
-  width: 22ch;
-  min-width: 0;
+.single-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+  font-weight: 650;
 }
-/* Monospace is for QIDs only. */
-.single-panel input.date,
-.single-panel input.ext-id {
+.single-head .sw {
+  background: var(--rg-edge);
+}
+.single-head .muted {
+  font-weight: 400;
+}
+.single-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+.single-fields .f {
+  font-size: 12.5px;
+}
+.single-panel input[type="text"] {
+  width: 100%;
+  min-width: 0;
   font-family: var(--sans);
+}
+.single-panel input.qid:not(:disabled) {
+  font-family: var(--mono);
 }
 .single-panel input:disabled {
   background: transparent;
   border-style: dashed;
-  font-family: var(--sans);
   cursor: not-allowed;
 }
 .single-panel .single-hint,
 .single-panel .field-err {
-  flex-basis: 100%;
-  /* Wrap to the fields' width rather than widen the panel. */
-  contain: inline-size;
   margin: 0;
+  font-size: 13px;
+}
+.single-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.single-note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.warn-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+}
+.warn-note svg {
+  flex: none;
+  color: var(--warn-edge);
 }
 .msg {
   font-size: 0.88rem;
