@@ -189,7 +189,7 @@ export function releaseIds(release: MbRelease) {
     artists: [...new Set(credits.map((c) => c.artist.id))],
     recordings: [...new Set(tracks.map((t) => t.recording.id))],
     works: [...new Set(tracks.flatMap((t) => workOf(t) ?? []))],
-    iswcs: [...new Set(tracks.flatMap((t) => iswcOf(t)))],
+    iswcs: [...new Set(tracks.flatMap((t) => iswcsOf(t)))],
     spotifyTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "spotify")))],
     appleMusicTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "appleMusic")))],
     deezerTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "deezer")))],
@@ -357,15 +357,6 @@ function iswcsOf(t: MbTrack): string[] {
   return [...new Set((work?.iswcs ?? []).filter((v) => ISWC_PATTERN.test(v)))];
 }
 
-/**
- * A track's composition's ISWC, if MusicBrainz has exactly one. Some works
- * have been given several, and there's no telling which is right.
- */
-function iswcOf(t: MbTrack): string[] {
-  const iswcs = iswcsOf(t);
-  return iswcs.length === 1 ? iswcs : [];
-}
-
 /** The names an artist credit lists, each once. */
 const creditNames = (credit: MbArtistCredit[]) => [
   ...new Set(credit.map((c) => c.name.trim()).filter(Boolean)),
@@ -437,12 +428,12 @@ export function releaseToForm(
     deezer: 0,
     tidal: 0,
   };
-  let manyIswcs = 0;
   const taken = new Set(lookups.taken);
   const misplaced = new Map<string, string>();
   const toAdd = {
     recordings: 0,
     works: 0,
+    iswcComps: 0,
     iswcs: 0,
     isrcs: 0,
     spotify: 0,
@@ -462,9 +453,10 @@ export function releaseToForm(
       const work = workOf(t);
       if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
         misplaced.set(work, t.title.trim());
-      const [iswc] = iswcOf(t);
-      // A composition found by its ISWC is only used when none has the work ID.
-      const comp = (work && lookups.works[work]) || (iswc && lookups.iswcs?.[iswc]);
+      const iswcs = iswcsOf(t);
+      // A composition found by an ISWC is only used when none has the work ID.
+      const comp =
+        (work && lookups.works[work]) || iswcs.map((v) => lookups.iswcs?.[v]).find(Boolean);
       if (comp) {
         disc.comp[t.position] = comp;
         comps++;
@@ -476,7 +468,7 @@ export function releaseToForm(
       const ids: MbRowIds = {
         recording: taken.has(t.recording.id) ? "" : t.recording.id,
         work: work && !taken.has(work) ? work : "",
-        iswcs: iswc && !taken.has(iswc) ? [iswc] : [],
+        iswcs: iswcs.filter((v) => !taken.has(v)),
         isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
         spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
         appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
@@ -497,8 +489,8 @@ export function releaseToForm(
       }
       if (!disc.comp[t.position]) {
         toAdd.works += ids.work ? 1 : 0;
+        toAdd.iswcComps += ids.iswcs.length ? 1 : 0;
         toAdd.iswcs += ids.iswcs.length;
-        if (iswcsOf(t).length > 1) manyIswcs++;
       }
       if (t.length === null) missingLength++;
       const feat = creditFeatured(t["artist-credit"]);
@@ -525,10 +517,6 @@ export function releaseToForm(
       `${which} ${one ? "has" : "have"} the work ID for “${title}”. Only a composition should have one. Remove it from ${one ? `the ${KIND_NOUNS[holders[0].kind]}` : "them"}.${instead}`,
     );
   }
-  if (manyIswcs)
-    notes.push(
-      `${plural(manyIswcs, "track's composition has", "tracks' compositions have")} more than one ISWC on MusicBrainz, so ${manyIswcs === 1 ? "it gets" : "they get"} no ISWC.`,
-    );
   if (missingLength)
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,
@@ -682,6 +670,8 @@ function refsSummary(n: {
 function idsSummary(n: {
   recordings: number;
   works: number;
+  /** New compositions that get at least one ISWC. */
+  iswcComps: number;
   iswcs: number;
   isrcs: number;
   spotify: number;
@@ -699,12 +689,13 @@ function idsSummary(n: {
   ].filter(Boolean) as string[];
   const tracks = parts.length ? `New tracks get ${joinList(parts)}` : "";
   const gets = (k: number) => (k === 1 ? "gets its" : "get their");
+  const iswc = n.iswcs > n.iswcComps ? "ISWCs" : "ISWC";
   const works = [
     n.works && `${plural(n.works, "new composition")} ${gets(n.works)} work ID`,
-    n.iswcs &&
+    n.iswcComps &&
       (n.works
-        ? `${n.iswcs} ${gets(n.iswcs)} ISWC`
-        : `${plural(n.iswcs, "new composition")} ${gets(n.iswcs)} ISWC`),
+        ? `${n.iswcComps} ${gets(n.iswcComps)} ${iswc}`
+        : `${plural(n.iswcComps, "new composition")} ${gets(n.iswcComps)} ${iswc}`),
   ]
     .filter(Boolean)
     .join(" and ");

@@ -329,22 +329,21 @@ describe("releaseToForm", () => {
       expect(form.summary).toContain("ISRCs, ISWCs and track IDs get a MusicBrainz reference");
     });
 
-    it("adds none when the composition has more than one", () => {
-      const r = withIswcs("T-345.246.800-1", "T-345.246.801-2");
-      expect(releaseIds(r).iswcs).toEqual([]);
+    it("adds all of them when the composition has more than one", () => {
+      const r = withIswcs("T-345.246.800-1", "T-345.246.801-2", "T-345.246.800-1");
+      expect(releaseIds(r).iswcs).toEqual(["T-345.246.800-1", "T-345.246.801-2"]);
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual([]);
-      expect(form.notes).toEqual([
-        "1 track's composition has more than one ISWC on MusicBrainz, so it gets no ISWC.",
-      ]);
+      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.800-1", "T-345.246.801-2"]);
+      expect(form.notes).toEqual([]);
+      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWCs,/);
     });
 
     it("leaves out one an item already has", () => {
-      const form = releaseToForm(withIswcs("T-345.246.800-1"), {
+      const form = releaseToForm(withIswcs("T-345.246.800-1", "T-345.246.801-2"), {
         ...NONE,
         taken: ["T-345.246.800-1"],
       });
-      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.801-2"]);
     });
 
     it("finds the composition by it when none has the work ID", () => {
@@ -353,6 +352,12 @@ describe("releaseToForm", () => {
       expect(releaseToForm(r, byIswc).discs[0].comp).toEqual({ "1": "Q30" });
       const both = { ...byIswc, works: { [work]: "Q20" } };
       expect(releaseToForm(r, both).discs[0].comp).toEqual({ "1": "Q20" });
+    });
+
+    it("finds the composition by any of its ISWCs", () => {
+      const r = withIswcs("T-345.246.800-1", "T-345.246.801-2");
+      const byIswc = { ...NONE, iswcs: { "T-345.246.801-2": "Q30" } };
+      expect(releaseToForm(r, byIswc).discs[0].comp).toEqual({ "1": "Q30" });
     });
   });
 
