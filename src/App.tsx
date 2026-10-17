@@ -201,6 +201,8 @@ export default function App() {
 function Form() {
   const [state, setState] = useState<State>(loadState);
   const [formId, renewFormId] = useFormId();
+  // Clear also starts the import afresh, without the last load's summary.
+  const [clears, setClears] = useState(0);
   // Clear and a MusicBrainz import start a new form.
   const replace = (next: State) => {
     setState(next);
@@ -263,6 +265,7 @@ function Form() {
       )}
       <ItemModel />
       <MusicBrainzImport
+        key={clears}
         ref={mbImport}
         state={state}
         needsConfirm={!isEmpty(state)}
@@ -299,7 +302,10 @@ function Form() {
                   action: "Clear the form",
                 }
           }
-          onConfirm={() => replace(structuredClone(EMPTY))}
+          onConfirm={() => {
+            replace(structuredClone(EMPTY));
+            setClears((n) => n + 1);
+          }}
         />
       </div>
       <Footer />
