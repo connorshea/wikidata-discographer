@@ -141,10 +141,7 @@ function Header() {
     <header className="top">
       <div>
         <h1>Wikidata Discographer</h1>
-        <p className="lede">
-          Turn an album's tracklist into Wikidata items: the album, a composition and a track for
-          each song, and any singles, all linked together and made with your account.
-        </p>
+        <p className="lede">Turn an album's tracklist into Wikidata items.</p>
       </div>
       <nav className="top-nav">
         <NavLink href="/">Add an album</NavLink>
@@ -298,7 +295,7 @@ function Form() {
               ? null
               : {
                   title: "Clear the form?",
-                  body: "This removes the album, settings, tracklists and performers you've entered. It can't be undone.",
+                  body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
                   action: "Clear the form",
                 }
           }

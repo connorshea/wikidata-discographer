@@ -65,10 +65,7 @@ export default function AlbumList() {
   return (
     <section className="block">
       <h2>Albums</h2>
-      <p className="hint">
-        Albums created with the tool, or that had a tracklist added with it, by everyone who uses
-        it. The newest run comes first.
-      </p>
+      <p className="hint">All recent albums created with Discographer.</p>
       {user && (
         <label className="row">
           <input
