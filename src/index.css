@@ -929,12 +929,10 @@ button.link.who-edit {
   text-decoration: none;
   white-space: nowrap;
 }
-/* Folded away, but still in the tab order, until its row is hovered or has focus. */
+/* Hidden, but still in the tab order, until its row is hovered or has focus. It
+   keeps its width meanwhile, so showing it doesn't reflow the table. */
 @media (hover: hover) {
   tr:not(:hover, :focus-within) button.link.who-edit:not(.shown) {
-    max-width: 0;
-    padding: 0;
-    overflow: hidden;
     opacity: 0;
   }
 }
