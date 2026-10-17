@@ -102,6 +102,8 @@ export interface MbRowIds {
   recording: string;
   /** P435 MusicBrainz work ID, for the composition. Empty if an item already has it. */
   work: string;
+  /** P1827 ISWC, for the composition. Empty if an item already has it. */
+  iswcs: string[];
   /** P1243 ISRCs, for the track. */
   isrcs: string[];
   /** P2207 Spotify track IDs, for the track. */
@@ -893,6 +895,9 @@ export function buildPlan(state: State): Plan {
         ...perf,
         ...workLang,
         ...(S.mbIds && it.mb?.work ? [str("P435", it.mb.work)] : []),
+        ...(S.mbIds && it.mb
+          ? it.mb.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.mb) }))
+          : []),
       ],
     });
   }

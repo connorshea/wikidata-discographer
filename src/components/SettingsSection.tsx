@@ -31,11 +31,11 @@ const FLAGS: [FlagKey, string][] = [
   ["extendExisting", "Add missing links to existing items you reuse (P2550, P175)"],
   [
     "mbIds",
-    "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify, P10110 Apple Music, P2724 Deezer, P4578 Tidal) and compositions (P435)",
+    "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify, P10110 Apple Music, P2724 Deezer, P4578 Tidal) and compositions (P435, P1827 ISWC)",
   ],
   [
     "mbRefs",
-    "Add a reference to what a MusicBrainz import filled in: a new album's publication date and identifiers, and new tracks' durations, ISRCs and track IDs (stated in MusicBrainz, the release group, release or recording it came from, and the day it was imported)",
+    "Add a reference to what a MusicBrainz import filled in: a new album's publication date and identifiers, new tracks' durations, ISRCs and track IDs, and new compositions' ISWCs (stated in MusicBrainz, the release group, release or recording it came from, and the day it was imported)",
   ],
 ];
 

@@ -77,6 +77,7 @@ describe("loadedReleaseGroup", () => {
         title: "Get Busy Living",
         recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c",
         work: "",
+        iswcs: [],
         isrcs: [],
         spotify: [],
         appleMusic: [],
@@ -140,6 +141,7 @@ describe("buildPlan", () => {
       title: "Habits of Creatures",
       recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
       work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+      iswcs: ["T-345.246.800-1"],
       isrcs: ["USUM72604367"],
       spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
       appleMusic: ["1820000002"],
@@ -170,7 +172,9 @@ describe("buildPlan", () => {
         }
       ).claims
         .filter((c) =>
-          ["P4404", "P435", "P1243", "P2207", "P10110", "P2724", "P4578"].includes(c.property),
+          ["P4404", "P435", "P1827", "P1243", "P2207", "P10110", "P2724", "P4578"].includes(
+            c.property,
+          ),
         )
         .map((c) => [c.property, c.value.value]);
 
@@ -183,7 +187,10 @@ describe("buildPlan", () => {
         ["P2724", "69018826"],
         ["P4578", "454960380"],
       ]);
-      expect(claimsOf(withIds(), "comp:0:2")).toEqual([["P435", ids.work]]);
+      expect(claimsOf(withIds(), "comp:0:2")).toEqual([
+        ["P435", ids.work],
+        ["P1827", "T-345.246.800-1"],
+      ]);
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
     });
 
@@ -221,7 +228,9 @@ describe("buildPlan", () => {
         return Object.fromEntries(
           (op?.op === "create" ? op.claims : [])
             .filter((c) =>
-              ["P4404", "P435", "P1243", "P2207", "P10110", "P2724", "P4578"].includes(c.property),
+              ["P4404", "P435", "P1827", "P1243", "P2207", "P10110", "P2724", "P4578"].includes(
+                c.property,
+              ),
             )
             .map((c) => [c.property, c.references]),
         );
@@ -264,7 +273,14 @@ describe("buildPlan", () => {
 
       it("but not the recording or work ID", () => {
         expect(refsOf(withIds()).P4404).toBeUndefined();
-        expect(refsOf(withIds(), "comp:0:2")).toEqual({ P435: undefined });
+        expect(refsOf(withIds(), "comp:0:2").P435).toBeUndefined();
+      });
+
+      it("and the ISWC on the new composition", () => {
+        expect(refsOf(withIds(), "comp:0:2")).toEqual({ P435: undefined, P1827: MB_REF });
+        const off = withIds();
+        off.settings.mbRefs = false;
+        expect(refsOf(off, "comp:0:2")).toEqual({ P435: undefined, P1827: undefined });
       });
 
       it("even once the length is edited, or when an item already has the recording ID", () => {
