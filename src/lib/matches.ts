@@ -221,15 +221,14 @@ export interface TrackReview {
   /** The candidates not dismissed. */
   candidates: Candidate[];
   dismissed: number;
-  /** A candidate is used, or none is left to decide on. */
+  /** Every candidate left is used, or its field already holds something else. */
   reviewed: boolean;
 }
 
 /**
- * Each track's candidates and whether it's been reviewed: a candidate is
- * used, or every one is dismissed or has its field filled with something else.
- * A used track's own composition must also be used or dismissed, since the
- * run links the track to the composition field.
+ * Each track's candidates and whether it's been reviewed: every candidate is
+ * used, dismissed or has its field filled with something else. Using one
+ * doesn't settle the rest, so a reused single still leaves its composition open.
  */
 export function reviewTracks(
   discs: readonly Disc[],
@@ -260,19 +259,13 @@ export function reviewTracks(
       );
       if (!all.length) continue;
       const candidates = all.filter((c) => !dismissed.has(c.id));
-      const recorded = (
-        all.find((c) => c.slot === "track" && c.used)?.match as TrackMatch | undefined
-      )?.composition;
-      const compOpen = candidates.some(
-        (c) => c.slot === "comp" && c.match.qid === recorded && !c.used,
-      );
       out.push({
         di,
         n: r.n,
         title: r.title,
         candidates,
         dismissed: all.length - candidates.length,
-        reviewed: !compOpen && (all.some((c) => c.used) || candidates.every((c) => c.taken)),
+        reviewed: candidates.every((c) => c.used || c.taken),
       });
     }
   });

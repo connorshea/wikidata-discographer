@@ -245,7 +245,7 @@ describe("reviewTracks", () => {
   };
   const parsed = [[row(1), row(2)]];
 
-  it("lists each track's candidates, open until one is used", () => {
+  it("lists each track's candidates, open until every one is settled", () => {
     const disc = emptyDisc();
     const [t1, t2] = reviewTracks([disc], parsed, rows, new Set());
     expect(t1.candidates.map((c) => c.id)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
@@ -253,12 +253,24 @@ describe("reviewTracks", () => {
     expect(t2.candidates[0].others).toEqual(["B"]);
     disc.comp[1] = "Q2";
     const [used] = reviewTracks([disc], parsed, rows, new Set());
-    expect(used.reviewed).toBe(true);
     expect(used.candidates.map((c) => [c.used, c.taken])).toEqual([
       [false, true],
       [true, false],
       [false, false],
     ]);
+    // The single is still to decide on.
+    expect(used.reviewed).toBe(false);
+    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
+    expect(reviewTracks([disc], parsed, rows, new Set())[0].reviewed).toBe(true);
+  });
+
+  it("keeps a reused single open until its composition is used or dismissed", () => {
+    const disc = emptyDisc();
+    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
+    const [t1] = reviewTracks([disc], parsed, rows, new Set());
+    expect(t1.reviewed).toBe(false);
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q1"), candidateId(0, 1, "comp", "Q2")]);
+    expect(reviewTracks([disc], parsed, rows, dismissed)[0].reviewed).toBe(true);
   });
 
   it("keeps a used track open until its own composition is used or dismissed", () => {
@@ -309,12 +321,16 @@ describe("reviewTracks", () => {
   it("sums up the review across tracks", () => {
     const disc = emptyDisc();
     disc.comp[1] = "Q1";
-    const dismissed = new Set([candidateId(0, 1, "comp", "Q2"), candidateId(0, 2, "comp", "Q4")]);
+    const dismissed = new Set([
+      candidateId(0, 1, "comp", "Q2"),
+      candidateId(0, 1, "single", "Q3"),
+      candidateId(0, 2, "comp", "Q4"),
+    ]);
     expect(reviewSummary(reviewTracks([disc], parsed, rows, dismissed))).toEqual({
       tracks: 2,
       reviewed: 2,
       reused: 1,
-      dismissed: 2,
+      dismissed: 3,
     });
     expect(reviewSummary([])).toEqual({ tracks: 0, reviewed: 0, reused: 0, dismissed: 0 });
   });
