@@ -2,14 +2,20 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Match, RowMatches, TrackMatch } from "./api-types.ts";
 import {
   candidateId,
+  comesWithTrack,
+  dismissAllIds,
   fillUnambiguous,
   isStrong,
   NO_ARTIST,
   otherArtists,
   pickSingle,
   pickTrack,
+  renumberDismissed,
+  reviewedLine,
+  reviewSummary,
   reviewTracks,
   stillValid,
+  summaryLine,
   withoutDismissed,
 } from "./matches.ts";
 import type { Track } from "./plan.ts";
@@ -242,7 +248,7 @@ describe("reviewTracks", () => {
   };
   const parsed = [[row(1), row(2)]];
 
-  it("lists each track's candidates, open until one is used", () => {
+  it("lists each track's candidates, open until every one is settled", () => {
     const disc = emptyDisc();
     const [t1, t2] = reviewTracks([disc], parsed, rows, new Set());
     expect(t1.candidates.map((c) => c.id)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
@@ -250,12 +256,24 @@ describe("reviewTracks", () => {
     expect(t2.candidates[0].others).toEqual(["B"]);
     disc.comp[1] = "Q2";
     const [used] = reviewTracks([disc], parsed, rows, new Set());
-    expect(used.reviewed).toBe(true);
     expect(used.candidates.map((c) => [c.used, c.taken])).toEqual([
       [false, true],
       [true, false],
       [false, false],
     ]);
+    // The single is still to decide on.
+    expect(used.reviewed).toBe(false);
+    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
+    expect(reviewTracks([disc], parsed, rows, new Set())[0].reviewed).toBe(true);
+  });
+
+  it("keeps a reused single open until its composition is used or dismissed", () => {
+    const disc = emptyDisc();
+    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
+    const [t1] = reviewTracks([disc], parsed, rows, new Set());
+    expect(t1.reviewed).toBe(false);
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q1"), candidateId(0, 1, "comp", "Q2")]);
+    expect(reviewTracks([disc], parsed, rows, dismissed)[0].reviewed).toBe(true);
   });
 
   it("keeps a used track open until its own composition is used or dismissed", () => {
@@ -288,5 +306,102 @@ describe("reviewTracks", () => {
     const left = withoutDismissed(rows, new Set([candidateId(0, 1, "comp", "Q1")]));
     expect(left["0:1"].comp).toEqual([match("Q2")]);
     expect(left["0:2"]).toEqual(rows["0:2"]);
+  });
+
+  it("dismisses every candidate left but a used one with Dismiss all", () => {
+    const disc = emptyDisc();
+    const [t1] = reviewTracks([disc], parsed, rows, new Set());
+    expect(dismissAllIds(t1)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
+    disc.comp[1] = "Q2";
+    const dismissed = new Set(dismissAllIds(reviewTracks([disc], parsed, rows, new Set())[0]));
+    expect([...dismissed]).toEqual(["0:1:comp:Q1", "0:1:single:Q3"]);
+    expect(reviewTracks([disc], parsed, rows, dismissed)[0]).toMatchObject({
+      dismissed: 2,
+      reviewed: true,
+    });
+  });
+
+  it("sums up the review across tracks", () => {
+    const disc = emptyDisc();
+    disc.comp[1] = "Q1";
+    const dismissed = new Set([
+      candidateId(0, 1, "comp", "Q2"),
+      candidateId(0, 1, "single", "Q3"),
+      candidateId(0, 2, "comp", "Q4"),
+    ]);
+    expect(reviewSummary(reviewTracks([disc], parsed, rows, dismissed))).toEqual({
+      tracks: 2,
+      reviewed: 2,
+      reused: 1,
+      dismissed: 3,
+    });
+    expect(reviewSummary([])).toEqual({ tracks: 0, reviewed: 0, reused: 0, dismissed: 0 });
+  });
+});
+
+describe("reviewedLine and summaryLine", () => {
+  const row: Track = { n: 1, title: "T1", artists: ["A"], seconds: 0, mb: null };
+  const rows = {
+    "0:1": rm({
+      track: [track("Q50", "Q60", ["Q70"])],
+      comp: [match("Q60")],
+      single: [match("Q70")],
+    }),
+  };
+  const review = (disc = emptyDisc(), dismissed = new Set<string>()) =>
+    reviewTracks([disc], [[row]], rows, dismissed)[0];
+
+  it("names the one item used, with its QID", () => {
+    const disc = emptyDisc();
+    disc.single[1] = { date: "", qid: "Q70", discogs: "" };
+    const dismissed = new Set([
+      candidateId(0, 1, "track", "Q50"),
+      candidateId(0, 1, "comp", "Q60"),
+    ]);
+    expect(reviewedLine(review(disc, dismissed))).toBe("Using the single, Q70, 2 dismissed");
+  });
+
+  it("names every kind used, the track first", () => {
+    const disc = emptyDisc();
+    pickTrack(disc, 1, rows["0:1"].track[0]);
+    disc.single[1] = { date: "", qid: "Q70", discogs: "" };
+    const r = review(disc);
+    expect(reviewedLine(r)).toBe("Using the track, composition and single");
+    expect(r.candidates.map((c) => comesWithTrack(r, c))).toEqual([true, false, true]);
+  });
+
+  it("says a track whose candidates were all dismissed is created new", () => {
+    const all = new Set(dismissAllIds(review()));
+    expect(reviewedLine(review(emptyDisc(), all))).toBe("3 dismissed, creating new");
+  });
+
+  it("says when other QIDs are filled in instead", () => {
+    const disc = emptyDisc();
+    disc.track[1] = "Q1";
+    disc.comp[1] = "Q2";
+    const dismissed = new Set([candidateId(0, 1, "single", "Q70")]);
+    expect(reviewedLine(review(disc, dismissed))).toBe("1 dismissed, other QIDs filled in");
+    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
+    expect(reviewedLine(review(disc))).toBe("Other QIDs are filled in");
+  });
+
+  it("folds the whole review into a line", () => {
+    expect(summaryLine({ tracks: 5, reviewed: 5, reused: 4, dismissed: 3 })).toBe(
+      "Using 4 items, 3 dismissed",
+    );
+    expect(summaryLine({ tracks: 1, reviewed: 1, reused: 1, dismissed: 0 })).toBe("Using 1 item");
+    expect(summaryLine({ tracks: 1, reviewed: 1, reused: 0, dismissed: 0 })).toBe(
+      "Other QIDs are filled in",
+    );
+  });
+});
+
+describe("renumberDismissed", () => {
+  it("follows the renumbered rows of one disc and drops removed ones", () => {
+    const dismissed = new Set(["0:1:comp:Q1", "0:2:track:Q2", "1:1:comp:Q3"]);
+    expect([...renumberDismissed(dismissed, 0, new Map([[1, 2]]))]).toEqual([
+      "0:2:comp:Q1",
+      "1:1:comp:Q3",
+    ]);
   });
 });

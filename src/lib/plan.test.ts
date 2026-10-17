@@ -3,6 +3,8 @@ import {
   buildPlan,
   citesMb,
   citesMbDate,
+  albumDescPreview,
+  descPreviews,
   descTypeLabel,
   loadedReleaseGroup,
   MAX_TERM_LENGTH,
@@ -184,6 +186,11 @@ describe("buildPlan", () => {
       const noIds = withIds();
       noIds.settings.mbIds = false;
       expect(durationOf(noIds)?.references).toHaveLength(1);
+      // A length typed by hand is stated without one.
+      const typed = withIds();
+      typed.discs[0].tracks[1].length = "3:30";
+      expect(durationOf(typed)).toMatchObject({ value: { amount: 210 } });
+      expect(durationOf(typed)?.references).toBeUndefined();
     });
 
     describe("give each ISRC and track ID on the new track a MusicBrainz reference", () => {
@@ -513,6 +520,57 @@ describe("buildPlan", () => {
     expect(buildPlan(state).ready).toBe(false);
   });
 
+  describe("rows entered by hand", () => {
+    const errsOf = (edit: (state: typeof EXAMPLE) => void) => {
+      const state = structuredClone(EXAMPLE);
+      edit(state);
+      return buildPlan(state);
+    };
+
+    it("marks each problem in its cell, with one message for the run", () => {
+      const plan = errsOf((s) => {
+        const [first, second] = s.discs[0].tracks;
+        first.title = "  ";
+        first.length = "3:2";
+        second.artists = [];
+        s.discs[0].comp[2] = "Q12x";
+      });
+      expect(plan.rowErrs).toEqual({
+        "0:1": { title: "Enter the title.", length: "Use m:ss" },
+        "0:2": { artists: "Enter the artists.", comp: '"Q12x" isn\'t a QID.' },
+      });
+      expect(plan.messages.filter((m) => m[0] === "err").map((m) => m[1])).toEqual([
+        "2 tracks have errors. They're marked in the track table.",
+      ]);
+      expect(plan.blockers).toEqual(["tracks"]);
+    });
+
+    it("uses a typed length in place of the imported one, and none when it's blank", () => {
+      const plan = errsOf((s) => {
+        s.discs[0].tracks[0].length = "1:02:03";
+        s.discs[0].tracks[1].length = "";
+      });
+      expect(plan.tracks[0][0].seconds).toBe(3723);
+      expect(plan.tracks[0][1].seconds).toBeNull();
+      expect(plan.rowErrs).toEqual({});
+    });
+
+    it("gives a row with no artists the new album's", () => {
+      const plan = errsOf((s) => {
+        s.album = {
+          ...s.album,
+          mode: "create",
+          title: "Day and Night",
+          artists: ["Carly Rae Jepsen"],
+        };
+        s.discs[0].tracks[0].artists = [];
+      });
+      expect(plan.tracks[0][0].artists).toEqual(["Carly Rae Jepsen"]);
+      expect(plan.rowErrs).toEqual({});
+      expect(plan.ready).toBe(true);
+    });
+  });
+
   describe("label and description length", () => {
     const errors = (plan: ReturnType<typeof buildPlan>) =>
       plan.messages.filter((m) => m[0] === "err").map((m) => m[1]);
@@ -541,17 +599,26 @@ describe("buildPlan", () => {
       expect(buildPlan(state).ready).toBe(true);
     });
 
-    it("names each over-long track title and filled-in description once", () => {
+    it("marks an over-long track title in its cell", () => {
       const state = structuredClone(EXAMPLE);
       const long = "x".repeat(MAX_TERM_LENGTH + 10);
       state.discs = [{ ...emptyDisc(), tracks: [track(1, long, "3:00")] }];
+      const plan = buildPlan(state);
+      expect(plan.rowErrs["0:1"]).toEqual({
+        title: `Wikidata allows ${MAX_TERM_LENGTH} characters at most. This title has ${MAX_TERM_LENGTH + 10}.`,
+      });
+      expect(errors(plan)).toEqual(["1 track has errors. They're marked in the track table."]);
+    });
+
+    it("names each over-long filled-in description once", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs = [{ ...emptyDisc(), tracks: [track(1, "Song", "3:00")] }];
       state.settings.trackDesc = `${"y".repeat(MAX_TERM_LENGTH)} by {artists}`;
       const plan = buildPlan(state);
       expect(plan.ready).toBe(false);
       expect(errors(plan)).toEqual([
         `Wikidata allows ${MAX_TERM_LENGTH} characters at most in a label or description. ` +
-          `Too long: the title of track 1.1 (${MAX_TERM_LENGTH + 10}), ` +
-          `the track description for track 1.1 (${MAX_TERM_LENGTH + 20}).`,
+          `Too long: the track description for track 1.1 (${MAX_TERM_LENGTH + 20}).`,
       ]);
     });
   });
@@ -601,5 +668,53 @@ describe("descTypeLabel", () => {
     expect(descTypeLabel("Q169930", "Q208569")).toBe("EP");
     expect(descTypeLabel("Q169930", "Q209939")).toBe("live EP");
     expect(descTypeLabel("Q169930", "Q963099")).toBe("remix EP");
+  });
+});
+
+describe("albumDescPreview", () => {
+  const album = (more: Partial<typeof EXAMPLE.album> = {}) => {
+    const state = structuredClone(EXAMPLE);
+    Object.assign(state.album, { mode: "create", title: "Day and Night" }, more);
+    return state;
+  };
+
+  it("fills in the year, form and artists", () => {
+    expect(albumDescPreview(album({ artists: ["Carly Rae Jepsen", "Ghost"] }))).toBe(
+      "2026 studio album by Carly Rae Jepsen and Ghost",
+    );
+  });
+
+  it("leaves what it can't fill as written", () => {
+    const state = album({ artists: [], type: "Q169930", form: "" });
+    state.settings.date = "";
+    expect(albumDescPreview(state)).toBe("{year} EP by {artists}");
+  });
+});
+
+describe("descPreviews", () => {
+  const previews = (state: typeof EXAMPLE) => descPreviews(state, buildPlan(state));
+
+  it("fills in the templates for the first track", () => {
+    expect(previews(EXAMPLE)).toEqual({
+      comp: "2026 song by Carly Rae Jepsen",
+      track: "vocal track by Carly Rae Jepsen",
+      single: null,
+    });
+  });
+
+  it("takes a single's year from its release date", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].single = { "3": { date: "2025-05-02", qid: "", discogs: "" } };
+    expect(previews(state)?.single).toBe("2025 single by Carly Rae Jepsen");
+  });
+
+  it("leaves {year} as written without a publication date", () => {
+    const state = structuredClone(EXAMPLE);
+    state.settings.date = "";
+    expect(previews(state)?.comp).toBe("{year} song by Carly Rae Jepsen");
+  });
+
+  it("waits for a track or album artist", () => {
+    expect(previews(EMPTY)).toBeNull();
   });
 });

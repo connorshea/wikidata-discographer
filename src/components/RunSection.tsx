@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import {
+  type MouseEvent,
+  type Ref,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { Link, useLocation, useSearch } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
@@ -17,21 +28,39 @@ import {
 } from "../lib/own-run.ts";
 import type { Plan, State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
+import type { PreviewEdit } from "../lib/preview.ts";
+import type { RunningInfo } from "../lib/progress.ts";
+import {
+  editShares,
+  type EditShare,
+  entryKind,
+  KIND_EDGES,
+  runEdits,
+  runProgress,
+  startedAt,
+  timeLeft,
+} from "../lib/run-view.ts";
 import type {
+  EditLogEntry,
   RecreateConflict,
   SubmissionInfo,
   SubmissionListResponse,
   SubmissionRequest,
+  SubmissionStatus,
   UnknownRunConflict,
 } from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
-import PlanPreview from "./PlanPreview.tsx";
+import PlannedEdits from "./PlannedEdits.tsx";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
+import { useItemSummaries } from "./use-item-summaries.ts";
 import { useStorageEvent } from "./use-storage-event.ts";
 
 const POLL_MS = 2000;
+
+/** Recent runs listed in the plan panel. */
+const RECENT = 5;
 
 type UnknownRun = UnknownRunConflict["unknownRun"];
 type Recreate = RecreateConflict["recreate"];
@@ -76,6 +105,10 @@ export default function RunSection({
   formId,
   stale,
   onFinished,
+  slot,
+  sideSlot,
+  albumName,
+  onRunning,
 }: SectionProps & {
   albumTracklist: AlbumTracklist | null;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
@@ -88,6 +121,14 @@ export default function RunSection({
   stale: boolean;
   /** Clears the form once its run is done, ready for the next album. */
   onFinished: () => void;
+  /** Where the run button and what it says go: the plan panel beside the form. */
+  slot: HTMLElement | null;
+  /** Where the run's own cards go in the plan panel: this run, and the recent runs. */
+  sideSlot: HTMLElement | null;
+  /** The album as the run's summary names it: its label or title. */
+  albumName: string;
+  /** Told when a run starts, makes progress and ends. */
+  onRunning: (r: RunningInfo | null) => void;
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
@@ -207,6 +248,36 @@ export default function RunSection({
   }, [ownRunId, runId, loggedIn, settle, dropIfGone]);
 
   const running = run?.status === "running";
+  // The own run goes on in the background even when another is on show.
+  const runningInfo: RunningInfo | null = running
+    ? { done: run.edits.length, total: run.total }
+    : loggedIn && ownRunId !== null
+      ? { done: 0, total: 0 }
+      : null;
+  const runDone = runningInfo?.done;
+  const runTotal = runningInfo?.total;
+  const anyRunning = runningInfo !== null;
+  useEffect(() => {
+    onRunning(anyRunning ? { done: runDone ?? 0, total: runTotal ?? 0 } : null);
+  }, [anyRunning, runDone, runTotal, onRunning]);
+  // The user's recent runs, again whenever a run starts, ends or is opened.
+  const [recent, setRecent] = useState<SubmissionListResponse["submissions"]>([]);
+  const runStatus = run?.status;
+  useEffect(() => {
+    if (!loggedIn) return;
+    let cancelled = false;
+    api<SubmissionListResponse>("/api/submissions")
+      .then((r) => !cancelled && setRecent(r.submissions))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn, runId, runStatus]);
+  // A run on an existing album is titled with its QID: name it by its label.
+  const lookup = useItemSummaries(
+    [run?.title ?? "", ...recent.slice(0, RECENT).map((r) => r.title)],
+    state.settings.lang,
+  );
   // Whether the form is the one the run on show started from, once it's ended.
   const fit = useMemo(
     () => (run && run.status !== "running" ? formOfRun(state, run) : "other"),
@@ -245,130 +316,240 @@ export default function RunSection({
       .finally(() => setStarting(false));
   };
 
-  const edits = plan.ops.length;
+  const count = plan.ops.length;
+  const n = `${count} edit${count === 1 ? "" : "s"}`;
+  const edits = useMemo(() => runEdits(plan, state), [plan, state]);
+  // What the checklist covers: the run can't start until it's all done.
+  const blocked =
+    !state.start ||
+    !user ||
+    !user.eligibility.ok ||
+    !plan.ready ||
+    !!albumTracklist ||
+    unreviewed > 0 ||
+    matchesPending ||
+    stale;
+  const disabled = blocked || finished || running || starting;
+  const label = starting
+    ? "Checking the QIDs…"
+    : running
+      ? "Running…"
+      : count
+        ? `Make ${n}`
+        : "Make edits";
+  const confirm = useRef<ConfirmHandle>(null);
+  const openConfirm = (e: MouseEvent<HTMLButtonElement>) => confirm.current?.open(e.currentTarget);
+  // A start that's held up says why under the big button, so bring it into view
+  // when it was started from the plan panel.
+  const held = !!(error || unknownRun || recreate);
+  const heldRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (held) heldRef.current?.scrollIntoView({ block: "nearest" });
+  }, [held]);
+  const errors = plan.messages.filter(([kind]) => kind === "err");
+  const titleOf = (title: string) => {
+    const found = lookup(title);
+    return (found?.status === "ok" && found.label) || title;
+  };
+  const doneHint = user && !stale && finished && (
+    <p className="hint">This run is done. Start a new album to make more edits.</p>
+  );
+  const staleHint = user && stale && (
+    <p className="hint">The form was changed in another tab. Reload this page first.</p>
+  );
   return (
-    <section className="block" ref={sectionRef}>
-      <h2>Create on Wikidata</h2>
-      {plan.messages.map(([kind, text], i) => (
-        // The summary is neutral: green stands for compositions elsewhere.
-        <p key={i} className={`msg ${kind === "ok" ? "summary" : kind}`}>
-          {text}
-        </p>
-      ))}
-      {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
-      {plan.ops.length > 0 && <PlanPreview plan={plan} state={state} />}
-      <div className="row">
+    <>
+      {/* Locked like the steps before it until a starting point is picked, unless a run is on show. */}
+      <section
+        className={`block create${!state.start && !run && !held ? " locked-step" : ""}`}
+        id="create"
+        ref={sectionRef}
+      >
+        {running ? (
+          <div className="create-head">
+            <h2>Creating on Wikidata</h2>
+            <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
+              View this run's EditGroup ↗
+            </a>
+          </div>
+        ) : (
+          <h2>Create on Wikidata</h2>
+        )}
+        {user && cleared && !stale && (
+          <p className="hint">The run is done, so the form was cleared for the next album.</p>
+        )}
+        {run && (
+          <RunProgress
+            run={run}
+            title={titleOf(run.title)}
+            onClose={() => {
+              setRunId(null);
+              setRun(null);
+              setCleared(false);
+            }}
+          />
+        )}
+        {!running && (
+          <>
+            {/* Nothing to fix while the steps are locked: the checklist asks for a starting point. */}
+            {!state.start ? null : count === 0 ? (
+              errors.length ? (
+                errors.map(([, text], i) => (
+                  <p key={i} className="msg err">
+                    {text}
+                  </p>
+                ))
+              ) : (
+                <p className="hint">Nothing to create yet.</p>
+              )
+            ) : (
+              <>
+                <p className="create-intro">
+                  {blocked ? (
+                    <>
+                      This run will make <b>{n}</b> once everything in the checklist is done.
+                    </>
+                  ) : (
+                    <>
+                      Everything checks out. This run makes <b>{n}</b> as <b>{user.username}</b>.
+                    </>
+                  )}
+                </p>
+                {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
+                <EditBar shares={editShares(edits, albumName)} total={count} />
+                <div className="create-go">
+                  <button type="button" className="go" disabled={disabled} onClick={openConfirm}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                      <circle cx="9" cy="9" r="8" />
+                      <circle cx="9" cy="9" r="3" />
+                    </svg>
+                    {label}
+                  </button>
+                  <p className="hint">
+                    You'll confirm once more before anything is written. Edits go out a few seconds
+                    apart, grouped in one EditGroup so the whole run can be reviewed or undone
+                    together.
+                  </p>
+                </div>
+                {staleHint}
+                {doneHint}
+              </>
+            )}
+          </>
+        )}
+        <div ref={heldRef} id="create-held" className="create-held">
+          {error && <p className="msg err">{error}</p>}
+          {unknownRun && (
+            <UnknownRunGuard
+              run={unknownRun}
+              disabled={starting}
+              onUse={() => {
+                const found = {
+                  op: "create" as const,
+                  ok: true,
+                  key: unknownRun.key,
+                  qid: unknownRun.qid,
+                };
+                update((s) => applyCreated(s, [found]));
+                setUnknownRun(null);
+              }}
+              onConfirm={() => start({ confirmUnknown: unknownRun.id })}
+            />
+          )}
+          {recreate && (
+            <RecreateGuard
+              recreate={recreate}
+              disabled={starting}
+              onUse={() => {
+                const found = recreate.created.map((c) => ({
+                  op: "create" as const,
+                  ok: true,
+                  key: c.key,
+                  qid: c.qid,
+                }));
+                update((s) => applyCreated(s, found));
+                setRecreate(null);
+              }}
+              onConfirm={() => start({ confirmRecreate: recreate.id })}
+            />
+          )}
+        </div>
         <ConfirmRun
-          label={
-            starting
-              ? "Checking the QIDs…"
-              : running
-                ? "Running…"
-                : `Make ${edits} edit${edits === 1 ? "" : "s"}`
-          }
-          disabled={
-            !user ||
-            !user.eligibility.ok ||
-            !plan.ready ||
-            !!albumTracklist ||
-            unreviewed > 0 ||
-            matchesPending ||
-            stale ||
-            finished ||
-            running ||
-            starting
-          }
+          ref={confirm}
+          disabled={disabled}
           plan={plan}
           state={state}
           username={user?.username ?? "you"}
           onConfirm={() => start()}
         />
-        {!user && <span className="hint">Log in to edit.</span>}
-        {user && !user.eligibility.ok && <span className="hint">{user.eligibility.reason}</span>}
-        {user && stale && (
-          <span className="hint">The form was changed in another tab. Reload this page first.</span>
+      </section>
+      {count > 0 && <PlannedEdits edits={edits} />}
+      {/* A second run button in the plan panel, so it's in view wherever the form is
+          scrolled. It opens the same confirm. While a run goes the panel shows the run. */}
+      {slot &&
+        !running &&
+        createPortal(
+          <>
+            <button type="button" disabled={disabled} onClick={openConfirm}>
+              {label}
+            </button>
+            {held && (
+              <p className="hint">
+                <a href="#create-held">The run didn't start. See why ↓</a>
+              </p>
+            )}
+            {staleHint}
+            {doneHint}
+          </>,
+          slot,
         )}
-        {user && cleared && !stale && (
-          <span className="hint">The run is done, so the form was cleared for the next album.</span>
+      {sideSlot &&
+        createPortal(
+          <>
+            {running && <ThisRun run={run} username={user?.username ?? ""} />}
+            {!running && loggedIn && ownRunId !== null && ownRunId !== runId && (
+              <div className="card">
+                <div className="kicker">This run</div>
+                <p className="hint">Your run is still going.</p>
+                <button type="button" className="ghost" onClick={() => setRunId(ownRunId)}>
+                  Show it
+                </button>
+              </div>
+            )}
+            {user && recent.length > 0 && (
+              <RecentRuns
+                runs={recent}
+                current={runId}
+                titleOf={titleOf}
+                onOpen={(id) => {
+                  setCleared(false);
+                  setRunId(id);
+                  sectionRef.current?.scrollIntoView();
+                }}
+              />
+            )}
+          </>,
+          sideSlot,
         )}
-        {user && !stale && finished && (
-          <span className="hint">This run is done. Start a new album to make more edits.</span>
-        )}
-        {user && !finished && albumTracklist && (
-          <span className="hint">The album already has a tracklist. See the Album section.</span>
-        )}
-        {user && !finished && !albumTracklist && unreviewed > 0 && (
-          <span className="hint">Use or dismiss each possible match first.</span>
-        )}
-        {user && !finished && !albumTracklist && !unreviewed && matchesPending && (
-          <span className="hint">Looking for possible matches…</span>
-        )}
-      </div>
-      <p className="hint">
-        Edits are made with your account and grouped in EditGroups, so the whole run can be reviewed
-        or undone together. They go out two or three seconds apart, so a long album takes a few
-        minutes. Statements an item already has are skipped, so a failed run can be started again.
-      </p>
-      {error && <p className="msg err">{error}</p>}
-      {unknownRun && (
-        <UnknownRunGuard
-          run={unknownRun}
-          disabled={starting}
-          onUse={() => {
-            const found = {
-              op: "create" as const,
-              ok: true,
-              key: unknownRun.key,
-              qid: unknownRun.qid,
-            };
-            update((s) => applyCreated(s, [found]));
-            setUnknownRun(null);
-          }}
-          onConfirm={() => start({ confirmUnknown: unknownRun.id })}
-        />
-      )}
-      {recreate && (
-        <RecreateGuard
-          recreate={recreate}
-          disabled={starting}
-          onUse={() => {
-            const found = recreate.created.map((c) => ({
-              op: "create" as const,
-              ok: true,
-              key: c.key,
-              qid: c.qid,
-            }));
-            update((s) => applyCreated(s, found));
-            setRecreate(null);
-          }}
-          onConfirm={() => start({ confirmRecreate: recreate.id })}
-        />
-      )}
-      {run && <RunProgress run={run} />}
-      {user && (
-        <RecentRuns
-          current={runId}
-          onOpen={(id) => {
-            setCleared(false);
-            setRunId(id);
-          }}
-          refresh={run?.status}
-        />
-      )}
-    </section>
+    </>
   );
 }
 
-/** The run button. Edits go live on Wikidata, so it asks first in a modal dialog. */
+/** Opens the run's confirm dialog from whichever run button was pressed. */
+interface ConfirmHandle {
+  open: (from: HTMLElement) => void;
+}
+
+/** The run's confirm. Edits go live on Wikidata, so both run buttons ask first in a modal dialog. */
 function ConfirmRun({
-  label,
+  ref,
   disabled,
   plan,
   state,
   username,
   onConfirm,
 }: {
-  label: string;
+  ref: Ref<ConfirmHandle>;
   disabled: boolean;
   plan: Plan;
   state: State;
@@ -376,66 +557,93 @@ function ConfirmRun({
   onConfirm: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
+  const from = useRef<HTMLElement | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const bodyId = useId();
   const [open, setOpen] = useState(false);
   const close = () => dialog.current?.close();
+  useImperativeHandle(
+    ref,
+    () => ({
+      open(el) {
+        from.current = el;
+        setOpen(true);
+        dialog.current?.showModal();
+        // Enter on the default focus shouldn't start the run.
+        cancel.current?.focus();
+      },
+    }),
+    [],
+  );
   const n = plan.ops.length;
   return (
-    <>
-      <button
-        ref={button}
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          setOpen(true);
-          dialog.current?.showModal();
-          // Enter on the default focus shouldn't start the run.
-          cancel.current?.focus();
-        }}
-      >
-        {label}
-      </button>
-      <dialog
-        ref={dialog}
-        className="confirm"
-        aria-labelledby={titleId}
-        aria-describedby={bodyId}
-        onClose={() => {
-          setOpen(false);
-          button.current?.focus();
-        }}
-        // A click on the backdrop lands on the <dialog> itself; its contents are
-        // wrapped in a div that fills it, so clicks inside never do.
-        onClick={(e) => e.target === e.currentTarget && close()}
-      >
-        <div className="confirm-body">
-          <h2 id={titleId}>{`Make ${n} edit${n === 1 ? "" : "s"} on Wikidata?`}</h2>
-          <p id={bodyId}>
-            The edits are made right away with your account, {username}. They can be undone together
-            from EditGroups afterwards.
-          </p>
-          {open && <EditCounts plan={plan} state={state} />}
-          <div className="row">
-            <button ref={cancel} type="button" className="ghost" onClick={close}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                close();
-                onConfirm();
-              }}
-            >
-              {`Make ${n} edit${n === 1 ? "" : "s"}`}
-            </button>
-          </div>
+    <dialog
+      ref={dialog}
+      className="confirm"
+      aria-labelledby={titleId}
+      aria-describedby={bodyId}
+      onClose={() => {
+        setOpen(false);
+        from.current?.focus();
+      }}
+      // A click on the backdrop lands on the <dialog> itself; its contents are
+      // wrapped in a div that fills it, so clicks inside never do.
+      onClick={(e) => e.target === e.currentTarget && close()}
+    >
+      <div className="confirm-body">
+        <h2 id={titleId}>{`Make ${n} edit${n === 1 ? "" : "s"} on Wikidata?`}</h2>
+        <p id={bodyId}>
+          The edits are made right away with your account, {username}. They can be undone together
+          from EditGroups afterwards.
+        </p>
+        {open && <EditCounts plan={plan} state={state} />}
+        <div className="row">
+          <button ref={cancel} type="button" className="ghost" onClick={close}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              close();
+              onConfirm();
+            }}
+          >
+            {`Make ${n} edit${n === 1 ? "" : "s"}`}
+          </button>
         </div>
-      </dialog>
-    </>
+      </div>
+    </dialog>
+  );
+}
+
+/** How the run's edits split by item type: a stacked bar with a legend. */
+function EditBar({ shares, total }: { shares: EditShare[]; total: number }) {
+  const legend = (s: EditShare) => `${s.count} ${s.text}${s.extra ? `, ${s.extra}` : ""}`;
+  return (
+    <div className="edit-mix">
+      <div
+        className="edit-bar"
+        role="img"
+        aria-label={`${total} edit${total === 1 ? "" : "s"}: ${shares.map(legend).join(", ")}`}
+      >
+        {shares.map((s) => (
+          <div key={s.kind} style={{ flexGrow: s.edits, background: `var(--${s.edge})` }} />
+        ))}
+      </div>
+      <ul className="edit-legend" aria-hidden="true">
+        {shares.map((s) => (
+          <li key={s.kind}>
+            <i className="sw" style={{ background: `var(--${s.edge})` }} />
+            <span>
+              <b>{s.count}</b> {s.text}
+              {s.extra && <span className="muted"> · {s.extra}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -636,130 +844,285 @@ function Turntable({ done, total }: { done: number; total: number }) {
   );
 }
 
-function RunProgress({ run }: { run: SubmissionInfo }) {
+const RUN_STATUS: Record<SubmissionStatus, { label: string; tone: string }> = {
+  running: { label: "Running", tone: "" },
+  done: { label: "Done", tone: "ok" },
+  failed: { label: "Stopped on an error", tone: "bad" },
+  interrupted: { label: "Interrupted", tone: "warn" },
+  unknown: { label: "Outcome unknown", tone: "warn" },
+};
+
+/** Done rows shown under the edit in progress before "Show all N". */
+const LATEST = 3;
+
+/** An edit's item as the log names it, e.g. "composition". */
+function kindName(edit: PreviewEdit): string {
+  if (edit.kind === "comp") return "composition";
+  if (edit.kind === "album") return edit.heading.startsWith("Create EP") ? "EP" : "album";
+  return edit.kind;
+}
+
+function StatusIcon({ status }: { status: "done" | "fail" | "unknown" }) {
+  const label = { done: "Done", fail: "Failed", unknown: "Outcome unknown" }[status];
+  const cls = { done: "ok", fail: "fail", unknown: "problem" }[status];
+  return (
+    <svg className={`check ${cls}`} width="16" height="16" viewBox="0 0 16 16" role="img">
+      <title>{label}</title>
+      <circle cx="8" cy="8" r="7" />
+      <path
+        d={
+          status === "done"
+            ? "M4.8 8.2l2 2 4.2-4.4"
+            : status === "fail"
+              ? "M5.5 5.5l5 5M10.5 5.5l-5 5"
+              : "M8 4.6v4.2M8 11v.2"
+        }
+      />
+    </svg>
+  );
+}
+
+/**
+ * The run on show: while it goes, the turntable, the count with the time left
+ * and per-type progress, and the latest edits. Once it ends, how it ended and
+ * every edit it made.
+ */
+function RunProgress({
+  run,
+  title,
+  onClose,
+}: {
+  run: SubmissionInfo;
+  title: string;
+  onClose: () => void;
+}) {
   const { wikiBaseUrl } = useAuth();
+  const info = useMemo(() => runProgress(run), [run]);
+  const [all, setAll] = useState(false);
   const done = run.edits.length;
   const running = run.status === "running";
-  const entries = run.edits.map((e, i) => (
-    <li key={i} className={e.ok ? undefined : "fail"}>
-      {/* Matches the preview's headings; a statements edit's `what` says what it adds. */}
-      {e.unknown
-        ? "Outcome unknown: created? "
-        : e.op === "create"
-          ? e.ok
-            ? "Created "
-            : "Couldn't create "
-          : ""}
-      {e.what}
-      {e.qid && (
-        <>
-          {" "}
-          {e.unknown && "found later as "}
-          <WikiLink base={wikiBaseUrl} qid={e.qid} />
-        </>
-      )}
-      {e.skipped > 0 && <span className="muted"> ({e.skipped} already there)</span>}
-      {e.revid === null && e.ok && e.op === "addClaims" && (
-        <span className="muted"> (nothing to add)</span>
-      )}
-      {e.error && <>: {e.error}</>}
-      {e.unknown && !e.qid && (
-        <>
-          {" "}
-          Check <CheckLinks editGroupUrl={run.editGroupUrl} />.
-        </>
-      )}
-    </li>
-  ));
+  const status = RUN_STATUS[run.status] ?? { label: run.status, tone: "" };
+  // Newest first.
+  const rows = run.edits
+    .map((e, i) => <LogRow key={i} entry={e} edit={info.edits?.[i] ?? null} run={run} />)
+    .reverse();
+  const limit = info.next ? LATEST : LATEST + 1;
+  const shown = running && !all ? rows.slice(0, limit) : rows;
   return (
-    <div>
-      <h3 className="sub">
-        {run.title} ·{" "}
-        {run.status === "running"
-          ? `${done} of ${run.total}`
-          : run.status === "done"
-            ? "done"
-            : run.status === "failed"
-              ? "stopped on an error"
-              : run.status === "unknown"
-                ? "stopped, outcome unknown"
-                : "interrupted"}
-      </h3>
-      {running && (
-        <div className="turntable-row">
-          <Turntable done={done} total={run.total} />
-          <div className="run-status">
-            <p className="hint">
-              {run.waitingUntil ? "Waiting a moment…" : "Making the next edit…"}
-            </p>
-            {/* Just the latest few, newest first and fading as they age. The full log shows once the run ends. */}
-            <ol className="log recent">{entries.slice(-4).reverse()}</ol>
-          </div>
+    <div className="run">
+      <div className="run-box">
+        {running && <Turntable done={done} total={run.total} />}
+        <div className="run-figures">
+          {!running && (
+            <div className="run-title">
+              <b>{title}</b>
+              <span className={`pill ${status.tone}`}>{status.label}</span>
+            </div>
+          )}
+          <span className="run-count">
+            {done} <span>of {run.total} edits</span>
+          </span>
+          {running && <span>{timeLeft(info.secondsLeft)}</span>}
+          {info.kinds.length > 0 && (
+            <ul className="edit-legend">
+              {info.kinds.map((k) => (
+                <li key={k.kind}>
+                  <i className="sw" style={{ background: `var(--${k.edge})` }} />
+                  <span>
+                    {k.label} {k.done} / {k.total}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )}
+      </div>
       {run.error && (
         <p className={`msg ${run.status === "unknown" ? "warn" : "err"}`}>{run.error}</p>
       )}
       {run.status === "interrupted" && (
         <p className="msg warn">The server restarted during this run. Start it again to finish.</p>
       )}
-      <p className="hint">
-        <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
-          View this run in EditGroups
-        </a>
-        {run.albumQid && (
-          <>
-            {" · album "}
-            <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
-          </>
-        )}
-      </p>
-      {!running && <ol className="log">{entries}</ol>}
+      {!running && (
+        <div className="row run-links">
+          <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
+            View this run's EditGroup ↗
+          </a>
+          {run.albumQid && (
+            <span className="hint">
+              Album <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
+            </span>
+          )}
+          <button type="button" className="ghost small" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      )}
+      {(rows.length > 0 || info.next) && (
+        <div className="run-log">
+          <div className="run-log-head kicker">{running ? "Latest edits" : "Edits"}</div>
+          <ol>
+            {info.next && <NextRow edit={info.next} />}
+            {shown}
+          </ol>
+          {running && rows.length > limit && (
+            <button type="button" className="run-log-more" onClick={() => setAll((a) => !a)}>
+              {all ? "Show the latest only" : `Show all ${rows.length}`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function RecentRuns({
-  current,
-  onOpen,
-  refresh,
-}: {
-  current: number | null;
-  onOpen: (id: number) => void;
-  refresh: string | undefined;
-}) {
-  const [runs, setRuns] = useState<SubmissionListResponse["submissions"]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    api<SubmissionListResponse>("/api/submissions")
-      .then((r) => !cancelled && setRuns(r.submissions))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [current, refresh]);
-  if (!runs.length) return null;
+/** The edit being made now. */
+function NextRow({ edit }: { edit: PreviewEdit }) {
   return (
-    <details>
-      <summary>Your recent runs</summary>
-      <ul className="matches">
-        {runs.map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              className="ghost small"
-              disabled={r.id === current}
-              onClick={() => onOpen(r.id)}
-            >
-              Show
-            </button>
-            <span>{r.title}</span>
-            <span className="muted">
-              {r.createdAt} · {r.status}
-            </span>
-          </li>
-        ))}
+    <li className="next">
+      <span className="spinner" role="img" aria-label="In progress" />
+      <i className="sw" style={{ background: `var(--${KIND_EDGES[edit.kind]})` }} />
+      <span className="run-log-text">
+        {edit.creates ? (
+          <>
+            Creating {kindName(edit)} <b>{edit.title}</b>
+          </>
+        ) : edit.kind === "album" ? (
+          "Adding the album tracklist"
+        ) : (
+          <>
+            Adding statements to {kindName(edit)} <b>{edit.title}</b>
+          </>
+        )}
+      </span>
+      {edit.place && (
+        <span className="muted">
+          Disc {edit.place.disc} · {edit.place.n}
+        </span>
+      )}
+    </li>
+  );
+}
+
+/** A made edit: how it went, and a link to its item. */
+function LogRow({
+  entry: e,
+  edit,
+  run,
+}: {
+  entry: EditLogEntry;
+  /** What the plan says the edit was, when it lines up with the log. */
+  edit: PreviewEdit | null;
+  run: SubmissionInfo;
+}) {
+  const { wikiBaseUrl } = useAuth();
+  const status = e.unknown ? "unknown" : e.ok ? "done" : "fail";
+  const what =
+    e.op === "create" && edit ? (
+      <>
+        {kindName(edit)} <b>{edit.title}</b>
+      </>
+    ) : (
+      e.what
+    );
+  return (
+    <li className={status}>
+      <StatusIcon status={status} />
+      <i
+        className="sw"
+        style={{ background: `var(--${KIND_EDGES[edit?.kind ?? entryKind(e)]})` }}
+      />
+      <span className="run-log-text">
+        {e.op === "create" ? (
+          <>
+            {e.unknown ? "Outcome unknown: created " : e.ok ? "Created " : "Couldn't create "}
+            {what}
+          </>
+        ) : (
+          e.what.replace(/^Add /, e.ok ? "Added " : "Couldn't add ")
+        )}
+        {e.skipped > 0 && <span className="muted"> ({e.skipped} already there)</span>}
+        {e.revid === null && e.ok && e.op === "addClaims" && (
+          <span className="muted"> (nothing to add)</span>
+        )}
+        {e.error && <>: {e.error}</>}
+        {e.unknown && !e.qid && (
+          <>
+            {" "}
+            Check <CheckLinks editGroupUrl={run.editGroupUrl} />.
+          </>
+        )}
+      </span>
+      {e.qid && (
+        <a href={`${wikiBaseUrl}/wiki/${e.qid}`} target="_blank" rel="noreferrer">
+          Open<span className="visually-hidden"> {e.qid}</span> ↗
+        </a>
+      )}
+    </li>
+  );
+}
+
+/** The plan panel during a run: when it started, and who it edits as. */
+function ThisRun({ run, username }: { run: SubmissionInfo; username: string }) {
+  return (
+    <div className="card this-run">
+      <div className="kicker">This run</div>
+      <dl>
+        <div>
+          <dt>Started</dt>
+          <dd>{startedAt(run.createdAt)}</dd>
+        </div>
+        <div>
+          <dt>Account</dt>
+          <dd>{username}</dd>
+        </div>
+      </dl>
+      <p>
+        A failed run can be restarted safely if needed. Discographer will automatically avoid
+        redoing work or creating duplicate statements.
+      </p>
+    </div>
+  );
+}
+
+type RecentRun = SubmissionListResponse["submissions"][number];
+
+/** Recent runs to show again, in the plan panel. */
+function RecentRuns({
+  runs,
+  current,
+  titleOf,
+  onOpen,
+}: {
+  runs: RecentRun[];
+  current: number | null;
+  titleOf: (title: string) => string;
+  onOpen: (id: number) => void;
+}) {
+  return (
+    <div className="card recent-runs">
+      <div className="kicker" id="recent-runs">
+        Your recent runs
+      </div>
+      <ul aria-labelledby="recent-runs">
+        {runs.slice(0, RECENT).map((r) => {
+          const status = RUN_STATUS[r.status] ?? { label: r.status, tone: "" };
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                aria-current={r.id === current ? "true" : undefined}
+                title={`${r.createdAt} UTC`}
+                onClick={() => onOpen(r.id)}
+              >
+                <span>{titleOf(r.title)}</span>
+                <span className={`pill ${status.tone}`}>{status.label}</span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
-    </details>
+      <Link href="/albums">All albums →</Link>
+    </div>
   );
 }

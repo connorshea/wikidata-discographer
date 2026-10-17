@@ -1,5 +1,5 @@
 // Small form pieces shared by the sections.
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { normalizeQid } from "../lib/plan.ts";
 import { PROPERTY_LABELS } from "../lib/preview.ts";
 
@@ -31,6 +31,11 @@ export function QidInput({
   );
 }
 
+/**
+ * An "i" button with a tooltip, shown while it's hovered or focused. The
+ * tooltip is fixed and placed under the button, so a scrolling box around it,
+ * such as the track table's, can't clip it.
+ */
 export function InfoTip({
   id,
   label = "Template variables",
@@ -43,12 +48,47 @@ export function InfoTip({
   end?: boolean;
   children: ReactNode;
 }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const shown = hovered || focused;
+  const box = useRef<HTMLSpanElement>(null);
+  const tip = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    if (!shown) return;
+    const place = () => {
+      const b = box.current?.getBoundingClientRect();
+      const el = tip.current;
+      if (!b || !el) return;
+      const w = el.offsetWidth;
+      const left = end ? b.right - w : b.left;
+      el.style.left = `${Math.max(8, Math.min(left, window.innerWidth - w - 8))}px`;
+      el.style.top = `${b.bottom + 6}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [shown, end]);
   return (
-    <span className={end ? "info end" : "info"}>
-      <button type="button" aria-label={label} aria-describedby={`${id}-tip`}>
+    <span
+      ref={box}
+      className={shown ? "info shown" : "info"}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        aria-describedby={`${id}-tip`}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      >
         i
       </button>
-      <span role="tooltip" id={`${id}-tip`}>
+      <span ref={tip} role="tooltip" id={`${id}-tip`}>
         {children}
       </span>
     </span>

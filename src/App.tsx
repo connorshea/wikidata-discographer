@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
-import { PROPERTY_LABELS } from "./lib/preview.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -12,14 +11,15 @@ import PerformersSection from "./components/PerformersSection.tsx";
 import DiscsSection from "./components/DiscsSection.tsx";
 import MatchesSection from "./components/MatchesSection.tsx";
 import { useMatches } from "./components/use-matches.ts";
-import { reviewTracks } from "./lib/matches.ts";
+import { renumberDismissed, reviewTracks } from "./lib/matches.ts";
+import { createCounts, railSteps, type RunningInfo, runChecks } from "./lib/progress.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
-import { ConfirmButton } from "./components/ConfirmDialog.tsx";
-import MusicBrainzImport, {
-  type MusicBrainzImportHandle,
-} from "./components/MusicBrainzImport.tsx";
+import ProgressRail from "./components/ProgressRail.tsx";
+import PlanPanel from "./components/PlanPanel.tsx";
+import StartSection, { type StartHandle } from "./components/StartSection.tsx";
+import { albumProblem, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
 
 /**
@@ -38,49 +38,6 @@ const RECENT_CHANGES_URL = `https://www.wikidata.org/w/index.php?${new URLSearch
   enhanced: "1",
   urlversion: "2",
 })}`;
-
-/** An item type's name with its colour swatch. */
-function Kind({ edge, children }: { edge: string; children: string }) {
-  return (
-    <b className="kind">
-      <i style={{ background: `var(--${edge})` }} />
-      {children}
-    </b>
-  );
-}
-
-/** A property's plain name, linked to its page, with its ID on hover. */
-function Prop({ id, children }: { id: string; children: string }) {
-  const { wikiBaseUrl } = useAuth();
-  return (
-    <a
-      className="prop"
-      href={`${wikiBaseUrl}/wiki/Property:${id}`}
-      target="_blank"
-      rel="noreferrer"
-      title={`${PROPERTY_LABELS[id]} (${id})`}
-    >
-      {children}
-    </a>
-  );
-}
-
-/** How the items the app makes link together, in words. */
-function ItemModel() {
-  return (
-    <ul className="flow" aria-label="How the items are linked">
-      <li>
-        <Kind edge="disc-edge">Album</Kind> <Prop id="P658">lists</Prop>{" "}
-        <Kind edge="trk-edge">tracks</Kind>, each a <Prop id="P2550">recording of</Prop> a{" "}
-        <Kind edge="cmp-edge">composition</Kind>
-      </li>
-      <li>
-        <Kind edge="rg-edge">Singles</Kind> <Prop id="P658">list</Prop> a track and are{" "}
-        <Prop id="P13602">taken from</Prop> the album
-      </li>
-    </ul>
-  );
-}
 
 const STORAGE_KEY = "discographer:state";
 
@@ -125,6 +82,30 @@ function useFormId(): [string, () => void] {
 /** Whether the form is as Clear leaves it, so replacing it loses nothing. */
 const isEmpty = (s: State) => JSON.stringify(coerceState(s)) === JSON.stringify(coerceState(EMPTY));
 
+/** Where the later steps stand until a starting point is picked: locked, with nothing to fill in. */
+function LockedSteps() {
+  return (
+    <div className="locked" aria-disabled="true">
+      <p className="locked-note">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <rect x="2.5" y="6" width="9" height="6.5" rx="1.5" />
+          <path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" />
+        </svg>
+        Pick a starting point first
+      </p>
+      <section className="block locked-step" id="settings">
+        <h2>Item settings</h2>
+      </section>
+      <section className="block locked-step" id="tracks">
+        <h2>Tracks</h2>
+      </section>
+      <section className="block locked-step" id="performers">
+        <h2>Performers</h2>
+      </section>
+    </div>
+  );
+}
+
 /** A header link, marked as the current page while it's open. */
 function NavLink({ href, children }: { href: string; children: string }) {
   const [active] = useRoute(href);
@@ -135,19 +116,43 @@ function NavLink({ href, children }: { href: string; children: string }) {
   );
 }
 
-/** The page's title, with the links between pages and the login control. */
+/** A record, for the wordmark. */
+function RecordIcon() {
+  return (
+    <svg className="record-icon" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+      <circle className="vinyl" cx="14" cy="14" r="13" />
+      <circle className="groove" cx="14" cy="14" r="8.5" />
+      <circle className="label" cx="14" cy="14" r="4.5" />
+      <circle className="hole" cx="14" cy="14" r="1.4" />
+    </svg>
+  );
+}
+
+/** The wordmark, with the links between pages and the login control. */
 function Header() {
   return (
     <header className="top">
-      <div>
-        <h1>Wikidata Discographer</h1>
-        <p className="lede">Turn an album's tracklist into Wikidata items.</p>
-      </div>
-      <nav className="top-nav">
-        <NavLink href="/">Add an album</NavLink>
-        <NavLink href="/albums">Albums</NavLink>
+      <div className="top-inner">
+        <h1 className="wordmark">
+          <Link href="/">
+            <RecordIcon />
+            <span className="name">Discographer</span> <span className="for">for Wikidata</span>
+          </Link>
+        </h1>
+        <nav className="top-nav" aria-label="Pages">
+          <NavLink href="/">New album</NavLink>
+          <NavLink href="/albums">Albums</NavLink>
+          <a
+            href={RECENT_CHANGES_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="Edits made with this tool in the last 30 days"
+          >
+            Recent edits ↗
+          </a>
+        </nav>
         <AuthBar />
-      </nav>
+      </div>
     </header>
   );
 }
@@ -171,15 +176,15 @@ export default function App() {
         <Form />
       </Route>
       <Route path="/albums">
-        <main>
-          <Header />
+        <Header />
+        <main className="page">
           <AlbumList />
           <Footer />
         </main>
       </Route>
       <Route>
-        <main>
-          <Header />
+        <Header />
+        <main className="page">
           <section className="block">
             <h2>Page not found</h2>
             <p className="hint">
@@ -246,71 +251,143 @@ function Form() {
     }
   }, [state, stale]);
 
-  const { tracklist: albumTracklist, releaseGroup } = useAlbumTracklist(state);
-  const mbImport = useRef<MusicBrainzImportHandle>(null);
+  const {
+    tracklist: albumTracklist,
+    releaseGroup,
+    checked,
+    pending: tracklistPending,
+  } = useAlbumTracklist(state);
+  const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
+  const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
+  const albumFound = lookupAlbum(existingQid);
+  const startRef = useRef<StartHandle>(null);
   const { matches, status } = useMatches(state, plan);
   // Candidates dismissed in the Possible matches card, by candidateId.
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
   const reviews = reviewTracks(state.discs, plan.tracks, matches, dismissed);
   const props = { state, update, plan };
+  const { user } = useAuth();
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [sideSlot, setSideSlot] = useState<HTMLDivElement | null>(null);
+  const [running, setRunning] = useState<RunningInfo | null>(null);
+  const empty = isEmpty(state);
+  const unreviewed = reviews.filter((r) => !r.reviewed).length;
+  const progress = {
+    state,
+    plan,
+    empty,
+    unreviewed,
+    hasTracklist: !!albumTracklist,
+    notAlbum: !!albumProblem(existingQid, albumFound),
+    running,
+  };
   return (
-    <main>
+    <>
       <Header />
-      {stale && (
-        <div className="msg warn row">
-          <span>
-            The form was changed in another tab. Reload to get those changes. Until then this tab
-            can't run, and what you change here isn't saved.
-          </span>
-          <button type="button" onClick={() => location.reload()}>
-            Reload
-          </button>
+      <div className="page">
+        {stale && (
+          <div className="msg warn row">
+            <span>
+              The form was changed in another tab. Reload to get those changes. Until then this tab
+              can't run, and what you change here isn't saved.
+            </span>
+            <button type="button" onClick={() => location.reload()}>
+              Reload
+            </button>
+          </div>
+        )}
+        <div className="shell">
+          <ProgressRail
+            steps={railSteps(progress)}
+            running={!!running}
+            empty={empty}
+            clearConfirm={{
+              title: "Clear the form?",
+              body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
+              action: "Clear the form",
+            }}
+            onClear={clear}
+          />
+          <main className="steps">
+            <StartSection
+              key={clears}
+              ref={startRef}
+              {...props}
+              albumLabel={albumFound?.status === "ok" ? albumFound.label : null}
+              onLoad={replace}
+            />
+            {state.start ? (
+              <>
+                <AlbumSection
+                  {...props}
+                  found={albumFound}
+                  albumTracklist={albumTracklist}
+                  checked={checked}
+                  releaseGroup={releaseGroup}
+                  onLoadReleaseGroup={(mbid, album) =>
+                    startRef.current?.loadReleaseGroup(mbid, album)
+                  }
+                  onPickAnother={() =>
+                    startRef.current?.change(state.start === "search" ? "search" : "existing")
+                  }
+                />
+                {/* Picking a starting point doesn't collapse it, only a filled-in form does. */}
+                <SettingsSection
+                  key={formId}
+                  {...props}
+                  startCollapsed={!isEmpty({ ...state, start: null })}
+                />
+                <DiscsSection
+                  {...props}
+                  reviews={reviews}
+                  onRenumber={(di, moved) =>
+                    setDismissed((prev) => renumberDismissed(prev, di, moved))
+                  }
+                />
+                <MatchesSection
+                  key={formId}
+                  {...props}
+                  {...{ matches, status, reviews, dismissed, setDismissed }}
+                />
+                <PerformersSection {...props} />
+              </>
+            ) : (
+              <LockedSteps />
+            )}
+            <RunSection
+              {...props}
+              albumTracklist={albumTracklist}
+              unreviewed={unreviewed}
+              matchesPending={status === "pending"}
+              formId={formId}
+              stale={stale}
+              onFinished={clear}
+              slot={slot}
+              sideSlot={sideSlot}
+              albumName={
+                state.album.mode === "create"
+                  ? state.album.title.trim()
+                  : (albumFound?.status === "ok" && albumFound.label) || existingQid
+              }
+              onRunning={setRunning}
+            />
+          </main>
+          <PlanPanel
+            counts={createCounts(state, plan)}
+            checks={runChecks({
+              ...progress,
+              loggedIn: !!user,
+              ineligible: user && !user.eligibility.ok ? (user.eligibility.reason ?? null) : null,
+              matchesPending: status === "pending",
+              albumPending: tracklistPending || albumFound?.status === "loading",
+            })}
+            slot={setSlot}
+            sideSlot={setSideSlot}
+            running={!!running}
+          />
         </div>
-      )}
-      <ItemModel />
-      <MusicBrainzImport
-        key={clears}
-        ref={mbImport}
-        state={state}
-        needsConfirm={!isEmpty(state)}
-        onLoad={replace}
-      />
-      <AlbumSection
-        {...props}
-        albumTracklist={albumTracklist}
-        releaseGroup={releaseGroup}
-        onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
-      />
-      <SettingsSection {...props} />
-      <DiscsSection {...props} reviews={reviews} />
-      <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
-      <PerformersSection {...props} />
-      <RunSection
-        {...props}
-        albumTracklist={albumTracklist}
-        unreviewed={reviews.filter((r) => !r.reviewed).length}
-        matchesPending={status === "pending"}
-        formId={formId}
-        stale={stale}
-        onFinished={clear}
-      />
-      <div className="row" style={{ marginBottom: 24 }}>
-        <ConfirmButton
-          className="danger"
-          label="Clear the form"
-          confirm={
-            isEmpty(state)
-              ? null
-              : {
-                  title: "Clear the form?",
-                  body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
-                  action: "Clear the form",
-                }
-          }
-          onConfirm={clear}
-        />
+        <Footer />
       </div>
-      <Footer />
-    </main>
+    </>
   );
 }

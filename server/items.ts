@@ -1,6 +1,6 @@
 // Read routes over the music mirror, plus adding an item to it:
 //
-//   GET  /api/items/search?q=…&kind=artist   label search (exact, then prefix)
+//   GET  /api/items/search?q=…&kind=album,ep label search (exact, then prefix), of some kinds
 //   POST /api/items/duplicates               possible duplicates of a new album
 //   POST /api/items/matches                  existing items for a tracklist (server/matches.ts)
 //   POST /api/items/describe                 labels, descriptions and classes, live from Wikidata
@@ -8,7 +8,7 @@
 //   POST /api/items/:qid                     fetch an item from Wikidata into the mirror
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { and, eq, inArray, like, or } from "drizzle-orm";
+import { and, count, eq, inArray, like, or } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, toProperty, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
@@ -36,6 +36,7 @@ import type {
   MatchesRequest,
   MatchesResponse,
   MirrorItem,
+  SearchItem,
   SearchResponse,
   TracklistResponse,
 } from "../src/lib/api-types.ts";
@@ -48,7 +49,12 @@ const columns = {
   label: musicItems.label,
   description: musicItems.description,
 };
-type Selected = { qid: number; kind: string; label: string | null; description: string | null };
+export type Selected = {
+  qid: number;
+  kind: string;
+  label: string | null;
+  description: string | null;
+};
 const toItem = (r: Selected): MirrorItem => ({
   ...r,
   qid: toQid(r.qid),
@@ -60,15 +66,68 @@ const P175 = propertyNumber("P175");
 const isKind = (k: unknown): k is MusicKind => MUSIC_KINDS.includes(k as MusicKind);
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
+/** The kinds a search asks for, comma separated ("album,ep"). None, or none known, is any kind. */
+export const searchKinds = (raw: string | undefined): MusicKind[] => [
+  ...new Set(
+    (raw ?? "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(isKind),
+  ),
+];
+
+/** Search results, the albums and EPs with their facts from `albumFacts`. */
+export function withAlbumFacts(
+  rows: Selected[],
+  tracks: ReadonlyMap<number, number>,
+  onMusicBrainz: ReadonlySet<number>,
+): SearchItem[] {
+  return rows.map((r) =>
+    r.kind === "album" || r.kind === "ep"
+      ? {
+          ...toItem(r),
+          album: { tracks: tracks.get(r.qid) ?? 0, musicBrainz: onMusicBrainz.has(r.qid) },
+        }
+      : toItem(r),
+  );
+}
+
+const P436 = propertyNumber("P436");
+const P658 = propertyNumber("P658");
+
+/**
+ * How many tracks each album lists, and which have a MusicBrainz release
+ * group, as of the mirror. Both are keyed lookups on the tables' primary
+ * keys. The mirror can be a week behind, so a picked album is checked live.
+ */
+async function albumFacts(qids: number[]) {
+  if (!qids.length) return { tracks: new Map<number, number>(), onMusicBrainz: new Set<number>() };
+  const [counts, mb] = await Promise.all([
+    db
+      .select({ qid: musicLinks.qid, n: count() })
+      .from(musicLinks)
+      .where(and(inArray(musicLinks.qid, qids), eq(musicLinks.property, P658)))
+      .groupBy(musicLinks.qid),
+    db
+      .selectDistinct({ qid: musicExternalIds.qid })
+      .from(musicExternalIds)
+      .where(and(inArray(musicExternalIds.qid, qids), eq(musicExternalIds.property, P436))),
+  ]);
+  return {
+    tracks: new Map(counts.map((r) => [r.qid, r.n])),
+    onMusicBrainz: new Set(mb.map((r) => r.qid)),
+  };
+}
+
 items.get("/search", async (c) => {
   const q = c.req.query("q")?.trim() ?? "";
   const key = labelSearchKey(q);
-  const kind = c.req.query("kind");
+  const kinds = searchKinds(c.req.query("kind"));
   if (!key) return c.json({ items: [] } satisfies SearchResponse);
   // A short query keeps its punctuation, but the longer titles it starts are
   // keyed folded, so match their start folded too ("#1" finds "#1 Crush").
   const start = foldTitle(q) || key;
-  const kindFilter = isKind(kind) ? eq(musicItems.kind, kind) : undefined;
+  const kindFilter = kinds.length ? inArray(musicItems.kind, kinds) : undefined;
   const exact = await db
     .select(columns)
     .from(musicItems)
@@ -84,7 +143,12 @@ items.get("/search", async (c) => {
       : [];
   const seen = new Set<number>();
   const result = [...exact, ...prefix].filter((r) => !seen.has(r.qid) && seen.add(r.qid));
-  return c.json({ items: result.map(toItem) } satisfies SearchResponse);
+  const facts = await albumFacts(
+    result.filter((r) => r.kind === "album" || r.kind === "ep").map((r) => r.qid),
+  );
+  return c.json({
+    items: withAlbumFacts(result, facts.tracks, facts.onMusicBrainz),
+  } satisfies SearchResponse);
 });
 
 items.post("/duplicates", async (c) => {
