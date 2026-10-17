@@ -3,6 +3,7 @@ import { EXAMPLE } from "./example.fixture.ts";
 import { buildPlan, type State } from "./plan.ts";
 import {
   createCounts,
+  performerRows,
   type ProgressInput,
   railSteps,
   runChecks,
@@ -164,5 +165,18 @@ describe("settingsPills", () => {
   it("names what's missing", () => {
     const S = { ...EMPTY.settings, lang: "nds", straight: false };
     expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "3 options on"]);
+  });
+});
+
+describe("performerRows", () => {
+  it("counts each name's tracks and marks the album artists", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].tracks[1].artists = ["Carly Rae Jepsen", "Guest"];
+    expect(performerRows(state, buildPlan(state))).toEqual([
+      { name: "Carly Rae Jepsen", tracks: 24, albumArtist: false },
+      { name: "Guest", tracks: 1, albumArtist: false },
+    ]);
+    state.start = "mb";
+    expect(performerRows(state, buildPlan(state))[0].albumArtist).toBe(true);
   });
 });

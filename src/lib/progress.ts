@@ -51,6 +51,26 @@ export function performerNames(state: State, plan: Plan): string[] {
   return [...names];
 }
 
+export interface PerformerRow {
+  name: string;
+  /** How many tracks list them. */
+  tracks: number;
+  /** One of the album artists, as entered for a new album or imported from MusicBrainz. */
+  albumArtist: boolean;
+}
+
+/** Each name in Performers, in the table's order, with where it's used. */
+export function performerRows(state: State, plan: Plan): PerformerRow[] {
+  const ofAlbum =
+    state.album.mode === "create" || state.start === "mb" ? new Set(albumArtists(state)) : null;
+  const tracks = plan.tracks.flat();
+  return performerNames(state, plan).map((name) => ({
+    name,
+    tracks: tracks.filter((t) => t.artists.includes(name)).length,
+    albumArtist: ofAlbum?.has(name) ?? false,
+  }));
+}
+
 /** Performer names with a valid QID, of all of them. */
 export function linkedPerformers(state: State, plan: Plan): { linked: number; total: number } {
   const names = performerNames(state, plan);

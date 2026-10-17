@@ -1,94 +1,106 @@
 import { useEffect, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { albumArtists, normalizeQid, QID } from "../lib/plan.ts";
+import { normalizeQid, QID } from "../lib/plan.ts";
+import { type PerformerRow, performerRows } from "../lib/progress.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
-import { Pids, QidInput, WikiLink } from "./common.tsx";
+import { QidInput, WikiLink } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
-  const names = new Set<string>();
-  for (const t of plan.tracks.flat()) t.artists.forEach((a) => names.add(a));
-  if (state.album.mode === "create") albumArtists(state).forEach((a) => names.add(a));
+  const rows = performerRows(state, plan);
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);
   const lookup = useItemSummaries(
-    [...names].map((n) => (state.artists[n] ?? "").trim()),
+    rows.map((r) => (state.artists[r.name] ?? "").trim()),
     state.settings.lang,
   );
-  const mapped = [...names].filter((n) => {
-    const v = (state.artists[n] ?? "").trim();
+  const linked = rows.filter(({ name }) => {
+    const v = (state.artists[name] ?? "").trim();
     const s = lookup(v)?.status;
     return QID.test(v) && s !== "missing" && s !== "redirect";
   }).length;
 
   return (
     <section className="block" id="performers">
-      <h2>Performers</h2>
-      <p className="hint">
-        <Pids>
-          Every artist name found in the tracklists and album artists, mapped to a QID for P175.
-          Matching artists already on Wikidata are suggested. Each name needs a QID before the edits
-          can be made.
-        </Pids>
-      </p>
-      <div className="tablewrap">
-        <table className="performers">
-          <thead>
-            <tr>
-              <th>Name in tracklist</th>
-              <th className="qid">QID</th>
-              <th>
-                Wikidata item
-                {names.size > 0 && (
-                  <span className="muted count">
-                    {" "}
-                    · {mapped} of {names.size} mapped
-                  </span>
-                )}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {names.size ? (
-              [...names].map((n) => {
-                const v = (state.artists[n] ?? "").trim();
-                const set = (q: string) => update((s) => void (s.artists[n] = q.trim()));
-                return (
-                  <tr key={n} data-performer={n}>
-                    <td>{n}</td>
-                    <td className="qid">
-                      <QidInput
-                        placeholder="Q… or URL"
-                        aria-label={`QID for ${n}`}
-                        aria-invalid={v !== "" && !QID.test(v)}
-                        value={state.artists[n] ?? ""}
-                        onChange={set}
-                      />
-                    </td>
-                    <td>
-                      {v ? (
-                        <Chosen qid={v} found={lookup(v)} onUse={set} />
-                      ) : (
-                        <Suggestions name={n} version={mirrorVersion} onPick={set} />
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={3} className="hint">
-                  Artists appear here once a disc has tracks.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="perf-top">
+        <h2>Performers</h2>
+        {rows.length > 0 && (
+          <span className="perf-count">
+            <b>
+              {linked} of {rows.length}
+            </b>{" "}
+            linked
+          </span>
+        )}
       </div>
+      <p className="hint">
+        Every artist name in the tracklists, linked to a Wikidata item for performer. Each one needs
+        a QID before the run can start.
+      </p>
+      {rows.length > 0 && (
+        <div
+          className="perf-bar"
+          role="progressbar"
+          aria-label="Performers linked"
+          aria-valuemin={0}
+          aria-valuemax={rows.length}
+          aria-valuenow={linked}
+          aria-valuetext={`${linked} of ${rows.length} linked`}
+        >
+          <div style={{ width: `${(linked / rows.length) * 100}%` }} />
+        </div>
+      )}
+      {rows.length ? (
+        <div className="perf-rows">
+          {rows.map((r) => {
+            const v = (state.artists[r.name] ?? "").trim();
+            const set = (q: string) => update((s) => void (s.artists[r.name] = q.trim()));
+            return (
+              <div className="perf-row" key={r.name} data-performer={r.name}>
+                <PerformerName row={r} />
+                <label className="perf-qid">
+                  QID
+                  <QidInput
+                    className="mono"
+                    placeholder="Q… or URL"
+                    aria-label={`QID for ${r.name}`}
+                    aria-invalid={v !== "" && !QID.test(v)}
+                    value={state.artists[r.name] ?? ""}
+                    onChange={set}
+                  />
+                </label>
+                <div className="perf-result">
+                  {v ? (
+                    <Chosen qid={v} found={lookup(v)} onUse={set} />
+                  ) : (
+                    <Suggestions name={r.name} version={mirrorVersion} onPick={set} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="hint perf-empty">Artists appear here once a disc has tracks.</p>
+      )}
       <AddItem onAdded={() => setMirrorVersion((x) => x + 1)} />
     </section>
+  );
+}
+
+function PerformerName({ row }: { row: PerformerRow }) {
+  return (
+    <div className="perf-name">
+      <b>{row.name}</b>
+      <ul className="pills">
+        {row.albumArtist && <li className="pill">Album artist</li>}
+        <li className="pill">
+          {row.tracks} {row.tracks === 1 ? "track" : "tracks"}
+        </li>
+      </ul>
+    </div>
   );
 }
 
@@ -105,34 +117,40 @@ function Chosen({
   const { wikiBaseUrl } = useAuth();
   if (!QID.test(qid))
     return (
-      <span className="field-err">
+      <p className="field-err">
         "{qid}" isn't a QID. Enter something like Q52583, or paste the item's Wikidata URL.
-      </span>
+      </p>
     );
   if (found?.status === "missing")
-    return <span className="field-err">{qid} doesn't exist on Wikidata.</span>;
+    return <p className="field-err">{qid} doesn't exist on Wikidata.</p>;
   if (found?.status === "redirect")
     return (
-      <span className="field-err">
+      <p className="field-err">
         {qid} redirects to {found.to}.{" "}
         <button type="button" className="ghost small" onClick={() => onUse(found.to)}>
           Use {found.to}
         </button>
-      </span>
+      </p>
     );
   if (found?.status === "ok")
     return (
-      <span className="item">
-        <a href={`${wikiBaseUrl}/wiki/${qid}`} target="_blank" rel="noreferrer">
-          {found.label ?? qid}
-        </a>
-        {found.description && <span className="muted">{found.description}</span>}
-      </span>
+      <div className="perf-linked">
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <circle cx="9" cy="9" r="8" />
+          <path d="M5.5 9.2l2.3 2.3 4.7-5" />
+        </svg>
+        <span className="perf-linked-text">
+          <a href={`${wikiBaseUrl}/wiki/${qid}`} target="_blank" rel="noreferrer">
+            {found.label ?? qid} ↗
+          </a>
+          {found.description && <span>{found.description}</span>}
+        </span>
+      </div>
     );
   return (
-    <span className="muted">
+    <p className="muted perf-state">
       {found?.status === "failed" ? "Couldn’t look it up on Wikidata" : "Looking it up…"}
-    </span>
+    </p>
   );
 }
 
@@ -161,36 +179,45 @@ function Suggestions({
       cancelled = true;
     };
   }, [name, version]);
-  if (items === null) return <span className="muted">Looking for matches…</span>;
+  if (items === null) return <p className="muted perf-state">Looking for matches…</p>;
   if (!items.length)
     return (
-      <span className="muted">
-        No matching artist found.
-        {user && " If you just created one on Wikidata, add it below."}
-      </span>
+      <p className="perf-none">
+        No matching artist on Wikidata.{" "}
+        {user ? "Paste a QID, or if you just created one, add it below." : "Paste a QID."}
+      </p>
     );
   return (
-    <ul className="matches">
-      {items.slice(0, 5).map((i) => (
-        <li key={i.qid}>
-          <button
-            type="button"
-            className="ghost small"
-            aria-label={`Use ${i.qid} for ${name}`}
-            onClick={() => onPick(i.qid)}
-          >
-            Use
-          </button>
-          <span className="item">
-            <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
-              {i.label ?? i.qid}
-            </a>
-            <span className="muted">{i.qid}</span>
-            {i.description && <span className="muted">{i.description}</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="perf-suggest">
+      <p className="muted">
+        {items.length === 1
+          ? "1 artist on Wikidata has this name"
+          : `${items.length} artists on Wikidata have this name`}
+      </p>
+      <ul>
+        {items.slice(0, 5).map((i, n) => (
+          <li key={i.qid}>
+            <span className="perf-suggest-text">
+              <span className="match-label">
+                <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
+                  {i.label ?? i.qid} ↗
+                </a>
+                <span className="mono muted">{i.qid}</span>
+              </span>
+              {i.description && <span className="muted">{i.description}</span>}
+            </span>
+            <button
+              type="button"
+              className={n === 0 ? "small" : "ghost small"}
+              aria-label={`Use ${i.qid} for ${name}`}
+              onClick={() => onPick(i.qid)}
+            >
+              Use
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

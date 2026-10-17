@@ -1736,43 +1736,170 @@ th .info {
 .info dd {
   margin: 0;
 }
-.matches {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0 0;
-  font-size: 0.85rem;
-}
-.matches li {
+/* Performers: a row per name, its QID, then what that QID points at or what could fit. */
+.perf-top {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
   flex-wrap: wrap;
-  padding: 3px 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
-/* Performers: a narrow QID column, the rest for what it points at. */
-table.performers th.qid,
-table.performers td.qid {
-  width: 16ch;
-}
-table.performers td.qid input {
-  width: 100%;
-}
-table.performers .matches {
+.perf-top h2 {
   margin: 0;
 }
-table.performers .matches li {
-  padding: 1px 0;
+.perf-count {
+  font-size: 14px;
 }
-table.performers .item {
-  display: inline-flex;
+.perf-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--tint);
+  overflow: hidden;
+}
+.perf-bar > div {
+  height: 100%;
+  background: var(--ok);
+}
+.perf-rows {
+  margin-top: 6px;
+}
+.perf-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(150px, 190px) minmax(240px, 2fr);
+  gap: 12px 18px;
+  align-items: start;
+  padding: 16px 0;
+  border-top: 1px solid var(--tint);
+}
+@media (max-width: 720px) {
+  .perf-row {
+    grid-template-columns: 1fr;
+  }
+}
+.perf-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.perf-name b {
+  font-size: 16px;
+}
+label.perf-qid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+label.perf-qid input {
+  width: 100%;
+  font-size: 15px;
+  color: var(--ink);
+}
+/* Lined up with the QID input, under its label. */
+.perf-result {
+  min-width: 0;
+  padding-top: 21px;
+}
+@media (max-width: 720px) {
+  .perf-result {
+    padding-top: 0;
+  }
+}
+.perf-result > p {
+  margin: 0;
+  font-size: 14px;
+}
+.perf-state {
+  padding: 10px 0;
+}
+.perf-linked {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--ok-tint);
+}
+.perf-linked svg {
+  flex: none;
+  margin-top: 2px;
+}
+.perf-linked circle {
+  fill: var(--ok);
+}
+.perf-linked path {
+  fill: none;
+  stroke: var(--panel);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.perf-linked-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.perf-linked-text a {
+  font-weight: 600;
+}
+.perf-linked-text span {
+  font-size: 13px;
+  color: var(--cmp-ink);
+}
+.perf-suggest {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: baseline;
+}
+.perf-suggest > p {
+  margin: 0;
+  font-size: 13px;
+}
+.perf-suggest ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.perf-suggest li {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
 }
-table.performers th .count {
-  font-weight: 400;
+.perf-suggest-text {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
-.matches .muted,
+.perf-suggest-text a {
+  font-weight: 600;
+}
+.perf-suggest-text .mono {
+  font-size: 12.5px;
+}
+.perf-suggest-text > .muted {
+  font-size: 13px;
+}
+.perf-result > p.perf-none {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--soft-bg);
+  border: 1px dashed var(--line);
+}
+.perf-empty {
+  margin: 14px 0 0;
+}
 .muted {
   color: var(--muted);
 }
