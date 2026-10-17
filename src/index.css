@@ -1343,12 +1343,42 @@ button.link.match-toggle {
 }
 .match-empty {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: 12px;
   margin: 4px 0 0;
   font-size: 14px;
   color: var(--muted);
+}
+.state-icon {
+  flex: none;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.state-icon.idle circle {
+  stroke: var(--disc-edge);
+}
+.state-icon.idle .dot {
+  fill: var(--disc-edge);
+  stroke: none;
+}
+.state-icon.off circle {
+  stroke: var(--warn-edge);
+}
+.state-icon.off path {
+  stroke: var(--warn);
+  stroke-width: 1.8;
+}
+.state-icon.failed {
+  stroke: var(--err);
+}
+.state-icon.none circle {
+  fill: var(--ok);
+}
+.state-icon.none path {
+  stroke: var(--panel);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
 }
 .match-state.err {
   border-color: var(--danger-edge);

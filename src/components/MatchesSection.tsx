@@ -171,11 +171,17 @@ export default function MatchesSection({
         <h2>Possible matches</h2>
         <p className="match-empty" role="status">
           {!hasRows ? (
-            "Tracks that may already be on Wikidata are listed here."
+            <>
+              <StateIcon kind="idle" />
+              Tracks that may already be on Wikidata are listed here.
+            </>
           ) : status === "off" ? (
             <>
-              Give the performers QIDs to look for items already on Wikidata.{" "}
-              <a href="#performers">Go to Performers</a>
+              <StateIcon kind="off" />
+              <span>
+                Give the performers QIDs to look for items already on Wikidata.{" "}
+                <a href="#performers">Go to Performers</a>
+              </span>
             </>
           ) : status === "pending" ? (
             <>
@@ -183,9 +189,15 @@ export default function MatchesSection({
               Looking for items already on Wikidata…
             </>
           ) : status === "failed" ? (
-            "Couldn't look for items already on Wikidata."
+            <>
+              <StateIcon kind="failed" />
+              Couldn't look for items already on Wikidata.
+            </>
           ) : (
-            "No items already on Wikidata match these tracks. Everything will be created new."
+            <>
+              <StateIcon kind="none" />
+              No items already on Wikidata match these tracks. Everything will be created new.
+            </>
           )}
         </p>
       </section>
@@ -321,6 +333,33 @@ export default function MatchesSection({
       </div>
     );
   }
+}
+
+/** The icon by an empty card's line: nothing to look at yet, needs performers, failed, or no matches. */
+function StateIcon({ kind }: { kind: "idle" | "off" | "failed" | "none" }) {
+  return (
+    <svg
+      className={`state-icon ${kind}`}
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+    >
+      {kind === "none" ? (
+        <>
+          <circle cx="10" cy="10" r="9" />
+          <path d="M6 10.3l2.6 2.6L14 7.4" />
+        </>
+      ) : (
+        <>
+          <circle cx="10" cy="10" r="8.5" />
+          {kind === "idle" && <circle className="dot" cx="10" cy="10" r="2.5" />}
+          {kind === "off" && <path d="M10 5.5v5.5M10 13.8v.2" />}
+          {kind === "failed" && <path d="M7 7l6 6M13 7l-6 6" />}
+        </>
+      )}
+    </svg>
+  );
 }
 
 const Warn = () => (
