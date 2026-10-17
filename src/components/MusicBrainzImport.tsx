@@ -141,7 +141,16 @@ export default function MusicBrainzImport({
     <>
       {showForm && (
         <div className="start-panel">
-          <label htmlFor={inputId}>MusicBrainz release or release group URL</label>
+          <div className="start-panel-head">
+            <label htmlFor={inputId}>MusicBrainz release or release group URL</label>
+            <a
+              href="https://musicbrainz.org/search?type=release_group"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Search on MusicBrainz ↗
+            </a>
+          </div>
           <form
             className="row"
             onSubmit={(e) => {

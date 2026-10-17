@@ -2708,9 +2708,21 @@ section.block.start.started {
   padding-top: 18px;
   border-top: 1px solid var(--tint);
 }
-.start-panel > label {
+.start-panel > label,
+.start-panel-head label {
   font-size: 13px;
   font-weight: 600;
+}
+/* A field's label, with a link out on the right. */
+.start-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.start-panel-head a {
+  font-size: 13px;
 }
 .start-panel .row {
   margin-top: 0;
