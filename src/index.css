@@ -1848,3 +1848,123 @@ section.block.locked-step {
   font-size: inherit;
   font-weight: 600;
 }
+
+/* Search by name: the field, its state line and the results. */
+.search-field {
+  position: relative;
+}
+.search-field svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+.search-field input[type="search"] {
+  width: 100%;
+  padding-left: 38px;
+}
+.search-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 4px 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.search-state .link {
+  font-size: inherit;
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spinner-turn 0.8s linear infinite;
+}
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.search-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+}
+.search-result.taken {
+  background: var(--locked-bg);
+}
+.search-result.taken b {
+  color: var(--muted);
+}
+.search-result-text {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.search-result-text > .muted {
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-result-text .pills {
+  margin-top: 2px;
+}
+.search-result-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.search-result-title .muted {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.search-result-err {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--err-ink);
+}
+.search-result-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.search-result-actions button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+.search-result-actions a {
+  font-size: 13px;
+  font-weight: 600;
+}
+.pill.bad {
+  background: var(--err-tint);
+  color: var(--err-ink);
+}

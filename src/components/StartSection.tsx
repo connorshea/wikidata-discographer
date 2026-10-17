@@ -10,7 +10,11 @@ import {
   type State,
 } from "../lib/plan.ts";
 import { startSummary } from "../lib/progress.ts";
+import { api } from "../lib/client.ts";
+import { useAuth } from "../lib/auth-context.ts";
+import type { SearchItem, SearchResponse } from "../lib/api-types.ts";
 import { FieldErr, QidInput } from "./common.tsx";
+import { useDebounced } from "./use-debounced.ts";
 import { AlbumArtists } from "./AlbumSection.tsx";
 import MusicBrainzImport, { type MusicBrainzImportHandle } from "./MusicBrainzImport.tsx";
 import type { SectionProps } from "./types.ts";
@@ -79,6 +83,8 @@ export default function StartSection({
   const [card, setCard] = useState<StartingPoint | null>(null);
   // The starting point Change left, to go back to it.
   const [prev, setPrev] = useState<StartingPoint | null>(null);
+  // The search, kept here so "Pick a different album" comes back to it.
+  const [query, setQuery] = useState("");
   const mbImport = useRef<MusicBrainzImportHandle>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
@@ -171,7 +177,9 @@ export default function StartSection({
         )
       )}
       {picking && card === "existing" && <ExistingPanel state={state} update={update} />}
-      {picking && card === "search" && <SearchPanel onPick={setCard} />}
+      {picking && card === "search" && (
+        <SearchPanel update={update} query={query} setQuery={setQuery} onPick={setCard} />
+      )}
       {picking && card === "new" && <NewPanel state={state} update={update} />}
       <MusicBrainzImport
         ref={mbImport}
@@ -230,43 +238,162 @@ function ExistingPanel({ state, update }: Omit<SectionProps, "plan">) {
   );
 }
 
+/** A search's answer, tagged with the query it answers. `items` is null if it failed. */
+type SearchResult = { q: string; items: SearchItem[] | null };
+
 /**
- * A search of the albums and EPs already on Wikidata, by title. Only the
- * field for now: the results, and picking one (which sets `start` to
- * "search"), are still to come.
+ * A search of the albums and EPs already on Wikidata (as of the mirror), by
+ * title. Picking one does what ExistingPanel does, with `start` "search". The
+ * mirror can be a week behind, so the album card checks the pick live.
  */
-function SearchPanel({ onPick }: { onPick: (card: StartingPoint) => void }) {
+function SearchPanel({
+  update,
+  query,
+  setQuery,
+  onPick,
+}: Pick<SectionProps, "update"> & {
+  query: string;
+  setQuery: (q: string) => void;
+  onPick: (card: StartingPoint) => void;
+}) {
   const id = useId();
-  const [query, setQuery] = useState("");
+  const { wikiBaseUrl } = useAuth();
+  const q = useDebounced(query.trim(), 300);
+  const [result, setResult] = useState<SearchResult | null>(null);
+  useEffect(() => {
+    if (!q) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ q, kind: "album,ep" });
+    api<SearchResponse>(`/api/items/search?${params}`)
+      .then((r) => !cancelled && setResult({ q, items: r.items }))
+      .catch(() => !cancelled && setResult({ q, items: null }));
+    return () => {
+      cancelled = true;
+    };
+  }, [q]);
+  const typed = query.trim();
+  // Still settling, or asked and not answered yet: never show a stale answer.
+  const searching = !!typed && (q !== typed || result?.q !== typed);
+  const items = !searching && typed ? result?.items : undefined;
+  // The first one that can be used gets the primary button.
+  const first = items?.find((i) => !i.album?.tracks)?.qid;
+  const create = (title: string) => {
+    if (title) update((s) => void (s.album.title = title));
+    onPick("new");
+  };
   return (
     <div className="start-panel">
       <label htmlFor={id}>Album or EP title</label>
-      <input
-        id={id}
-        type="search"
-        value={query}
-        aria-describedby={`${id}-sub`}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      <span className="sub" id={`${id}-sub`}>
-        Albums and EPs already on Wikidata
-      </span>
-      {query.trim() && (
-        <p className="msg summary" role="status">
-          Searching by name isn't ready yet. For now,{" "}
-          <button type="button" className="link" onClick={() => onPick("existing")}>
-            enter the album's QID
+      <div className="search-field">
+        <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM13.5 13.5L17 17" />
+        </svg>
+        <input
+          id={id}
+          type="search"
+          value={query}
+          aria-describedby={`${id}-status`}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+      <div id={`${id}-status`} role="status" className="search-status">
+        {!typed ? (
+          <span className="sub">Albums and EPs already on Wikidata</span>
+        ) : searching ? (
+          <span className="search-state">
+            <span className="spinner" aria-hidden="true" />
+            Searching Wikidata…
+          </span>
+        ) : items === null ? (
+          <span className="search-state">Couldn't search Wikidata. Try again in a moment.</span>
+        ) : items?.length === 0 ? (
+          <span className="search-state">
+            No albums or EPs match "{typed}".{" "}
+            <button type="button" className="link" onClick={() => create(typed)}>
+              Create it as a new album
+            </button>
+          </span>
+        ) : (
+          <span className="sub">
+            {items?.length === 1 ? "1 album or EP" : `${items?.length} albums and EPs`} on Wikidata
+          </span>
+        )}
+      </div>
+      {!!items?.length && (
+        <ul className="search-results">
+          {items.map((i) => {
+            const tracks = i.album?.tracks ?? 0;
+            const type = i.kind === "ep" ? "EP" : "Album";
+            const label = i.label ?? i.qid;
+            return (
+              <li key={i.qid} className={`search-result${tracks ? " taken" : ""}`}>
+                <span className="search-result-text">
+                  <span className="search-result-title">
+                    <b>{label}</b>
+                    <span className="mono muted">{i.qid}</span>
+                  </span>
+                  {i.description && <span className="muted">{i.description}</span>}
+                  <ul className="pills" aria-label={`About ${label}`}>
+                    <li className="pill">{type}</li>
+                    {tracks ? (
+                      <li className="pill bad">
+                        Has a tracklist · {tracks} track{tracks === 1 ? "" : "s"}
+                      </li>
+                    ) : (
+                      <li className="pill ok">No tracklist yet</li>
+                    )}
+                    {i.album?.musicBrainz && (
+                      <li className="pill">
+                        <span className="mb-badge" aria-hidden="true">
+                          MB
+                        </span>
+                        On MusicBrainz
+                      </li>
+                    )}
+                  </ul>
+                  {tracks > 0 && (
+                    <span className="search-result-err" id={`${id}-${i.qid}-err`}>
+                      Discographer can't modify an album that already has a tracklist, sorry!
+                    </span>
+                  )}
+                </span>
+                <span className="search-result-actions">
+                  <button
+                    type="button"
+                    className={i.qid === first ? undefined : "ghost"}
+                    disabled={tracks > 0}
+                    aria-label={`Use ${label} (${i.qid})`}
+                    aria-describedby={tracks ? `${id}-${i.qid}-err` : undefined}
+                    onClick={() =>
+                      update((s) => {
+                        s.album.mode = "existing";
+                        s.album.qid = i.qid;
+                        s.start = "search";
+                      })
+                    }
+                  >
+                    Use this {type === "EP" ? "EP" : "album"}
+                  </button>
+                  {tracks > 0 && (
+                    <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
+                      View on Wikidata ↗
+                    </a>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!(items && items.length === 0) && (
+        <span className="sub">
+          Not listed?{" "}
+          <button type="button" className="link" onClick={() => create(typed)}>
+            Create it as a new album
           </button>
           .
-        </p>
+        </span>
       )}
-      <span className="sub">
-        Not listed?{" "}
-        <button type="button" className="link" onClick={() => onPick("new")}>
-          Create it as a new album
-        </button>
-        .
-      </span>
     </div>
   );
 }
