@@ -16,6 +16,7 @@ import { ALBUM_ID_FIELDS, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
+import { useItemSummaries } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
@@ -35,6 +36,8 @@ export default function AlbumSection({
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
   const errs = plan.fieldErrs;
+  const lookup = useItemSummaries([A.qid], state.settings.lang);
+  const found = A.mode === "existing" ? lookup(A.qid) : undefined;
   return (
     <section className="block">
       <h2>Album</h2>
@@ -62,7 +65,17 @@ export default function AlbumSection({
         <div style={{ marginTop: 12 }}>
           <div className="grid">
             <label className="f">
-              Album QID
+              <span>
+                Album QID
+                {found?.status === "ok" && (
+                  <>
+                    {" · "}
+                    <a href={`${wikiBaseUrl}/wiki/${A.qid}`} target="_blank" rel="noreferrer">
+                      View {found.label ? `“${found.label}”` : A.qid} on Wikidata
+                    </a>
+                  </>
+                )}
+              </span>
               <QidInput
                 id="albumQid"
                 placeholder="Q…"
@@ -70,7 +83,15 @@ export default function AlbumSection({
                 aria-invalid={!!errs.albumQid}
                 onChange={(v) => update((s) => void (s.album.qid = v.trim()))}
               />
-              <span className="sub">Q-number or Wikidata URL</span>
+              <span className="sub">
+                {found?.status === "missing"
+                  ? `${A.qid} doesn't exist on Wikidata.`
+                  : found?.status === "redirect"
+                    ? `${A.qid} redirects to ${found.to}. Use ${found.to}.`
+                    : found?.status === "ok" && found.description
+                      ? found.description
+                      : "Q-number or Wikidata URL"}
+              </span>
               <FieldErr id="albumQid" msg={errs.albumQid} />
             </label>
           </div>
