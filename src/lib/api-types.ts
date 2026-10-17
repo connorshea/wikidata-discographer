@@ -101,7 +101,7 @@ export interface SubmissionInfo {
   finishedAt: string | null;
   /** Operations in the plan, so the client can show progress. */
   total: number;
-  /** While the run waits before its next edit (they go out a second or two apart): when it goes. */
+  /** While the run waits before its next edit (they go out two or three seconds apart): when it goes. */
   waitingUntil: string | null;
   edits: EditLogEntry[];
   /** The form the run was started from, so the client can tell whether it's still the one open. */

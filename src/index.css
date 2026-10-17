@@ -801,9 +801,192 @@ table.album-list td.count {
 .log li.fail {
   color: var(--err);
 }
-progress {
-  width: 100%;
+.turntable-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin-top: 10px;
+}
+.turntable-row .hint {
+  margin: 0;
+}
+.turntable {
+  position: relative;
+  flex: none;
+  width: 108px;
+  /* Leaves room for the front, which hangs below the tilted top. */
+  padding-bottom: 14px;
+  perspective: 420px;
+}
+.turntable .deck {
+  position: relative;
+  transform-style: preserve-3d;
+  /* Seen a little from the front. */
+  transform: rotateX(42deg);
+}
+.turntable svg {
+  display: block;
+  width: 108px;
+  height: 90px;
+  overflow: visible;
+}
+.turntable .plinth {
+  fill: color-mix(in srgb, var(--accent) 22%, var(--panel));
+}
+.turntable .front {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--accent) 38%, var(--panel));
+  border-radius: 0 0 6px 6px;
+  box-shadow: 0 10px 12px -4px rgb(0 0 0 / 0.45);
+  transform-origin: top;
+  transform: rotateX(-90deg);
+}
+.turntable .bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.turntable .bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.6s ease-out;
+}
+.turntable .vinyl-edge {
+  fill: #050508;
+}
+.turntable .record {
+  transform-box: view-box;
+  transform-origin: 50px 52px;
+  /* 33⅓ rpm is one turn every 1.8 seconds. */
+  animation: turntable-spin 1.8s linear infinite;
+}
+.turntable .vinyl {
+  fill: #14151c;
+}
+.turntable .groove {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.09;
+  stroke-width: 0.6;
+}
+.turntable .sheen {
+  fill: #ffffff;
+  fill-opacity: 0.07;
+}
+.turntable .label {
+  fill: var(--accent);
+}
+.turntable .label-mark {
+  fill: var(--accent-ink);
+  fill-opacity: 0.7;
+}
+.turntable .spindle {
+  fill: var(--panel);
+}
+.turntable .tonearm,
+.turntable .jitter {
+  transform-box: view-box;
+  transform-origin: 106px 10px;
+}
+.turntable .tonearm {
+  transition: transform 0.6s ease-out;
+}
+.turntable .jitter {
+  animation: turntable-jitter 1.2s ease-in-out infinite;
+}
+.turntable .arm,
+.turntable .arm-shadow line {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.turntable .arm {
+  stroke: var(--accent);
+}
+.turntable .arm-shadow line {
+  stroke: #000000;
+}
+.turntable .arm-shadow {
+  fill: #000000;
+  opacity: 0.35;
+}
+.turntable .arm-shine {
+  stroke: #ffffff;
+  stroke-opacity: 0.5;
+  stroke-width: 0.7;
+  stroke-linecap: round;
+}
+.turntable .headshell,
+.turntable .counterweight {
+  fill: var(--accent);
+}
+.turntable .cartridge {
+  fill: #000000;
+  fill-opacity: 0.35;
+}
+.turntable .pivot-base {
+  fill: color-mix(in srgb, var(--accent) 38%, var(--panel));
+  stroke: var(--line);
+}
+.turntable .pivot {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.turntable .notes span {
+  position: absolute;
+  top: 30px;
+  left: 44px;
+  color: var(--accent);
+  font-size: 16px;
+  opacity: 0;
+  pointer-events: none;
+  animation: turntable-note 2.4s ease-out infinite;
+}
+.turntable .notes span:nth-child(2) {
+  left: 58px;
+  animation-delay: 0.8s;
+}
+.turntable .notes span:nth-child(3) {
+  left: 36px;
+  animation-delay: 1.6s;
+}
+@keyframes turntable-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes turntable-jitter {
+  0%,
+  100% {
+    transform: rotate(0.2deg);
+  }
+  25% {
+    transform: rotate(-0.1deg);
+  }
+  50% {
+    transform: rotate(0.15deg);
+  }
+  75% {
+    transform: rotate(-0.2deg);
+  }
+}
+@keyframes turntable-note {
+  20% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(14px, -46px) rotate(15deg);
+    opacity: 0;
+  }
 }
 footer {
   color: var(--muted);
@@ -813,6 +996,21 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   .info [role="tooltip"] {
     transition: none;
+  }
+  .turntable .record {
+    animation: none;
+  }
+  .turntable .tonearm {
+    transition: none;
+  }
+  .turntable .jitter {
+    animation: none;
+  }
+  .turntable .bar-fill {
+    transition: none;
+  }
+  .turntable .notes {
+    display: none;
   }
 }
 @media (max-width: 560px) {
