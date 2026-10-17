@@ -57,11 +57,14 @@ export const ID_PROPERTIES: Readonly<Record<string, string>> = {
   P2281: "Apple Music album ID",
   P1954: "Discogs master ID",
   P2723: "Deezer album ID",
+  P4577: "Tidal album ID",
+  P1729: "AllMusic album ID",
   P435: "MusicBrainz work ID",
   P4404: "MusicBrainz recording ID",
   P2207: "Spotify track ID",
   P10110: "Apple Music track ID",
   P2724: "Deezer track ID",
+  P4578: "Tidal track ID",
 };
 
 /**
@@ -96,6 +99,7 @@ export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 export const SPOTIFY_TRACK_PATTERN = /^[0-9A-Za-z]{22}$/;
 export const APPLE_MUSIC_TRACK_PATTERN = /^\d+$/;
 export const DEEZER_TRACK_PATTERN = /^\d+$/;
+export const TIDAL_TRACK_PATTERN = /^\d+$/;
 
 /** The album identifiers the album form takes, with how to read a pasted URL. */
 export const ALBUM_ID_FIELDS = [
@@ -127,6 +131,21 @@ export const ALBUM_ID_FIELDS = [
     label: "Deezer album ID",
     pattern: /^\d+$/,
     fromUrl: /deezer\.com\/(?:[a-z]{2}\/)?album\/(\d+)/,
+  },
+  {
+    key: "tidal",
+    property: "P4577",
+    label: "Tidal album ID",
+    pattern: /^\d+$/,
+    fromUrl: /tidal\.com\/(?:browse\/)?album\/(\d+)/,
+  },
+  {
+    key: "allmusic",
+    property: "P1729",
+    label: "AllMusic album ID",
+    pattern: /^mw\d{10}$/,
+    // MusicBrainz links the bare ID, but the site's own URLs put the title before it.
+    fromUrl: /allmusic\.com\/album\/(?:[^/?#]*-)?(mw\d{10})/,
   },
   {
     key: "discogs",

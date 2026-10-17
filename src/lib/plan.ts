@@ -110,6 +110,8 @@ export interface MbRowIds {
   appleMusic: string[];
   /** P2724 Deezer track IDs, for the track. */
   deezer: string[];
+  /** P4578 Tidal track IDs, for the track. */
+  tidal: string[];
   /**
    * The recording and day the import came from, for the references on the
    * duration and identifiers. Kept even when an item already has the recording ID.
@@ -824,6 +826,7 @@ export function buildPlan(state: State): Plan {
       ...mb.spotify.map((v) => cited("P2207", v)),
       ...mb.appleMusic.map((v) => cited("P10110", v)),
       ...mb.deezer.map((v) => cited("P2724", v)),
+      ...mb.tidal.map((v) => cited("P4578", v)),
     ];
   };
   // Only for a duration still as the import filled it in.

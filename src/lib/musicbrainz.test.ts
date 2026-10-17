@@ -175,6 +175,8 @@ describe("releaseToForm", () => {
         musicbrainz: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
         appleMusic: "",
         deezer: "1076048342",
+        tidal: "",
+        allmusic: "",
         discogs: "4348311",
       },
       mb: {
@@ -220,6 +222,7 @@ describe("releaseToForm", () => {
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
       appleMusic: [],
       deezer: [],
+      tidal: [],
       source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
       length: 252,
     });
@@ -450,6 +453,11 @@ describe("releaseToForm", () => {
         "target-type": "url",
         url: { resource: "https://www.deezer.com/album/790000000" },
       },
+      {
+        type: "streaming",
+        "target-type": "url",
+        url: { resource: "https://tidal.com/album/450000000" },
+      },
     ];
     const { album } = releaseToForm(r, NONE);
     expect(album).toMatchObject({ type: "Q169930", form: "Q209939" });
@@ -457,13 +465,43 @@ describe("releaseToForm", () => {
       spotify: "4aawyAB9vmqN3uQ7FjRGTy",
       appleMusic: "1820000000",
       deezer: "790000000",
+      tidal: "450000000",
     });
     // Linked from the release, so they're cited to it.
     expect(album.mb?.ids).toMatchObject({
       spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
       appleMusic: { value: "1820000000", from: "release" },
       deezer: { value: "790000000", from: "release" },
+      tidal: { value: "450000000", from: "release" },
     });
+  });
+
+  it("reads the AllMusic album from the release group, not the release", () => {
+    const allmusic = (id: string) => ({
+      type: "allmusic",
+      "target-type": "url",
+      url: { resource: `https://www.allmusic.com/album/${id}` },
+    });
+    const r = release();
+    r.relations = [allmusic("mw0000000001")];
+    expect(releaseToForm(r, NONE).album.ids.allmusic).toBe("");
+    r["release-group"].relations = [allmusic("mw0004834138")];
+    const { album } = releaseToForm(r, NONE);
+    expect(album.ids.allmusic).toBe("mw0004834138");
+    expect(album.mb?.ids.allmusic).toEqual({ value: "mw0004834138", from: "releaseGroup" });
+  });
+
+  it("reads a recording's Tidal track ID", () => {
+    const r = release();
+    r.media[0].tracks![0].recording.relations!.push({
+      type: "streaming",
+      "target-type": "url",
+      url: { resource: "https://tidal.com/track/454960380" },
+    });
+    expect(releaseIds(r).tidalTracks).toEqual(["454960380"]);
+    const form = releaseToForm(r, NONE);
+    expect(form.discs[0].mb["1"].tidal).toEqual(["454960380"]);
+    expect(form.summary).toContain("1 Tidal track ID");
   });
 
   it("gives an EP with no secondary type no form, not studio album", () => {
@@ -677,5 +715,21 @@ describe("normalizeAlbumId", () => {
       "https://www.deezer.com/fr/album/790000000",
     ])
       expect(normalizeAlbumId("deezer", url)).toBe("790000000");
+  });
+
+  it("reads a Tidal album ID from a Tidal URL", () => {
+    for (const url of [
+      "https://tidal.com/album/450000000",
+      "https://tidal.com/browse/album/450000000",
+    ])
+      expect(normalizeAlbumId("tidal", url)).toBe("450000000");
+  });
+
+  it("reads an AllMusic album ID from an AllMusic URL", () => {
+    for (const url of [
+      "https://www.allmusic.com/album/mw0004834138",
+      "https://www.allmusic.com/album/day-and-night-mw0004834138",
+    ])
+      expect(normalizeAlbumId("allmusic", url)).toBe("mw0004834138");
   });
 });
