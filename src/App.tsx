@@ -282,6 +282,13 @@ function Form() {
     notAlbum: !!albumProblem(existingQid, albumFound),
     running,
   };
+  const checks = runChecks({
+    ...progress,
+    loggedIn: !!user,
+    ineligible: user && !user.eligibility.ok ? (user.eligibility.reason ?? null) : null,
+    matchesPending: status === "pending",
+    albumPending: tracklistPending || albumFound?.status === "loading",
+  });
   return (
     <>
       <Header />
@@ -359,9 +366,8 @@ function Form() {
             )}
             <RunSection
               {...props}
-              albumTracklist={albumTracklist}
+              checked={checks.every((c) => c.ok)}
               unreviewed={unreviewed}
-              matchesPending={status === "pending"}
               formId={formId}
               stale={stale}
               onFinished={clear}
@@ -377,13 +383,7 @@ function Form() {
           </main>
           <PlanPanel
             counts={createCounts(state, plan)}
-            checks={runChecks({
-              ...progress,
-              loggedIn: !!user,
-              ineligible: user && !user.eligibility.ok ? (user.eligibility.reason ?? null) : null,
-              matchesPending: status === "pending",
-              albumPending: tracklistPending || albumFound?.status === "loading",
-            })}
+            checks={checks}
             slot={setSlot}
             sideSlot={setSideSlot}
             running={!!running}

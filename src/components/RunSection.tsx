@@ -54,7 +54,6 @@ import { WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import PlannedEdits from "./PlannedEdits.tsx";
 import type { SectionProps } from "./types.ts";
-import type { AlbumTracklist } from "./use-album-tracklist.ts";
 import { useItemSummaries } from "./use-item-summaries.ts";
 import { useStorageEvent } from "./use-storage-event.ts";
 
@@ -100,9 +99,8 @@ export default function RunSection({
   update,
   plan,
   state,
-  albumTracklist,
+  checked,
   unreviewed,
-  matchesPending,
   formId,
   stale,
   onFinished,
@@ -111,11 +109,10 @@ export default function RunSection({
   albumName,
   onRunning,
 }: SectionProps & {
-  albumTracklist: AlbumTracklist | null;
+  /** Everything in the run's checklist (`runChecks`) is done. */
+  checked: boolean;
   /** Tracks with possible matches not yet used or dismissed. They block the run. */
   unreviewed: number;
-  /** The lookup for possible matches is in flight, so there may be more to review. */
-  matchesPending: boolean;
   /** Identifies the form until it's cleared or replaced (see `useFormId`). */
   formId: string;
   /** Another tab changed the form since: this tab mustn't run it. */
@@ -320,16 +317,8 @@ export default function RunSection({
   const count = plan.ops.length;
   const n = `${count} edit${count === 1 ? "" : "s"}`;
   const edits = useMemo(() => runEdits(plan, state), [plan, state]);
-  // What the checklist covers: the run can't start until it's all done.
-  const blocked =
-    !state.start ||
-    !user ||
-    !user.eligibility.ok ||
-    !plan.ready ||
-    !!albumTracklist ||
-    unreviewed > 0 ||
-    matchesPending ||
-    stale;
+  // The run can't start until everything in the checklist is done.
+  const blocked = !checked || !user || !plan.ready || stale;
   const disabled = blocked || finished || running || starting;
   const label = starting
     ? "Checking the QIDs…"
