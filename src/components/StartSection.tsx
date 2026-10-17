@@ -83,6 +83,10 @@ export default function StartSection({
   const headRef = useRef<HTMLHeadingElement>(null);
   // Set by Change, to move focus to the picker once it's shown.
   const focusHead = useRef(false);
+  // Set by a click on a card, so its panel takes focus. Arrow keys also pick a
+  // card, and moving focus then would stop them stepping through the cards.
+  const clicked = useRef(false);
+  const [focusPanel, setFocusPanel] = useState(false);
 
   const change = (to?: StartingPoint) => {
     if (state.start) setPrev(state.start);
@@ -133,13 +137,21 @@ export default function StartSection({
           </div>
           <div className="start-cards" role="radiogroup" aria-label="Starting point">
             {OPTIONS.map((o) => (
-              <label className="start-card" key={o.id}>
+              <label
+                className="start-card"
+                key={o.id}
+                onPointerDown={() => void (clicked.current = true)}
+              >
                 <input
                   type="radio"
                   name="start"
                   className="visually-hidden"
                   checked={card === o.id}
-                  onChange={() => setCard(o.id)}
+                  onChange={() => {
+                    setFocusPanel(clicked.current);
+                    clicked.current = false;
+                    setCard(o.id);
+                  }}
                 />
                 <StartIcon start={o.id} on={card === o.id} />
                 <span className="start-card-text">
@@ -171,7 +183,13 @@ export default function StartSection({
       )}
       {picking && card === "existing" && <ExistingPanel state={state} update={update} />}
       {picking && card === "search" && (
-        <SearchPanel update={update} query={query} setQuery={setQuery} onPick={setCard} />
+        <SearchPanel
+          update={update}
+          query={query}
+          setQuery={setQuery}
+          onPick={setCard}
+          focus={focusPanel}
+        />
       )}
       {picking && card === "new" && <NewPanel state={state} update={update} />}
       <MusicBrainzImport
@@ -244,12 +262,21 @@ function SearchPanel({
   query,
   setQuery,
   onPick,
+  focus,
 }: Pick<SectionProps, "update"> & {
   query: string;
   setQuery: (q: string) => void;
   onPick: (card: StartingPoint) => void;
+  /** Take focus when shown, as when its card was clicked. */
+  focus: boolean;
 }) {
   const id = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Only when first shown.
+  const focusOnShow = useRef(focus);
+  useEffect(() => {
+    if (focusOnShow.current) inputRef.current?.focus();
+  }, []);
   const { wikiBaseUrl } = useAuth();
   const q = useDebounced(query.trim(), 300);
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -282,6 +309,7 @@ function SearchPanel({
           <path d="M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM13.5 13.5L17 17" />
         </svg>
         <input
+          ref={inputRef}
           id={id}
           type="search"
           value={query}
