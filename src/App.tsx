@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { useAuth } from "./lib/auth-context.ts";
-import { PROPERTY_LABELS } from "./lib/preview.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -13,10 +12,12 @@ import DiscsSection from "./components/DiscsSection.tsx";
 import MatchesSection from "./components/MatchesSection.tsx";
 import { useMatches } from "./components/use-matches.ts";
 import { reviewTracks } from "./lib/matches.ts";
+import { createCounts, railSteps, type RunningInfo, runChecks } from "./lib/progress.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
-import { ConfirmButton } from "./components/ConfirmDialog.tsx";
+import ProgressRail from "./components/ProgressRail.tsx";
+import PlanPanel from "./components/PlanPanel.tsx";
 import MusicBrainzImport, {
   type MusicBrainzImportHandle,
 } from "./components/MusicBrainzImport.tsx";
@@ -38,49 +39,6 @@ const RECENT_CHANGES_URL = `https://www.wikidata.org/w/index.php?${new URLSearch
   enhanced: "1",
   urlversion: "2",
 })}`;
-
-/** An item type's name with its colour swatch. */
-function Kind({ edge, children }: { edge: string; children: string }) {
-  return (
-    <b className="kind">
-      <i style={{ background: `var(--${edge})` }} />
-      {children}
-    </b>
-  );
-}
-
-/** A property's plain name, linked to its page, with its ID on hover. */
-function Prop({ id, children }: { id: string; children: string }) {
-  const { wikiBaseUrl } = useAuth();
-  return (
-    <a
-      className="prop"
-      href={`${wikiBaseUrl}/wiki/Property:${id}`}
-      target="_blank"
-      rel="noreferrer"
-      title={`${PROPERTY_LABELS[id]} (${id})`}
-    >
-      {children}
-    </a>
-  );
-}
-
-/** How the items the app makes link together, in words. */
-function ItemModel() {
-  return (
-    <ul className="flow" aria-label="How the items are linked">
-      <li>
-        <Kind edge="disc-edge">Album</Kind> <Prop id="P658">lists</Prop>{" "}
-        <Kind edge="trk-edge">tracks</Kind>, each a <Prop id="P2550">recording of</Prop> a{" "}
-        <Kind edge="cmp-edge">composition</Kind>
-      </li>
-      <li>
-        <Kind edge="rg-edge">Singles</Kind> <Prop id="P658">list</Prop> a track and are{" "}
-        <Prop id="P13602">taken from</Prop> the album
-      </li>
-    </ul>
-  );
-}
 
 const STORAGE_KEY = "discographer:state";
 
@@ -277,10 +235,23 @@ function Form() {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
   const reviews = reviewTracks(state.discs, plan.tracks, matches, dismissed);
   const props = { state, update, plan };
+  const { user } = useAuth();
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [running, setRunning] = useState<RunningInfo | null>(null);
+  const empty = isEmpty(state);
+  const unreviewed = reviews.filter((r) => !r.reviewed).length;
+  const progress = {
+    state,
+    plan,
+    empty,
+    unreviewed,
+    hasTracklist: !!albumTracklist,
+    running,
+  };
   return (
     <>
       <Header />
-      <main className="page">
+      <div className="page">
         {stale && (
           <div className="msg warn row">
             <span>
@@ -292,51 +263,61 @@ function Form() {
             </button>
           </div>
         )}
-        <ItemModel />
-        <MusicBrainzImport
-          key={clears}
-          ref={mbImport}
-          state={state}
-          needsConfirm={!isEmpty(state)}
-          onLoad={replace}
-        />
-        <AlbumSection
-          {...props}
-          albumTracklist={albumTracklist}
-          releaseGroup={releaseGroup}
-          onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
-        />
-        <SettingsSection {...props} />
-        <DiscsSection {...props} reviews={reviews} />
-        <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
-        <PerformersSection {...props} />
-        <RunSection
-          {...props}
-          albumTracklist={albumTracklist}
-          unreviewed={reviews.filter((r) => !r.reviewed).length}
-          matchesPending={status === "pending"}
-          formId={formId}
-          stale={stale}
-          onFinished={clear}
-        />
-        <div className="row" style={{ marginBottom: 24 }}>
-          <ConfirmButton
-            className="danger"
-            label="Clear the form"
-            confirm={
-              isEmpty(state)
-                ? null
-                : {
-                    title: "Clear the form?",
-                    body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
-                    action: "Clear the form",
-                  }
-            }
-            onConfirm={clear}
+        <div className="shell">
+          <ProgressRail
+            steps={railSteps(progress)}
+            running={!!running}
+            empty={empty}
+            clearConfirm={{
+              title: "Clear the form?",
+              body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
+              action: "Clear the form",
+            }}
+            onClear={clear}
+          />
+          <main className="steps">
+            <MusicBrainzImport
+              key={clears}
+              ref={mbImport}
+              state={state}
+              needsConfirm={!empty}
+              onLoad={replace}
+            />
+            <AlbumSection
+              {...props}
+              albumTracklist={albumTracklist}
+              releaseGroup={releaseGroup}
+              onLoadReleaseGroup={(mbid, album) => mbImport.current?.loadReleaseGroup(mbid, album)}
+            />
+            <SettingsSection {...props} />
+            <DiscsSection {...props} reviews={reviews} />
+            <MatchesSection {...props} {...{ matches, status, reviews, dismissed, setDismissed }} />
+            <PerformersSection {...props} />
+            <RunSection
+              {...props}
+              albumTracklist={albumTracklist}
+              unreviewed={unreviewed}
+              matchesPending={status === "pending"}
+              formId={formId}
+              stale={stale}
+              onFinished={clear}
+              slot={slot}
+              onRunning={setRunning}
+            />
+          </main>
+          <PlanPanel
+            counts={createCounts(state, plan)}
+            checks={runChecks({
+              ...progress,
+              loggedIn: !!user,
+              ineligible: user && !user.eligibility.ok ? (user.eligibility.reason ?? null) : null,
+              matchesPending: status === "pending",
+            })}
+            slot={setSlot}
           />
         </div>
         <Footer />
-      </main>
+      </div>
     </>
   );
 }

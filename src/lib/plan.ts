@@ -186,6 +186,9 @@ export type Op =
 export type MsgKind = "err" | "warn" | "ok";
 export type Msg = [MsgKind, string];
 
+/** The form sections an error can be fixed in, for the run checklist to link to. */
+export type BlockerAt = "album" | "settings" | "tracks" | "performers" | "create";
+
 export interface Plan {
   /** Each disc's tracks, with the titles as they're written to Wikidata. */
   tracks: Track[][];
@@ -194,6 +197,8 @@ export interface Plan {
   /** Errors for single rows, keyed "disc:track". */
   singleErrs: Record<string, string>;
   messages: Msg[];
+  /** Where each error in `messages` is fixed, one per error, in the same order. */
+  blockers: BlockerAt[];
   ops: Op[];
   /** True when there is something to do and nothing blocks it. */
   ready: boolean;
@@ -564,7 +569,11 @@ export function buildPlan(state: State): Plan {
   const fieldErrs: Record<string, string> = {};
   const singleErrs: Record<string, string> = {};
   const messages: Msg[] = [];
-  const err = (text: string) => messages.push(["err", text]);
+  const blockers: BlockerAt[] = [];
+  const err = (text: string, at: BlockerAt) => {
+    messages.push(["err", text]);
+    blockers.push(at);
+  };
 
   fieldErrs.lang = !lang
     ? isCustomLabelLang(S)
@@ -699,12 +708,13 @@ export function buildPlan(state: State): Plan {
     seen.add(k);
   }
 
-  if (!items.length) err("Load a release from MusicBrainz to fill in the tracklist.");
+  if (!items.length) err("Load a release from MusicBrainz to fill in the tracklist.", "tracks");
   tracks.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
       err(
         `Disc ${di + 1} has ${rows.length} tracks, but a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
           "Split it into more discs, or into separate runs.",
+        "tracks",
       );
   });
   const trackCount = tracks.reduce((n, rows) => n + rows.length, 0);
@@ -712,28 +722,30 @@ export function buildPlan(state: State): Plan {
     err(
       `That's ${trackCount} tracks across all discs, but a run can have at most ${MAX_TRACKS}. ` +
         "Split the release into separate runs.",
+      "tracks",
     );
-  if (albumErr) err("Fix the album details at the top of the page.");
-  if (dupes.size) err(`Track numbers repeat within a disc: ${[...dupes].join(", ")}.`);
-  if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`);
-  if (unmapped.size) err(`No performer QID for: ${[...unmapped].join(", ")}.`);
-  if (invalid.length) err(`Not a QID: ${invalid.join(", ")}.`);
+  if (albumErr) err("Fix the album details at the top of the page.", "album");
+  if (dupes.size) err(`Track numbers repeat within a disc: ${[...dupes].join(", ")}.`, "tracks");
+  if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`, "performers");
+  if (unmapped.size) err(`No performer QID for: ${[...unmapped].join(", ")}.`, "performers");
+  if (invalid.length) err(`Not a QID: ${invalid.join(", ")}.`, "tracks");
   const settingsErr =
     !!fieldErrs.lang ||
     !!fieldErrs.date ||
     !!fieldErrs.p407 ||
     blocking(fieldErrs.compDesc) ||
     blocking(fieldErrs.trackDesc);
-  if (settingsErr) err("Fix the errors in Item settings.");
+  if (settingsErr) err("Fix the errors in Item settings.", "settings");
   if (Object.keys(singleErrs).length)
     err(
       `${Object.keys(singleErrs).length} single(s) have errors. They're marked in the disc tables.`,
+      "tracks",
     );
   if (items.some((it) => it.single) && blocking(fieldErrs.singleDesc))
-    err("Fix the single description template in Item settings.");
+    err("Fix the single description template in Item settings.", "settings");
 
   const blocked = messages.some((m) => m[0] === "err");
-  if (blocked) return { tracks, fieldErrs, singleErrs, messages, ops: [], ready: false };
+  if (blocked) return { tracks, fieldErrs, singleErrs, messages, blockers, ops: [], ready: false };
 
   /* operations */
   const ops: Op[] = [];
@@ -966,15 +978,17 @@ export function buildPlan(state: State): Plan {
     err(
       `Wikidata allows ${MAX_TERM_LENGTH} characters at most in a label or description. ` +
         `Too long: ${[...tooLong].join(", ")}.`,
+      "create",
     );
-    return { tracks, fieldErrs, singleErrs, messages, ops: [], ready: false };
+    return { tracks, fieldErrs, singleErrs, messages, blockers, ops: [], ready: false };
   }
 
   if (ops.length > MAX_OPS) {
     err(
       `That's ${ops.length} edits, but a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
+      "create",
     );
-    return { tracks, fieldErrs, singleErrs, messages, ops: [], ready: false };
+    return { tracks, fieldErrs, singleErrs, messages, blockers, ops: [], ready: false };
   }
 
   const creates = (prefix: string) =>
@@ -989,7 +1003,7 @@ export function buildPlan(state: State): Plan {
       ...(made || reused ? [`${made} single(s) to create, ${reused} reused`] : []),
     ].join(". ") + ".",
   ]);
-  return { tracks, fieldErrs, singleErrs, messages, ops, ready: ops.length > 0 };
+  return { tracks, fieldErrs, singleErrs, messages, blockers, ops, ready: ops.length > 0 };
 }
 
 // ---------------------------------------------------------------------------

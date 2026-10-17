@@ -58,7 +58,7 @@ export default function SettingsSection({ state, update, plan }: SectionProps) {
   const yearNote = "Year of the publication date above. Needs a publication date.";
 
   return (
-    <section className="block">
+    <section className="block" id="settings">
       <h2>Item settings</h2>
       <p className="hint">Applied to newly created items.</p>
       <div className="grid">

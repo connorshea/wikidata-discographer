@@ -24,7 +24,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
   }).length;
 
   return (
-    <section className="block">
+    <section className="block" id="performers">
       <h2>Performers</h2>
       <p className="hint">
         <Pids>

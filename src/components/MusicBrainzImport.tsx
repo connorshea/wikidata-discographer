@@ -132,7 +132,7 @@ export default function MusicBrainzImport({
   }, [group, pickId]);
 
   return (
-    <section className="block" ref={sectionRef}>
+    <section className="block" id="start" ref={sectionRef}>
       <h2>Start from MusicBrainz</h2>
       <p className="hint">
         Paste a MusicBrainz release or release group to fill in the album, discs and performers. A

@@ -109,6 +109,7 @@ h1.wordmark {
 }
 .record-icon .vinyl {
   fill: #15171f;
+  stroke: var(--line);
 }
 .record-icon .groove {
   fill: none;
@@ -139,30 +140,275 @@ h3.sub i {
   border-radius: 2px;
   display: inline-block;
 }
-.flow {
-  list-style: none;
-  padding: 0;
-  color: var(--muted);
-  margin: 0 0 16px;
+/* The form's three columns: the progress rail, the steps and the plan panel. They wrap
+   into one column, rail first, on a narrow window. */
+.shell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  align-items: flex-start;
 }
-.flow .kind {
+.shell > .steps {
+  flex: 999 1 560px;
+  min-width: 0;
+}
+.steps section.block {
+  scroll-margin-top: 16px;
+}
+.kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.rail {
+  flex: 1 1 250px;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail .kicker {
+  padding: 0 12px 8px;
+}
+.rail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  min-height: 44px;
+}
+.rail-item:hover {
+  background: var(--hover);
+}
+.rail-item[aria-current="step"] {
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.rail-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rail-text b {
+  font-weight: 650;
+}
+.rail-text span {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: break-word;
+}
+.dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex: none;
+  margin-top: 1px;
+  background: var(--tint);
+  color: var(--muted);
+}
+.dot.done {
+  background: var(--ok);
+  color: var(--panel);
+}
+.dot.done path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dot.attention {
+  background: var(--warn-tint);
+  color: var(--warn);
+  box-shadow: inset 0 0 0 1.5px var(--warn-edge);
+}
+.dot.current {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.rail hr {
+  border: 0;
+  height: 1px;
+  background: var(--line);
+  margin: 12px;
+}
+button.clear-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 4px;
+  min-height: 44px;
+  font-size: 14px;
+  background: var(--panel);
+  border-color: var(--danger-edge);
+}
+button.clear-form path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rail #clear-hint {
+  font-size: 12.5px;
+  padding: 6px 12px 0;
+  margin: 0;
+}
+.plan-panel {
+  flex: 1 1 280px;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.plan-panel .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plan-panel .hint {
+  margin: 0;
+}
+.plan-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.counts li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.counts li > span {
+  flex: 1;
+}
+.counts .muted {
+  font-weight: 400;
+}
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.model ul {
+  font-size: 13px;
+  color: var(--muted);
+}
+.model .kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
 }
-.flow .kind i {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
-  margin-right: 5px;
-}
-.flow a.prop {
+.model a.prop {
   color: inherit;
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
-.flow a.prop:hover {
+.model a.prop:hover {
   color: var(--accent);
+}
+.checks-list li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.check {
+  flex: none;
+}
+.check path {
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.check.ok circle {
+  fill: var(--ok);
+}
+.check.ok path {
+  stroke: var(--panel);
+}
+.check.todo circle {
+  fill: none;
+  stroke: var(--warn-edge);
+  stroke-width: 1.6;
+}
+.check.todo path {
+  stroke: var(--warn);
+}
+/* What RunSection puts here: the run button, and what it says about it. */
+.run-slot > .row {
+  margin-top: 4px;
+}
+.run-slot > .row > button:first-child {
+  width: 100%;
+  min-height: 44px;
+}
+.run-slot .hint {
+  margin: 0;
+}
+/* Stacked, the rail and the panel take the full width. */
+@media (max-width: 860px) {
+  .rail,
+  .plan-panel {
+    max-width: none;
+  }
+}
+/* Side by side, the rail and the panel stay in view as the form scrolls. */
+@media (min-width: 1200px) {
+  .rail,
+  .plan-panel {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
 }
 abbr.pid {
   text-decoration: underline dotted;

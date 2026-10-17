@@ -76,11 +76,19 @@ export function ConfirmDialog({
 export function ConfirmButton({
   label,
   className,
+  disabled,
+  describedBy,
+  children,
   confirm,
   onConfirm,
 }: {
   label: string;
   className: string;
+  disabled?: boolean;
+  /** The id of a hint that says why it's disabled. */
+  describedBy?: string;
+  /** Shown before the label, such as an icon. */
+  children?: React.ReactNode;
   confirm: Confirm | null;
   onConfirm: () => void;
 }) {
@@ -92,8 +100,11 @@ export function ConfirmButton({
         ref={button}
         type="button"
         className={className}
+        disabled={disabled}
+        aria-describedby={describedBy}
         onClick={() => (confirm ? setAsking(true) : onConfirm())}
       >
+        {children}
         {label}
       </button>
       <ConfirmDialog

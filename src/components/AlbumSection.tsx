@@ -41,7 +41,7 @@ export default function AlbumSection({
   const found = A.mode === "existing" ? lookup(A.qid) : undefined;
   const notAlbum = albumProblem(A.qid, found);
   return (
-    <section className="block">
+    <section className="block" id="album">
       <h2>Album</h2>
       <p className="hint">
         <Pids>

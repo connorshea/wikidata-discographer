@@ -50,7 +50,7 @@ export default function DiscsSection({
     state.settings.lang,
   );
   return (
-    <section className="block">
+    <section className="block" id="tracks">
       <h2>Discs</h2>
       <p className="hint">
         One tracklist per disc or side, filled in by a MusicBrainz import. Fill in a composition or
