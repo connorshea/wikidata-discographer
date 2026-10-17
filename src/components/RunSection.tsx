@@ -604,6 +604,38 @@ function Turntable({ done, total }: { done: number; total: number }) {
 function RunProgress({ run }: { run: SubmissionInfo }) {
   const { wikiBaseUrl } = useAuth();
   const done = run.edits.length;
+  const running = run.status === "running";
+  const entries = run.edits.map((e, i) => (
+    <li key={i} className={e.ok ? undefined : "fail"}>
+      {/* Matches the preview's headings; a statements edit's `what` says what it adds. */}
+      {e.unknown
+        ? "Outcome unknown: created? "
+        : e.op === "create"
+          ? e.ok
+            ? "Created "
+            : "Couldn't create "
+          : ""}
+      {e.what}
+      {e.qid && (
+        <>
+          {" "}
+          {e.unknown && "found later as "}
+          <WikiLink base={wikiBaseUrl} qid={e.qid} />
+        </>
+      )}
+      {e.skipped > 0 && <span className="muted"> ({e.skipped} already there)</span>}
+      {e.revid === null && e.ok && e.op === "addClaims" && (
+        <span className="muted"> (nothing to add)</span>
+      )}
+      {e.error && <>: {e.error}</>}
+      {e.unknown && !e.qid && (
+        <>
+          {" "}
+          Check <CheckLinks editGroupUrl={run.editGroupUrl} />.
+        </>
+      )}
+    </li>
+  ));
   return (
     <div>
       <h3 className="sub">
@@ -618,14 +650,16 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
                 ? "stopped, outcome unknown"
                 : "interrupted"}
       </h3>
-      {run.status === "running" && (
+      {running && (
         <div className="turntable-row">
           <Turntable done={done} total={run.total} />
-          <p className="hint">
-            {run.waitingUntil
-              ? "Waiting a moment before the next edit, so they go out at a steady pace."
-              : "Making the next edit…"}
-          </p>
+          <div className="run-status">
+            <p className="hint">
+              {run.waitingUntil ? "Waiting a moment…" : "Making the next edit…"}
+            </p>
+            {/* Just the latest few, newest first and fading as they age. The full log shows once the run ends. */}
+            <ol className="log recent">{entries.slice(-4).reverse()}</ol>
+          </div>
         </div>
       )}
       {run.error && (
@@ -645,39 +679,7 @@ function RunProgress({ run }: { run: SubmissionInfo }) {
           </>
         )}
       </p>
-      <ol className="log">
-        {run.edits.map((e, i) => (
-          <li key={i} className={e.ok ? undefined : "fail"}>
-            {/* Matches the preview's headings; a statements edit's `what` says what it adds. */}
-            {e.unknown
-              ? "Outcome unknown: created? "
-              : e.op === "create"
-                ? e.ok
-                  ? "Created "
-                  : "Couldn't create "
-                : ""}
-            {e.what}
-            {e.qid && (
-              <>
-                {" "}
-                {e.unknown && "found later as "}
-                <WikiLink base={wikiBaseUrl} qid={e.qid} />
-              </>
-            )}
-            {e.skipped > 0 && <span className="muted"> ({e.skipped} already there)</span>}
-            {e.revid === null && e.ok && e.op === "addClaims" && (
-              <span className="muted"> (nothing to add)</span>
-            )}
-            {e.error && <>: {e.error}</>}
-            {e.unknown && !e.qid && (
-              <>
-                {" "}
-                Check <CheckLinks editGroupUrl={run.editGroupUrl} />.
-              </>
-            )}
-          </li>
-        ))}
-      </ol>
+      {!running && <ol className="log">{entries}</ol>}
     </div>
   );
 }
