@@ -3287,9 +3287,13 @@ button.mb-button[aria-expanded="true"] {
   fill: var(--locked-bg);
 }
 
-/* Dark mode: the current step and page stand out from the page, and a disabled button
-   goes neutral, since a dim accent still looks half on. */
+/* Dark mode: the current step and page stand out from the page, a disabled button
+   goes neutral, since a dim accent still looks half on, and a start card's icon square
+   is lighter than the card, hovered or not. */
 @media (prefers-color-scheme: dark) {
+  .start-icon:not(.on) {
+    background: #343858;
+  }
   .rail-item[aria-current="step"] {
     background: var(--raised);
   }
