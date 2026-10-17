@@ -80,6 +80,7 @@ describe("loadedReleaseGroup", () => {
         isrcs: [],
         spotify: [],
         appleMusic: [],
+        deezer: [],
         source: { recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c", retrieved: "2026-10-12" },
         length: 200,
       };
@@ -141,6 +142,7 @@ describe("buildPlan", () => {
       isrcs: ["USUM72604367"],
       spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
       appleMusic: ["1820000002"],
+      deezer: ["69018826"],
       source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
       length: 177,
     };
@@ -165,7 +167,7 @@ describe("buildPlan", () => {
           claims: { property: string; value: { value?: string } }[];
         }
       ).claims
-        .filter((c) => ["P4404", "P435", "P1243", "P2207", "P10110"].includes(c.property))
+        .filter((c) => ["P4404", "P435", "P1243", "P2207", "P10110", "P2724"].includes(c.property))
         .map((c) => [c.property, c.value.value]);
 
     it("go on the new track and composition", () => {
@@ -174,6 +176,7 @@ describe("buildPlan", () => {
         ["P1243", "USUM72604367"],
         ["P2207", "6RSxVKsgvNIIN6IwYA8GsQ"],
         ["P10110", "1820000002"],
+        ["P2724", "69018826"],
       ]);
       expect(claimsOf(withIds(), "comp:0:2")).toEqual([["P435", ids.work]]);
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
@@ -212,17 +215,20 @@ describe("buildPlan", () => {
         const op = buildPlan(state).ops.find((o) => o.op === "create" && o.key === key);
         return Object.fromEntries(
           (op?.op === "create" ? op.claims : [])
-            .filter((c) => ["P4404", "P435", "P1243", "P2207", "P10110"].includes(c.property))
+            .filter((c) =>
+              ["P4404", "P435", "P1243", "P2207", "P10110", "P2724"].includes(c.property),
+            )
             .map((c) => [c.property, c.references]),
         );
       };
-      const only = (key: "isrcs" | "spotify" | "appleMusic") => {
+      const only = (key: "isrcs" | "spotify" | "appleMusic" | "deezer") => {
         const state = withIds();
         state.discs[0].mb["2"] = {
           ...ids,
           isrcs: [],
           spotify: [],
           appleMusic: [],
+          deezer: [],
           [key]: ids[key],
         };
         return state;
@@ -232,6 +238,7 @@ describe("buildPlan", () => {
         ["isrcs", "P1243"],
         ["spotify", "P2207"],
         ["appleMusic", "P10110"],
+        ["deezer", "P2724"],
       ] as const)("%s (%s), with the setting on", (key, property) => {
         expect(refsOf(only(key))).toEqual({ P4404: undefined, [property]: MB_REF });
       });
@@ -240,6 +247,7 @@ describe("buildPlan", () => {
         ["isrcs", "P1243"],
         ["spotify", "P2207"],
         ["appleMusic", "P10110"],
+        ["deezer", "P2724"],
       ] as const)("%s (%s), not with the setting off", (key, property) => {
         const state = only(key);
         state.settings.mbRefs = false;
@@ -262,7 +270,7 @@ describe("buildPlan", () => {
     it("match the title ignoring case and curly quotes", () => {
       const state = withIds();
       state.discs[0].mb["2"] = { ...ids, title: "habits  of creatures" };
-      expect(claimsOf(state, "track:0:2")).toHaveLength(4);
+      expect(claimsOf(state, "track:0:2")).toHaveLength(5);
     });
   });
 
@@ -288,6 +296,7 @@ describe("buildPlan", () => {
           spotify: "4aawyAB9vmqN3uQ7FjRGTy",
           musicbrainz: RG,
           appleMusic: "",
+          deezer: "",
           discogs: "4348311",
         },
         mb: {

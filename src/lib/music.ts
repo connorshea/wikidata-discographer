@@ -95,6 +95,7 @@ export const MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 export const SPOTIFY_TRACK_PATTERN = /^[0-9A-Za-z]{22}$/;
 export const APPLE_MUSIC_TRACK_PATTERN = /^\d+$/;
+export const DEEZER_TRACK_PATTERN = /^\d+$/;
 
 /** The album identifiers the album form takes, with how to read a pasted URL. */
 export const ALBUM_ID_FIELDS = [
@@ -119,6 +120,13 @@ export const ALBUM_ID_FIELDS = [
     pattern: /^\d+$/,
     // MusicBrainz still has older iTunes links, like itunes.apple.com/us/album/id123.
     fromUrl: /(?:music|itunes)\.apple\.com\/.*\/album\/(?:[^/?#]*\/)?(?:id)?(\d+)/,
+  },
+  {
+    key: "deezer",
+    property: "P2723",
+    label: "Deezer album ID",
+    pattern: /^\d+$/,
+    fromUrl: /deezer\.com\/(?:[a-z]{2}\/)?album\/(\d+)/,
   },
   {
     key: "discogs",

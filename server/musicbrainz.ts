@@ -208,13 +208,14 @@ export async function lookupRelease(
   album?: { qid: string; releaseGroup: string },
 ): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works, spotify, appleMusic] = await Promise.all([
+  const [albums, artists, recordings, works, spotify, appleMusic, deezer] = await Promise.all([
     lookup("P436", [ids.releaseGroup], ["album", "ep"]),
     lookup("P434", ids.artists, ["artist"]),
     lookup("P4404", ids.recordings, ["track"]),
     lookup("P435", ids.works, ["work"]),
     lookup("P2207", ids.spotifyTracks, ["track"]),
     lookup("P10110", ids.appleMusicTracks, ["track"]),
+    lookup("P2724", ids.deezerTracks, ["track"]),
   ]);
   // MusicBrainz's own Wikidata link names a wikidata.org item, which is
   // only right when that's where the edits go.
@@ -230,7 +231,13 @@ export async function lookupRelease(
     works: works.unique,
     // A work ID belongs on the composition, so one held only by a single or
     // another item that isn't a composition is still added to the new one.
-    taken: [...recordings.taken, ...works.held, ...spotify.taken, ...appleMusic.taken],
+    taken: [
+      ...recordings.taken,
+      ...works.held,
+      ...spotify.taken,
+      ...appleMusic.taken,
+      ...deezer.taken,
+    ],
     misplacedWorks: works.elsewhere,
   };
 }

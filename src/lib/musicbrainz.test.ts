@@ -174,6 +174,7 @@ describe("releaseToForm", () => {
         spotify: "",
         musicbrainz: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
         appleMusic: "",
+        deezer: "1076048342",
         discogs: "4348311",
       },
       mb: {
@@ -181,7 +182,10 @@ describe("releaseToForm", () => {
         release: RELEASE.id,
         retrieved: "2026-10-04",
         date: { value: "2026-09-18", from: "releaseGroup" },
-        ids: { discogs: { value: "4348311", from: "releaseGroup" } },
+        ids: {
+          deezer: { value: "1076048342", from: "release" },
+          discogs: { value: "4348311", from: "releaseGroup" },
+        },
       },
     });
     expect(form.date).toBe("2026-09-18");
@@ -196,7 +200,7 @@ describe("releaseToForm", () => {
     );
     expect(form.notes).toEqual([]);
     expect(form.summary).toMatch(
-      /^Loaded 2 discs and 6 tracks\. The new album gets the Discogs master ID MusicBrainz links to\. Found nothing else/,
+      /^Loaded 2 discs and 6 tracks\. The new album gets the Deezer album ID and Discogs master ID MusicBrainz links to\. Found nothing else/,
     );
     expect(form.summary).toContain(
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
@@ -215,6 +219,7 @@ describe("releaseToForm", () => {
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
       appleMusic: [],
+      deezer: [],
       source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
       length: 252,
     });
@@ -315,6 +320,56 @@ describe("releaseToForm", () => {
     });
   });
 
+  describe("Deezer track IDs", () => {
+    const deezer = (url: string) => ({
+      type: "free streaming",
+      "target-type": "url",
+      url: { resource: url },
+    });
+    const withDeezer = (...links: ReturnType<typeof deezer>[]) => {
+      const r = release();
+      r.media[0].tracks![0].recording.relations!.push(...links);
+      return r;
+    };
+
+    it("adds the one a recording links", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/track/69018826"));
+      expect(releaseIds(r).deezerTracks).toEqual(["69018826"]);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].deezer).toEqual(["69018826"]);
+      expect(form.discs[0].mb["2"].deezer).toEqual([]);
+      expect(form.summary).toContain("1 Deezer track ID");
+    });
+
+    it("reads a link with a language in it", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/fr/track/69018826"));
+      expect(releaseIds(r).deezerTracks).toEqual(["69018826"]);
+    });
+
+    it("adds none when a recording links more than one", () => {
+      const r = withDeezer(
+        deezer("https://www.deezer.com/track/69018826"),
+        deezer("https://www.deezer.com/track/69018827"),
+      );
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].deezer).toEqual([]);
+      expect(form.notes).toEqual([
+        "1 track links more than one Deezer track on MusicBrainz, so it gets no Deezer track ID.",
+      ]);
+    });
+
+    it("leaves out one an item already has", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/track/69018826"));
+      const form = releaseToForm(r, { ...NONE, taken: ["69018826"] });
+      expect(form.discs[0].mb["1"].deezer).toEqual([]);
+    });
+
+    it("ignores other Deezer links", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/album/10535858"));
+      expect(releaseIds(r).deezerTracks).toEqual([]);
+    });
+  });
+
   it("doesn't count identifiers for rows that reuse an existing track", () => {
     const rec = RELEASE.media[0].tracks![0].recording.id;
     const form = releaseToForm(RELEASE, { ...NONE, recordings: { [rec]: "Q10" }, taken: [rec] });
@@ -390,17 +445,24 @@ describe("releaseToForm", () => {
         "target-type": "url",
         url: { resource: "https://music.apple.com/gb/album/day-and-night/1820000000" },
       },
+      {
+        type: "free streaming",
+        "target-type": "url",
+        url: { resource: "https://www.deezer.com/album/790000000" },
+      },
     ];
     const { album } = releaseToForm(r, NONE);
     expect(album).toMatchObject({ type: "Q169930", form: "Q209939" });
     expect(album.ids).toMatchObject({
       spotify: "4aawyAB9vmqN3uQ7FjRGTy",
       appleMusic: "1820000000",
+      deezer: "790000000",
     });
     // Linked from the release, so they're cited to it.
     expect(album.mb?.ids).toMatchObject({
       spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
       appleMusic: { value: "1820000000", from: "release" },
+      deezer: { value: "790000000", from: "release" },
     });
   });
 
@@ -607,5 +669,13 @@ describe("normalizeAlbumId", () => {
       "https://itunes.apple.com/us/album/day-and-night/id1820000000?uo=4",
     ])
       expect(normalizeAlbumId("appleMusic", url)).toBe("1820000000");
+  });
+
+  it("reads a Deezer album ID from a Deezer URL", () => {
+    for (const url of [
+      "https://www.deezer.com/album/790000000",
+      "https://www.deezer.com/fr/album/790000000",
+    ])
+      expect(normalizeAlbumId("deezer", url)).toBe("790000000");
   });
 });

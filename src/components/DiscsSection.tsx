@@ -439,12 +439,13 @@ function MbChip({
           ...ids.isrcs.map((v) => `ISRC (P1243) ${v}`),
           ...ids.spotify.map((v) => `Spotify track ID (P2207) ${v}`),
           ...ids.appleMusic.map((v) => `Apple Music track ID (P10110) ${v}`),
+          ...ids.deezer.map((v) => `Deezer track ID (P2724) ${v}`),
         ]
       : []),
     S.mbIds &&
       S.mbRefs &&
       ids.source &&
-      ids.isrcs.length + ids.spotify.length + ids.appleMusic.length > 0 &&
+      ids.isrcs.length + ids.spotify.length + ids.appleMusic.length + ids.deezer.length > 0 &&
       `A reference for the ISRCs and track IDs, stated in MusicBrainz`,
     S.duration &&
       S.mbRefs &&
