@@ -155,4 +155,23 @@ describe("assembleMatches", () => {
     ]);
     expect(rows["0:1"].comp.map((m) => m.qid)).toEqual(["Q20"]);
   });
+
+  it("leaves out singles taken from another album", () => {
+    const items = mapOf(
+      facts("Q10", "track", "Glow", { P175: ["Q52583"], P1433: ["Q30", "Q31"] }),
+      facts("Q30", "single", "Glow", { P175: ["Q52583"], P13602: ["Q40"] }),
+      facts("Q31", "single", "Glow", { P175: ["Q52583"], P13602: ["Q41"] }),
+      facts("Q32", "single", "Glow", { P175: ["Q52583"], P658: ["Q10"] }),
+    );
+    const singles = (album: string | null) => {
+      const { rows } = assembleMatches([row("Glow")], { items, albumTracks: new Set(), album });
+      return [rows["0:1"].single.map((m) => m.qid), rows["0:1"].track[0].singles];
+    };
+    expect(singles(null)).toEqual([["Q32"], ["Q32"]]);
+    // One taken from the album being added to is still its single.
+    expect(singles("Q41")).toEqual([
+      ["Q31", "Q32"],
+      ["Q31", "Q32"],
+    ]);
+  });
 });

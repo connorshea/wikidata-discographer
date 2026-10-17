@@ -16,7 +16,7 @@ import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
  * contents change (a new column, a class added or removed): rows from an
  * older version are then re-read from the next dump.
  */
-export const MIRROR_VERSION = 3; // 2: music_links, and curly quotes in label_search. 3: folded label_search
+export const MIRROR_VERSION = 4; // 2: music_links, and curly quotes in label_search. 3: folded label_search. 4: P13602 links
 
 export interface MirrorRow {
   qid: string;
