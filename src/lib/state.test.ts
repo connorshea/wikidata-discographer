@@ -13,7 +13,7 @@ describe("coerceState", () => {
 
   it("keeps a valid state", () => {
     const s = coerceState(JSON.parse(JSON.stringify(EXAMPLE)));
-    expect(s.discs.map((d) => d.text)).toEqual(EXAMPLE.discs.map((d) => d.text));
+    expect(s.discs.map((d) => d.tracks)).toEqual(EXAMPLE.discs.map((d) => d.tracks));
     expect(s.artists).toEqual(EXAMPLE.artists);
   });
 
@@ -70,121 +70,94 @@ describe("coerceState", () => {
     expect(coerceState({ album: {} }).album.mb).toBeNull();
   });
 
-  it("keeps only well-formed imported identifiers", () => {
+  it("keeps only well-formed tracks and imported identifiers", () => {
     const s = coerceState({
       discs: [
         {
-          mb: {
-            "1": {
+          tracks: [
+            {
+              n: 1,
               title: "Song",
-              recording: "not an mbid",
-              work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
-              iswcs: [],
-              isrcs: ["USUM72604367", "bad", 5, "USUM72604367"],
-              spotify: "6RSxVKsgvNIIN6IwYA8GsQ",
-              appleMusic: ["1820000002", "apple", "1820000002"],
-              deezer: ["69018826", "deezer"],
-              tidal: ["454960380", "tidal"],
-              length: {
-                seconds: 177,
-                recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
-                retrieved: "2026-10-04",
+              artists: ["A", 5, " ", "B"],
+              seconds: 177,
+              mb: {
+                recording: "not an mbid",
+                work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+                iswcs: [],
+                isrcs: ["USUM72604367", "bad", 5, "USUM72604367"],
+                spotify: "6RSxVKsgvNIIN6IwYA8GsQ",
+                appleMusic: ["1820000002", "apple", "1820000002"],
+                deezer: ["69018826", "deezer"],
+                tidal: ["454960380", "tidal"],
+                source: {
+                  recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+                  retrieved: "2026-02-30",
+                },
               },
             },
-            "2": "x",
-            "3": {
-              title: "Other",
-              length: {
-                seconds: 177,
-                recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
-                retrieved: "2026-02-30",
-              },
-            },
-            "4": { title: "Third", length: { seconds: 1.5, recording: "x", retrieved: "" } },
-            "5": {
-              title: "Fourth",
-              source: {
-                recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
-                retrieved: "2026-10-04",
-              },
-              length: 200,
-            },
-            "6": {
-              title: "Fifth",
-              source: { recording: "x", retrieved: "2026-10-04" },
-              length: -1,
-            },
-          },
+            { n: 2, title: "Two", seconds: 1.5, mb: "x" },
+            { n: "3", title: "Not a track" },
+            "x",
+          ],
         },
       ],
     });
-    expect(s.discs[0].mb).toEqual({
-      "1": {
+    expect(s.discs[0].tracks).toEqual([
+      {
+        n: 1,
         title: "Song",
-        recording: "",
-        work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
-        iswcs: [],
-        isrcs: ["USUM72604367"],
-        spotify: [],
-        appleMusic: ["1820000002"],
-        deezer: ["69018826"],
-        tidal: ["454960380"],
-        // Saved before identifiers had references, so the source comes from the length.
-        source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
-        length: 177,
+        artists: ["A", "B"],
+        seconds: 177,
+        mb: {
+          recording: "",
+          work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+          iswcs: [],
+          isrcs: ["USUM72604367"],
+          spotify: [],
+          appleMusic: ["1820000002"],
+          deezer: ["69018826"],
+          tidal: ["454960380"],
+          source: null,
+        },
       },
-      "3": {
-        title: "Other",
-        recording: "",
-        work: "",
-        iswcs: [],
-        isrcs: [],
-        spotify: [],
-        appleMusic: [],
-        deezer: [],
-        tidal: [],
-        source: null,
-        length: 177,
-      },
-      "4": {
-        title: "Third",
-        recording: "",
-        work: "",
-        iswcs: [],
-        isrcs: [],
-        spotify: [],
-        appleMusic: [],
-        deezer: [],
-        tidal: [],
-        source: null,
-        length: null,
-      },
-      "5": {
-        title: "Fourth",
-        recording: "",
-        work: "",
-        iswcs: [],
-        isrcs: [],
-        spotify: [],
-        appleMusic: [],
-        deezer: [],
-        tidal: [],
-        source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
-        length: 200,
-      },
-      "6": {
-        title: "Fifth",
-        recording: "",
-        work: "",
-        iswcs: [],
-        isrcs: [],
-        spotify: [],
-        appleMusic: [],
-        deezer: [],
-        tidal: [],
-        source: null,
-        length: null,
+      { n: 2, title: "Two", artists: [], seconds: null, mb: null },
+    ]);
+  });
+
+  it("reads a disc saved as a tracklist with a line per track", () => {
+    const ids = (title: string) => ({
+      title,
+      recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+      isrcs: ["USUM72604367"],
+      // Saved before identifiers had references, so the source comes from the length.
+      length: {
+        seconds: 177,
+        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+        retrieved: "2026-10-04",
       },
     });
+    const disc = {
+      text: "1. Song - A & B (2:57)\nnonsense\n\n02. Other - C feat. D\n3. Renamed - A (1:02:03)",
+      mb: { "1": ids("song"), "2": ids("Other"), "3": ids("Before") },
+    };
+    const mb = {
+      recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+      work: "",
+      iswcs: [],
+      isrcs: ["USUM72604367"],
+      spotify: [],
+      appleMusic: [],
+      deezer: [],
+      tidal: [],
+      source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
+    };
+    expect(coerceState({ discs: [disc] }).discs[0].tracks).toEqual([
+      { n: 1, title: "Song", artists: ["A", "B"], seconds: 177, mb },
+      { n: 2, title: "Other", artists: ["C", "D"], seconds: null, mb },
+      // Its identifiers were for another title.
+      { n: 3, title: "Renamed", artists: ["A"], seconds: 3723, mb: null },
+    ]);
+    const unsplit = coerceState({ settings: { splitArtists: false }, discs: [disc] });
+    expect(unsplit.discs[0].tracks[0].artists).toEqual(["A & B"]);
   });
 });

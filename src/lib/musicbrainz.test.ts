@@ -14,7 +14,7 @@ import {
   wikidataLink,
 } from "./musicbrainz.ts";
 import { normalizeAlbumId } from "./music.ts";
-import { buildPlan, parseDisc } from "./plan.ts";
+import { albumArtists, buildPlan } from "./plan.ts";
 import { EMPTY } from "./state.ts";
 import { EXAMPLE } from "./example.fixture.ts";
 
@@ -133,7 +133,7 @@ describe("releaseChoices", () => {
 });
 
 describe("creditText", () => {
-  it("keeps join phrases the tracklist parser splits on", () => {
+  it("keeps join phrases the album artists field splits on", () => {
     expect(creditText(credit(["A", " feat. "], ["B", " & "], ["C", ""]))).toBe("A feat. B & C");
   });
 
@@ -193,13 +193,11 @@ describe("releaseToForm", () => {
     expect(form.date).toBe("2026-09-18");
     expect(form.p407).toBe("Q1860");
     expect(form.discs.map((d) => d.part)).toEqual(["Q61629664", "Q61629680"]);
-    expect(form.discs[0].text).toBe(
-      [
-        "1. After All - Carly Rae Jepsen (4:12)",
-        "2. Habits of Creatures - Carly Rae Jepsen (2:57)",
-        "3. Versailles - Carly Rae Jepsen (3:14)",
-      ].join("\n"),
-    );
+    expect(form.discs[0].tracks.map((t) => ({ ...t, mb: undefined }))).toEqual([
+      { n: 1, title: "After All", artists: ["Carly Rae Jepsen"], seconds: 252 },
+      { n: 2, title: "Habits of Creatures", artists: ["Carly Rae Jepsen"], seconds: 177 },
+      { n: 3, title: "Versailles", artists: ["Carly Rae Jepsen"], seconds: 194 },
+    ]);
     expect(form.notes).toEqual([]);
     expect(form.summary).toMatch(
       /^Loaded 2 discs and 6 tracks\. The new album gets the Deezer album ID and Discogs master ID MusicBrainz links to\. Found nothing else/,
@@ -208,14 +206,13 @@ describe("releaseToForm", () => {
       "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
     );
     expect(form.summary).toMatch(
-      /The imported publication date, album IDs, durations, ISRCs and track IDs get a MusicBrainz reference, if that's on in Item settings\.$/,
+      /The imported publication date, album IDs, durations, ISRCs and track IDs get a MusicBrainz reference\.$/,
     );
   });
 
-  it("keeps each track's identifiers with its title", () => {
+  it("keeps each track's identifiers on it", () => {
     const [first] = releaseToForm(RELEASE, NONE, "2026-10-04").discs;
-    expect(first.mb["1"]).toEqual({
-      title: "After All",
+    expect(first.tracks[0].mb!).toEqual({
       recording: "263340e1-2f03-4b31-b404-a06a8acda193",
       work: "2bf1a377-686f-426a-ab5a-309466d201e9",
       iswcs: [],
@@ -225,20 +222,19 @@ describe("releaseToForm", () => {
       deezer: [],
       tidal: [],
       source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
-      length: 252,
     });
-    expect(Object.keys(first.mb)).toEqual(["1", "2", "3"]);
+    expect(first.tracks.every((t) => t.mb)).toBe(true);
   });
 
   it("keeps the source even when an item already has the recording ID", () => {
     const t = RELEASE.media[0].tracks![0];
     const form = releaseToForm(RELEASE, { ...NONE, taken: [t.recording.id] });
-    expect(form.discs[0].mb["1"].source?.recording).toBe(t.recording.id);
+    expect(form.discs[0].tracks[0].mb!.source?.recording).toBe(t.recording.id);
     const noLength = structuredClone(RELEASE);
     noLength.media[0].tracks![0].length = null;
-    const ids = releaseToForm(noLength, NONE).discs[0].mb["1"];
-    expect(ids.length).toBeNull();
-    expect(ids.source?.recording).toBe(t.recording.id);
+    const [track] = releaseToForm(noLength, NONE).discs[0].tracks;
+    expect(track.seconds).toBeNull();
+    expect(track.mb!.source?.recording).toBe(t.recording.id);
   });
 
   it("leaves out identifiers an item already has", () => {
@@ -248,7 +244,7 @@ describe("releaseToForm", () => {
       ...NONE,
       taken: [t.recording.id, work, "6HSinPEEP7FeS2k1y7BD7j"],
     });
-    expect(form.discs[0].mb["1"]).toMatchObject({
+    expect(form.discs[0].tracks[0].mb!).toMatchObject({
       recording: "",
       work: "",
       iswcs: [],
@@ -267,7 +263,7 @@ describe("releaseToForm", () => {
     });
     expect(releaseIds(many).spotifyTracks).toEqual([]);
     const form = releaseToForm(many, NONE);
-    expect(form.discs[0].mb["1"].spotify).toEqual([]);
+    expect(form.discs[0].tracks[0].mb!.spotify).toEqual([]);
     expect(form.notes).toEqual([
       "1 track links more than one Spotify track on MusicBrainz, so it gets no Spotify track ID.",
     ]);
@@ -290,8 +286,8 @@ describe("releaseToForm", () => {
       const r = withApple(apple("1065973702"), apple("1065973702", "purchase for download"));
       expect(releaseIds(r).appleMusicTracks).toEqual(["1065973702"]);
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].mb["1"].appleMusic).toEqual(["1065973702"]);
-      expect(form.discs[0].mb["2"].appleMusic).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.appleMusic).toEqual(["1065973702"]);
+      expect(form.discs[0].tracks[1].mb!.appleMusic).toEqual([]);
       expect(form.notes).toEqual([]);
       expect(form.summary).toContain(
         "New tracks get 6 recording IDs, 6 ISRCs, 1 Spotify track ID and 1 Apple Music track ID, and",
@@ -302,7 +298,7 @@ describe("releaseToForm", () => {
       const r = withApple(apple("1065973702"), apple("1665303757"));
       expect(releaseIds(r).appleMusicTracks).toEqual([]);
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].mb["1"].appleMusic).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.appleMusic).toEqual([]);
       expect(form.notes).toEqual([
         "1 track links more than one Apple Music song on MusicBrainz, so it gets no Apple Music track ID.",
       ]);
@@ -313,7 +309,7 @@ describe("releaseToForm", () => {
         ...NONE,
         taken: ["1065973702"],
       });
-      expect(form.discs[0].mb["1"].appleMusic).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.appleMusic).toEqual([]);
     });
 
     it("ignores other Apple links", () => {
@@ -337,8 +333,8 @@ describe("releaseToForm", () => {
       const r = withIswcs("T-345.246.800-1", "not an ISWC");
       expect(releaseIds(r).iswcs).toEqual(["T-345.246.800-1"]);
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].mb["1"].iswcs).toEqual(["T-345.246.800-1"]);
-      expect(form.discs[0].mb["2"].iswcs).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.800-1"]);
+      expect(form.discs[0].tracks[1].mb!.iswcs).toEqual([]);
       expect(form.notes).toEqual([]);
       expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWC,/);
       expect(form.summary).toContain("ISRCs, ISWCs and track IDs get a MusicBrainz reference");
@@ -348,7 +344,7 @@ describe("releaseToForm", () => {
       const r = withIswcs("T-345.246.800-1", "T-345.246.801-2");
       expect(releaseIds(r).iswcs).toEqual([]);
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].mb["1"].iswcs).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual([]);
       expect(form.notes).toEqual([
         "1 track's composition has more than one ISWC on MusicBrainz, so it gets no ISWC.",
       ]);
@@ -359,7 +355,7 @@ describe("releaseToForm", () => {
         ...NONE,
         taken: ["T-345.246.800-1"],
       });
-      expect(form.discs[0].mb["1"].iswcs).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual([]);
     });
 
     it("finds the composition by it when none has the work ID", () => {
@@ -387,8 +383,8 @@ describe("releaseToForm", () => {
       const r = withDeezer(deezer("https://www.deezer.com/track/69018826"));
       expect(releaseIds(r).deezerTracks).toEqual(["69018826"]);
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].mb["1"].deezer).toEqual(["69018826"]);
-      expect(form.discs[0].mb["2"].deezer).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.deezer).toEqual(["69018826"]);
+      expect(form.discs[0].tracks[1].mb!.deezer).toEqual([]);
       expect(form.summary).toContain("1 Deezer track ID");
     });
 
@@ -403,7 +399,7 @@ describe("releaseToForm", () => {
         deezer("https://www.deezer.com/track/69018827"),
       );
       const form = releaseToForm(r, NONE);
-      expect(form.discs[0].mb["1"].deezer).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.deezer).toEqual([]);
       expect(form.notes).toEqual([
         "1 track links more than one Deezer track on MusicBrainz, so it gets no Deezer track ID.",
       ]);
@@ -412,7 +408,7 @@ describe("releaseToForm", () => {
     it("leaves out one an item already has", () => {
       const r = withDeezer(deezer("https://www.deezer.com/track/69018826"));
       const form = releaseToForm(r, { ...NONE, taken: ["69018826"] });
-      expect(form.discs[0].mb["1"].deezer).toEqual([]);
+      expect(form.discs[0].tracks[0].mb!.deezer).toEqual([]);
     });
 
     it("ignores other Deezer links", () => {
@@ -455,7 +451,7 @@ describe("releaseToForm", () => {
         misplacedWorks: { [work]: [{ qid: "Q2081516", kind: "single" }] },
       });
       expect(form.discs[0].comp).toEqual({});
-      expect(form.discs[0].mb["1"].work).toBe(work);
+      expect(form.discs[0].tracks[0].mb!.work).toBe(work);
       expect(form.notes).toEqual([
         `Q2081516, a single, has the work ID for “${t.title}”. Only a composition should have one. Remove it from the single. The new composition gets it instead, if adding identifiers is on in Item settings.`,
       ]);
@@ -474,7 +470,7 @@ describe("releaseToForm", () => {
         },
       });
       expect(form.discs[0].comp).toEqual({ "1": "Q20" });
-      expect(form.discs[0].mb["1"].work).toBe("");
+      expect(form.discs[0].tracks[0].mb!.work).toBe("");
       expect(form.notes).toEqual([
         `Q1, a single, and Q2, an EP, have the work ID for “${t.title}”. Only a composition should have one. Remove it from them.`,
       ]);
@@ -548,7 +544,7 @@ describe("releaseToForm", () => {
     });
     expect(releaseIds(r).tidalTracks).toEqual(["454960380"]);
     const form = releaseToForm(r, NONE);
-    expect(form.discs[0].mb["1"].tidal).toEqual(["454960380"]);
+    expect(form.discs[0].tracks[0].mb!.tidal).toEqual(["454960380"]);
     expect(form.summary).toContain("1 Tidal track ID");
   });
 
@@ -647,13 +643,27 @@ describe("releaseToForm", () => {
     const form = releaseToForm(r, NONE);
     expect(form.album.form).toBe("");
     expect(form.p407).toBe("");
-    expect(form.discs[0].text.split("\n")[0]).toBe("1. After All - Carly Rae Jepsen");
+    expect(form.discs[0].tracks[0].seconds).toBeNull();
     expect(form.notes).toEqual([
       "1 track has no length on MusicBrainz, so it gets no duration.",
-      expect.stringContaining("“Simon & Garfunkel” has a comma"),
       expect.stringContaining("a Single, not an album or EP"),
       expect.stringContaining("language (fin)"),
     ]);
+  });
+
+  it("keeps a name with a comma or ampersand whole", () => {
+    const r = release();
+    r["artist-credit"] = credit(["Simon & Garfunkel", " feat. "], ["Carly Rae Jepsen", ""]);
+    r.media[1].tracks![0]["artist-credit"] = credit(["Simon & Garfunkel", ""]);
+    const form = releaseToForm(r, NONE);
+    expect(form.discs[1].tracks[0].artists).toEqual(["Simon & Garfunkel"]);
+    // Listed without a QID, so the album artists field doesn't split it either.
+    expect(form.artists).toEqual({ "Simon & Garfunkel": "" });
+    expect(albumArtists(applyMbForm(EMPTY, form))).toEqual([
+      "Simon & Garfunkel",
+      "Carly Rae Jepsen",
+    ]);
+    expect(form.notes).toEqual([]);
   });
 
   it("uses vinyl parts for vinyl, and none for one disc", () => {
@@ -683,11 +693,9 @@ describe("applyMbForm", () => {
     expect(next.discs[0].comp).toEqual({});
   });
 
-  it("makes a form the tracklist parser reads", () => {
+  it("keeps the tracks", () => {
     const next = applyMbForm(EMPTY, releaseToForm(RELEASE, { ...NONE, albumQid: "Q1" }));
-    const rows = next.discs.flatMap((d) => parseDisc(d.text, next.settings));
-    expect(rows.every((r) => r.error === undefined)).toBe(true);
-    expect(rows[0]).toMatchObject({ n: 1, title: "After All", seconds: 252 });
+    expect(next.discs[0].tracks[0]).toMatchObject({ n: 1, title: "After All", seconds: 252 });
     expect(buildPlan(next).fieldErrs.albumQid).toBe("");
   });
   it("gives a new album's date and Discogs master ID a MusicBrainz reference", () => {

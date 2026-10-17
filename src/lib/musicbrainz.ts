@@ -15,7 +15,7 @@ import {
   splitArtists,
   STUDIO_ALBUM,
 } from "./plan.ts";
-import type { AlbumMb, AlbumState, Disc, MbRowIds, State } from "./plan.ts";
+import type { AlbumMb, AlbumState, Disc, MbRowIds, State, Track } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
@@ -368,30 +368,22 @@ function iswcOf(t: MbTrack): string[] {
 }
 
 /**
- * An artist credit written so the tracklist parser splits it back into the
- * same artists: MusicBrainz's join phrases where the parser understands them
+ * An artist credit written so the album artists field splits it back into the
+ * same artists: MusicBrainz's join phrases where the field understands them
  * (", ", " & ", " feat. "), and ", " for anything else (" x ", " and ", " with ").
  */
 export function creditText(credit: MbArtistCredit[]): string {
   return credit
     .map((c, i) => {
       if (i === credit.length - 1) return c.name;
-      const split = splitArtists(`X${c.joinphrase}Y`, true);
+      const split = splitArtists(`X${c.joinphrase}Y`);
       return c.name + (split.length === 2 ? c.joinphrase : ", ");
     })
     .join("");
 }
 
-/** A MusicBrainz length in milliseconds as the whole seconds the tracklist shows. */
+/** A MusicBrainz length in milliseconds as whole seconds. */
 const seconds = (ms: number) => Math.round(ms / 1000);
-
-const duration = (ms: number) => {
-  const s = seconds(ms);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = String(s % 60).padStart(2, "0");
-  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
-};
 
 /** The Wikidata item a MusicBrainz entity's relations link to, if any. */
 export function wikidataLink(relations: MbRelation[] | undefined): string | undefined {
@@ -414,14 +406,15 @@ export function releaseToForm(
   const rg = release["release-group"];
 
   // Artists, keyed by the name they're credited as, as the Performers table is.
+  // A name like "Tyler, the Creator" is listed even without a QID, so the album
+  // artists field keeps it whole.
   const artists: Record<string, string> = {};
-  const nameTroubles = new Set<string>();
   const addCredit = (credit: MbArtistCredit[]) => {
     for (const c of credit) {
-      if (splitArtists(c.name, true).length > 1 || /\s[-–—]\s/.test(c.name))
-        nameTroubles.add(c.name);
       const qid = lookups.artists[c.artist.id];
-      if (qid && !(c.name in artists)) artists[c.name] = qid;
+      if (c.name in artists) continue;
+      if (qid) artists[c.name] = qid;
+      else if (splitArtists(c.name).length > 1) artists[c.name] = "";
     }
   };
   addCredit(release["artist-credit"]);
@@ -463,70 +456,58 @@ export function releaseToForm(
       disc.part = parts[i] ?? "";
       if (!disc.part) notes.push(`Disc ${i + 1} has no part. Choose one under Discs.`);
     }
-    disc.text = m
-      .tracks!.map((t) => {
-        addCredit(t["artist-credit"]);
-        const work = workOf(t);
-        if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
-          misplaced.set(work, t.title.trim());
-        const [iswc] = iswcOf(t);
-        // A composition found by its ISWC is only used when none has the work ID.
-        const comp = (work && lookups.works[work]) || (iswc && lookups.iswcs?.[iswc]);
-        if (comp) {
-          disc.comp[t.position] = comp;
-          comps++;
-        }
-        if (lookups.recordings[t.recording.id]) {
-          disc.track[t.position] = lookups.recordings[t.recording.id];
-          tracks++;
-        }
-        const ids: MbRowIds = {
-          title: t.title.trim(),
-          recording: taken.has(t.recording.id) ? "" : t.recording.id,
-          work: work && !taken.has(work) ? work : "",
-          iswcs: iswc && !taken.has(iswc) ? [iswc] : [],
-          isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
-          spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
-          appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
-          deezer: trackLinkOf(t, "deezer").filter((v) => !taken.has(v)),
-          tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
-          source: { recording: t.recording.id, retrieved },
-          length: t.length === null ? null : seconds(t.length),
-        };
-        if (
-          ids.recording ||
-          ids.work ||
-          ids.iswcs.length ||
-          ids.isrcs.length ||
-          ids.spotify.length ||
-          ids.appleMusic.length ||
-          ids.deezer.length ||
-          ids.tidal.length ||
-          ids.length !== null
-        ) {
-          disc.mb[t.position] = ids;
-          if (!disc.track[t.position]) {
-            toAdd.recordings += ids.recording ? 1 : 0;
-            toAdd.isrcs += ids.isrcs.length;
-            toAdd.spotify += ids.spotify.length;
-            toAdd.appleMusic += ids.appleMusic.length;
-            toAdd.deezer += ids.deezer.length;
-            toAdd.tidal += ids.tidal.length;
-            for (const key of Object.keys(many) as TrackLinkKey[])
-              if (trackLinks(t, key).length > 1) many[key]++;
-            toAdd.durationRefs += ids.length !== null ? 1 : 0;
-          }
-          if (!disc.comp[t.position]) {
-            toAdd.works += ids.work ? 1 : 0;
-            toAdd.iswcs += ids.iswcs.length;
-            if (iswcsOf(t).length > 1) manyIswcs++;
-          }
-        }
-        if (t.length === null) missingLength++;
-        const len = t.length === null ? "" : ` (${duration(t.length)})`;
-        return `${t.position}. ${t.title} - ${creditText(t["artist-credit"])}${len}`;
-      })
-      .join("\n");
+    disc.tracks = m.tracks!.map((t): Track => {
+      addCredit(t["artist-credit"]);
+      const work = workOf(t);
+      if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
+        misplaced.set(work, t.title.trim());
+      const [iswc] = iswcOf(t);
+      // A composition found by its ISWC is only used when none has the work ID.
+      const comp = (work && lookups.works[work]) || (iswc && lookups.iswcs?.[iswc]);
+      if (comp) {
+        disc.comp[t.position] = comp;
+        comps++;
+      }
+      if (lookups.recordings[t.recording.id]) {
+        disc.track[t.position] = lookups.recordings[t.recording.id];
+        tracks++;
+      }
+      const ids: MbRowIds = {
+        recording: taken.has(t.recording.id) ? "" : t.recording.id,
+        work: work && !taken.has(work) ? work : "",
+        iswcs: iswc && !taken.has(iswc) ? [iswc] : [],
+        isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
+        spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
+        appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
+        deezer: trackLinkOf(t, "deezer").filter((v) => !taken.has(v)),
+        tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
+        source: { recording: t.recording.id, retrieved },
+      };
+      if (!disc.track[t.position]) {
+        toAdd.recordings += ids.recording ? 1 : 0;
+        toAdd.isrcs += ids.isrcs.length;
+        toAdd.spotify += ids.spotify.length;
+        toAdd.appleMusic += ids.appleMusic.length;
+        toAdd.deezer += ids.deezer.length;
+        toAdd.tidal += ids.tidal.length;
+        for (const key of Object.keys(many) as TrackLinkKey[])
+          if (trackLinks(t, key).length > 1) many[key]++;
+        toAdd.durationRefs += t.length === null ? 0 : 1;
+      }
+      if (!disc.comp[t.position]) {
+        toAdd.works += ids.work ? 1 : 0;
+        toAdd.iswcs += ids.iswcs.length;
+        if (iswcsOf(t).length > 1) manyIswcs++;
+      }
+      if (t.length === null) missingLength++;
+      return {
+        n: t.position,
+        title: t.title.trim(),
+        artists: [...new Set(t["artist-credit"].map((c) => c.name.trim()).filter(Boolean))],
+        seconds: t.length === null ? null : seconds(t.length),
+        mb: ids,
+      };
+    });
     return disc;
   });
   // A work ID belongs on the composition, never on a single.
@@ -554,10 +535,6 @@ export function releaseToForm(
       notes.push(
         `${plural(n, "track links", "tracks link")} more than one ${TRACK_LINKS[key].song} on MusicBrainz, so ${n === 1 ? "it gets" : "they get"} no ${TRACK_LINKS[key].label}.`,
       );
-  for (const name of nameTroubles)
-    notes.push(
-      `“${name}” has a comma, ampersand, “feat.” or dash in their name, so the tracklist may split it into several artists. Check the Performers table, or turn off splitting artists in Item settings.`,
-    );
 
   const type = PRIMARY_TYPES[rg["primary-type"] ?? ""];
   if (!type)
@@ -630,8 +607,9 @@ export function releaseToForm(
     );
 
   const songs = discs.reduce((n, _, i) => n + (media[i].tracks?.length ?? 0), 0);
+  const foundArtists = Object.values(artists).filter(Boolean).length;
   const found = [
-    Object.keys(artists).length && plural(Object.keys(artists).length, "artist"),
+    foundArtists && plural(foundArtists, "artist"),
     comps && plural(comps, "composition"),
     tracks && plural(tracks, "track"),
   ].filter(Boolean);
@@ -695,7 +673,7 @@ function refsSummary(n: {
     n.spotify + n.appleMusic + n.deezer + n.tidal && "track IDs",
   ].filter(Boolean) as string[];
   if (!what.length) return "";
-  return ` The imported ${joinList(what)} get a MusicBrainz reference, if that's on in Item settings.`;
+  return ` The imported ${joinList(what)} get a MusicBrainz reference.`;
 }
 
 /** What the import adds to the items the run creates, as a sentence. */

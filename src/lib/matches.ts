@@ -8,7 +8,7 @@ import type {
   RowMatches,
   TrackMatch,
 } from "./api-types.ts";
-import type { Disc, Row } from "./plan.ts";
+import type { Disc, Track } from "./plan.ts";
 import { SIMILAR_TITLE } from "./titles.ts";
 
 /**
@@ -233,16 +233,15 @@ export interface TrackReview {
  */
 export function reviewTracks(
   discs: readonly Disc[],
-  parsed: readonly (readonly Row[])[],
+  tracks: readonly (readonly Track[])[],
   rows: Record<string, RowMatches>,
   dismissed: ReadonlySet<string>,
 ): TrackReview[] {
   const out: TrackReview[] = [];
-  parsed.forEach((tracks, di) => {
+  tracks.forEach((discTracks, di) => {
     const disc = discs[di];
     if (!disc) return;
-    for (const r of tracks) {
-      if (r.error !== undefined) continue;
+    for (const r of discTracks) {
       const m = rows[`${di}:${r.n}`];
       if (!m) continue;
       const all = (["comp", "track", "single"] as const).flatMap((slot) =>

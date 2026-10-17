@@ -15,6 +15,7 @@ import {
   settleOwnRun,
 } from "./own-run.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
+import { track } from "./example.fixture.ts";
 
 /** A Storage backed by a Map. */
 function memoryStore() {
@@ -171,7 +172,7 @@ describe("applyCreated", () => {
 describe("formOfRun", () => {
   const input = structuredClone(EMPTY);
   input.album = { ...input.album, mode: "create", title: "New" };
-  input.discs[0].text = "1. Intro";
+  input.discs[0].tracks = [track(1, "Intro")];
   input.artists = { a: "Q10", b: "Q11" };
   const edits = [edit({ key: "album", qid: "Q1" }), edit({ key: "track:0:1", qid: "Q3" })];
   const run = { input, edits };
@@ -199,7 +200,7 @@ describe("formOfRun", () => {
 
   it("is another form once anything else differs", () => {
     const s = structuredClone(input);
-    s.discs[0].text = "1. Outro";
+    s.discs[0].tracks[0].title = "Outro";
     expect(formOfRun(s, run)).toBe("other");
     expect(formOfRun(structuredClone(EMPTY), run)).toBe("other");
   });

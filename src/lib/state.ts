@@ -1,6 +1,17 @@
 // The default form state, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
-import type { AlbumMb, Disc, MbCited, MbRowIds, Settings, SingleState, State } from "./plan.ts";
+import type {
+  AlbumMb,
+  Disc,
+  MbCited,
+  MbRowIds,
+  Settings,
+  SingleState,
+  State,
+  Track,
+} from "./plan.ts";
+import { splitArtists } from "./plan.ts";
+import { sameTitle } from "./titles.ts";
 import {
   ALBUM_ID_FIELDS,
   APPLE_MUSIC_TRACK_PATTERN,
@@ -23,18 +34,16 @@ const DEFAULT_SETTINGS: Settings = {
   albumDesc: "{year} {type} by {artists}",
   compPerformer: true,
   straight: true,
-  splitArtists: true,
   extendExisting: true,
   mbIds: true,
 };
 
 export const emptyDisc = (): Disc => ({
   part: "",
-  text: "",
+  tracks: [],
   comp: {},
   track: {},
   single: {},
-  mb: {},
 });
 
 export const EMPTY: State = {
@@ -81,12 +90,7 @@ const matching = (v: unknown, pattern: RegExp) =>
 
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
-  // Forms saved before identifiers had references kept the source with the length.
-  const legacy = isObj(ids.length) ? ids.length : null;
-  const source = coerceSource(ids.source ?? legacy);
-  const seconds = legacy ? legacy.seconds : ids.length;
   return {
-    title: str(ids.title),
     recording: matching(ids.recording, MBID_PATTERN),
     work: matching(ids.work, MBID_PATTERN),
     iswcs: strList(ids.iswcs, ISWC_PATTERN),
@@ -95,9 +99,51 @@ function coerceMbIds(ids: Obj): MbRowIds {
     appleMusic: strList(ids.appleMusic, APPLE_MUSIC_TRACK_PATTERN),
     deezer: strList(ids.deezer, DEEZER_TRACK_PATTERN),
     tidal: strList(ids.tidal, TIDAL_TRACK_PATTERN),
-    source,
-    length: Number.isInteger(seconds) && (seconds as number) >= 0 ? (seconds as number) : null,
+    // Forms saved before identifiers had references kept the source with the length.
+    source: coerceSource(ids.source ?? ids.length),
   };
+}
+
+const seconds = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : null);
+
+function coerceTrack(t: Obj): Track | null {
+  if (!Number.isInteger(t.n) || (t.n as number) < 0) return null;
+  return {
+    n: t.n as number,
+    title: str(t.title),
+    artists: Array.isArray(t.artists)
+      ? t.artists.filter((a): a is string => typeof a === "string" && a.trim() !== "")
+      : [],
+    seconds: seconds(t.seconds),
+    mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
+  };
+}
+
+const LEGACY_LINE =
+  /^\s*(\d+)\s*[.)]?\s+(.+)\s+[-–—]\s+(.+?)\s*(?:\(\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*\))?\s*$/;
+
+/**
+ * The tracks of a disc saved as a tracklist with a line per track, as forms
+ * were before tracks were kept one by one. Submitted forms are stored like
+ * this too. Lines that can't be read are left out, and the identifiers a row
+ * had are kept only while it has the title they were imported with.
+ */
+function legacyTracks(text: string, split: boolean, mb: Obj): Track[] {
+  return text.split(/\r?\n/).flatMap((line): Track[] => {
+    const m = LEGACY_LINE.exec(line);
+    if (!m) return [];
+    const title = m[2].trim();
+    const ids = mb[String(+m[1])];
+    return [
+      {
+        n: +m[1],
+        title,
+        artists: split ? splitArtists(m[3]) : [m[3].trim()],
+        seconds: m[5] ? (m[4] ? +m[4] : 0) * 3600 + +m[5] * 60 + +m[6] : null,
+        mb: isObj(ids) && sameTitle(str(ids.title), title) ? coerceMbIds(ids) : null,
+      },
+    ];
+  });
 }
 
 /** A real day written YYYY-MM-DD, or "". */
@@ -162,7 +208,6 @@ export function coerceState(raw: unknown): State {
     albumDesc: str(s.albumDesc, d.albumDesc),
     compPerformer: bool(s.compPerformer, d.compPerformer),
     straight: bool(s.straight, d.straight),
-    splitArtists: bool(s.splitArtists, d.splitArtists),
     extendExisting: bool(s.extendExisting, d.extendExisting),
     mbIds: bool(s.mbIds, d.mbIds),
   };
@@ -190,7 +235,9 @@ export function coerceState(raw: unknown): State {
   const discs = (Array.isArray(r.discs) ? r.discs : []).filter(isObj).map((disc): Disc => ({
     part: str(disc.part),
     partCustom: bool(disc.partCustom, false),
-    text: str(disc.text),
+    tracks: Array.isArray(disc.tracks)
+      ? disc.tracks.filter(isObj).flatMap((t) => coerceTrack(t) ?? [])
+      : legacyTracks(str(disc.text), s.splitArtists !== false, isObj(disc.mb) ? disc.mb : {}),
     comp: strMap(disc.comp),
     track: strMap(disc.track),
     single: isObj(disc.single)
@@ -201,13 +248,6 @@ export function coerceState(raw: unknown): State {
               n,
               { date: str(sg.date), qid: str(sg.qid), discogs: str(sg.discogs) },
             ]),
-        )
-      : {},
-    mb: isObj(disc.mb)
-      ? Object.fromEntries(
-          Object.entries(disc.mb)
-            .filter((e): e is [string, Obj] => isObj(e[1]))
-            .map(([n, ids]): [string, MbRowIds] => [n, coerceMbIds(ids)]),
         )
       : {},
   }));

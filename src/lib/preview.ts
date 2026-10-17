@@ -136,7 +136,7 @@ export function formatDuration(seconds: number): string {
 }
 
 /** Names for the items the form knows: its fixed choices, performers and reused items. */
-function itemNames(state: State, parsed: Plan["parsed"]): Map<string, string> {
+function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
   const fixed: (readonly [string, string])[] = [
     ...ALBUM_TYPES,
     ...ALBUM_FORMS,
@@ -159,11 +159,10 @@ function itemNames(state: State, parsed: Plan["parsed"]): Map<string, string> {
   };
   if (state.album.mode === "existing") add(state.album.qid, "this album");
   for (const [name, qid] of Object.entries(state.artists)) add(qid, name);
-  parsed.forEach((rows, di) => {
+  tracks.forEach((rows, di) => {
     const disc = state.discs[di];
     if (!disc) return;
     for (const r of rows) {
-      if (r.error !== undefined) continue;
       add(disc.comp[r.n], `composition “${r.title}”`);
       add(disc.track[r.n], `track “${r.title}”`);
       add(disc.single[r.n]?.qid, `single “${r.title}”`);
@@ -185,8 +184,8 @@ function groupOf(op: Op, albumQid: string | null): PreviewGroupId {
 }
 
 /** The plan's operations as grouped, labelled edits. */
-export function previewPlan(plan: Pick<Plan, "ops" | "parsed">, state: State): PreviewGroup[] {
-  const names = itemNames(state, plan.parsed);
+export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewGroup[] {
+  const names = itemNames(state, plan.tracks);
   const created = new Map<string, string>();
   for (const op of plan.ops) if (op.op === "create") created.set(op.key, `new ${describeOp(op)}`);
 

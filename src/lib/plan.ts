@@ -19,7 +19,6 @@ import {
   type MusicKind,
   normalizeAlbumId,
 } from "./music.ts";
-import { sameTitle } from "./titles.ts";
 
 // ---------------------------------------------------------------------------
 // Form state
@@ -38,7 +37,6 @@ export interface Settings {
   albumDesc: string;
   compPerformer: boolean;
   straight: boolean;
-  splitArtists: boolean;
   extendExisting: boolean;
   /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
   mbIds: boolean;
@@ -86,13 +84,8 @@ export interface SingleState {
   discogs: string;
 }
 
-/**
- * A track's identifiers from a MusicBrainz import, kept with the title it was
- * imported with: they're only used while the row still has that title, so
- * editing the tracklist can't move them onto another song.
- */
+/** A track's identifiers from a MusicBrainz import. */
 export interface MbRowIds {
-  title: string;
   /** P4404 MusicBrainz recording ID, for the track. Empty if an item already has it. */
   recording: string;
   /** P435 MusicBrainz work ID, for the composition. Empty if an item already has it. */
@@ -114,22 +107,28 @@ export interface MbRowIds {
    * duration and identifiers. Kept even when an item already has the recording ID.
    */
   source: { recording: string; retrieved: string } | null;
-  /**
-   * The length imported, in seconds. The duration only gets a reference while
-   * the row has this length. Null when MusicBrainz has no length for the track.
-   */
-  length: number | null;
+}
+
+/** A track as a MusicBrainz import read it. */
+export interface Track {
+  n: number;
+  title: string;
+  /** The names it's credited to, as the Performers table maps them. */
+  artists: string[];
+  /** Null when MusicBrainz has no length for it. */
+  seconds: number | null;
+  /** Null for a track from a form saved before tracks had identifiers of their own. */
+  mb: MbRowIds | null;
 }
 
 export interface Disc {
   part: string;
   partCustom?: boolean;
-  text: string;
+  tracks: Track[];
+  /** Existing compositions, tracks and singles, by track number. */
   comp: Record<string, string>;
   track: Record<string, string>;
   single: Record<string, SingleState>;
-  /** Imported identifiers by track number. */
-  mb: Record<string, MbRowIds>;
 }
 
 export interface State {
@@ -186,19 +185,9 @@ export type Op =
 export type MsgKind = "err" | "warn" | "ok";
 export type Msg = [MsgKind, string];
 
-export interface ParsedRow {
-  n: number;
-  title: string;
-  artists: string[];
-  /** Null when the line has no length. */
-  seconds: number | null;
-  raw: string;
-  error?: undefined;
-}
-export type Row = ParsedRow | { error: string; raw: string };
-
 export interface Plan {
-  parsed: Row[][];
+  /** Each disc's tracks, with the titles as they're written to Wikidata. */
+  tracks: Track[][];
   /** Errors for individual form fields, keyed by field id. */
   fieldErrs: Record<string, string>;
   /** Errors for single rows, keyed "disc:track". */
@@ -372,38 +361,44 @@ export const isCustomLabelLang = (s: Settings) =>
 export const isCustomPart = (d: Disc) =>
   !!d.partCustom || (d.part.trim() !== "" && !KNOWN_PARTS.has(d.part.trim()));
 
-export function splitArtists(s: string, split: boolean): string[] {
-  if (!split) return [s.trim()];
-  return s
-    .split(/\s*(?:,|&|\bfeat\.?|\bft\.?|\bfeaturing\b)\s+/i)
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
+const SEPARATOR = /(\s*(?:,|&|\bfeat\.?|\bft\.?|\bfeaturing\b)\s+)/i;
 
-const LINE =
-  /^\s*(\d+)\s*[.)]?\s+(.+)\s+[-–—]\s+(.+?)\s*(?:\(\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*\))?\s*$/;
-
-export function parseDisc(text: string, settings: Settings): Row[] {
-  const straighten = (s: string) =>
-    settings.straight ? s.replace(/[’‘]/g, "'").replace(/[“”]/g, '"') : s;
-  const rows: Row[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    const m = LINE.exec(line);
-    if (!m) {
-      rows.push({ error: "Couldn't read this line", raw: line });
-      continue;
-    }
-    rows.push({
-      n: +m[1],
-      title: straighten(m[2].trim()),
-      artists: splitArtists(m[3], settings.splitArtists),
-      seconds: m[5] ? (m[4] ? +m[4] : 0) * 3600 + +m[5] * 60 + +m[6] : null,
-      raw: line,
-    });
+/**
+ * Artist names written as "A, B & C feat. D". A name in `whole`, such as
+ * "Tyler, the Creator", isn't split up.
+ */
+export function splitArtists(s: string, whole: Iterable<string> = []): string[] {
+  const keep = new Set(whole);
+  // Names at the even indexes, with the separators between them.
+  const parts = s.split(SEPARATOR);
+  const names: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    // The longest run of names from here that's one to keep whole.
+    let j = parts.length - 1;
+    while (
+      j > i &&
+      !keep.has(
+        parts
+          .slice(i, j + 1)
+          .join("")
+          .trim(),
+      )
+    )
+      j -= 2;
+    names.push(
+      parts
+        .slice(i, j + 1)
+        .join("")
+        .trim(),
+    );
+    i = j;
   }
-  return rows;
+  return names.filter(Boolean);
 }
+
+/** A new album's artists, keeping names the Performers table already has whole. */
+export const albumArtists = (state: State) =>
+  splitArtists(state.album.artists, Object.keys(state.artists));
 
 type ParsedDate =
   | { ok: true; val: null; year: "" }
@@ -535,7 +530,7 @@ const statedInMb = (
 export function loadedReleaseGroup(state: State, releaseGroup: string) {
   return (
     normalizeAlbumId("musicbrainz", state.album.ids.musicbrainz) === releaseGroup &&
-    state.discs.some((d) => Object.keys(d.mb).length > 0)
+    state.discs.some((d) => d.tracks.some((t) => t.mb))
   );
 }
 
@@ -575,20 +570,13 @@ function albumMbRef(state: State, cited: MbCited | null | undefined, value: stri
 // ---------------------------------------------------------------------------
 
 interface PlanItem {
-  r: ParsedRow;
+  r: Track;
   di: number;
   part: string | null;
   perf: string[];
   existComp: string | null;
   existTrack: string | null;
   single: { date: ParsedDate; qid: string | null; discogs: string | null } | null;
-  mb: MbRowIds | null;
-}
-
-/** The row's imported identifiers, if it still has the title they were imported with. */
-export function mbIdsFor(disc: Disc, row: ParsedRow): MbRowIds | null {
-  const ids = disc.mb[row.n];
-  return ids && sameTitle(ids.title, row.title) ? ids : null;
 }
 
 /** Wikidata's limit on a label or description. */
@@ -596,7 +584,7 @@ export const MAX_TERM_LENGTH = 250;
 /** Length as Wikidata counts it, in code points rather than UTF-16 units. */
 const chars = (s: string) => s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "_").length;
 
-/** More tracks than this on one disc is likely a paste gone wrong. */
+/** More tracks than this on one disc is likely a mistake. */
 export const MAX_TRACKS_PER_DISC = 50;
 /** Tracks per run, across all discs; a bigger release goes in several runs. */
 export const MAX_TRACKS = 100;
@@ -639,11 +627,14 @@ export function buildPlan(state: State): Plan {
     year: "0",
   }).join(" ");
 
-  const parsed = state.discs.map((d) => parseDisc(d.text, S));
+  const straighten = (s: string) =>
+    S.straight ? s.replace(/[’‘]/g, "'").replace(/[“”]/g, '"') : s;
+  const tracks = state.discs.map((d) =>
+    d.tracks.map((t) => ({ ...t, title: straighten(t.title) })),
+  );
   const unmapped = new Set<string>();
   const badPerf = new Set<string>();
   const invalid: string[] = [];
-  let readErr = 0;
   const perfFor = (names: string[]) => {
     const perf = names.map((a) => (state.artists[a] ?? "").trim());
     names.forEach((a, i) => {
@@ -656,16 +647,9 @@ export function buildPlan(state: State): Plan {
   /* album */
   const A = state.album;
   const creatingAlbum = A.mode === "create";
-  const albumArtists = creatingAlbum ? splitArtists(A.artists, S.splitArtists).filter(Boolean) : [];
-  const albumPerf = perfFor(albumArtists);
-  const albumTitle = creatingAlbum
-    ? S.straight
-      ? A.title
-          .trim()
-          .replace(/[’‘]/g, "'")
-          .replace(/[“”]/g, '"')
-      : A.title.trim()
-    : "";
+  const albumNames = creatingAlbum ? albumArtists(state) : [];
+  const albumPerf = perfFor(albumNames);
+  const albumTitle = creatingAlbum ? straighten(A.title.trim()) : "";
   const albumTypeLabel = descTypeLabel(A.type, A.form);
   Object.assign(fieldErrs, { albumQid: "", albumTitle: "", albumArtists: "", albumDesc: "" });
   const albumIds: Claim[] = [];
@@ -677,7 +661,7 @@ export function buildPlan(state: State): Plan {
     if (!albumTitle) fieldErrs.albumTitle = "Enter the album title.";
     else if (chars(albumTitle) > MAX_TERM_LENGTH)
       fieldErrs.albumTitle = `Wikidata allows ${MAX_TERM_LENGTH} characters at most. This title has ${chars(albumTitle)}.`;
-    if (!albumArtists.length) fieldErrs.albumArtists = "Enter at least one album artist.";
+    if (!albumNames.length) fieldErrs.albumArtists = "Enter at least one album artist.";
     fieldErrs.albumDesc = checkTemplate(S.albumDesc, date, ["year", "type", "artists"]).join(" ");
     for (const f of ALBUM_ID_FIELDS) {
       const v = (A.ids[f.key] ?? "").trim();
@@ -701,15 +685,11 @@ export function buildPlan(state: State): Plan {
 
   /* rows */
   const items: PlanItem[] = [];
-  parsed.forEach((rows, di) => {
+  tracks.forEach((rows, di) => {
     const d = state.discs[di];
     const part = d.part.trim();
     if (part && !QID.test(part)) invalid.push(`Disc ${di + 1} part "${part}"`);
     for (const r of rows) {
-      if (r.error !== undefined) {
-        readErr++;
-        continue;
-      }
       const perf = perfFor(r.artists);
       const ec = (d.comp[r.n] ?? "").trim();
       const et = (d.track[r.n] ?? "").trim();
@@ -741,7 +721,6 @@ export function buildPlan(state: State): Plan {
         existComp: QID.test(ec) ? ec : null,
         existTrack: QID.test(et) ? et : null,
         single,
-        mb: mbIdsFor(d, r),
       });
     }
   });
@@ -754,25 +733,21 @@ export function buildPlan(state: State): Plan {
     seen.add(k);
   }
 
-  if (!items.length && !readErr) err("Paste at least one track into a disc.");
-  parsed.forEach((rows, di) => {
+  if (!items.length) err("Load a release from MusicBrainz to fill in the tracklist.");
+  tracks.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
       err(
         `Disc ${di + 1} has ${rows.length} tracks, but a disc can have at most ${MAX_TRACKS_PER_DISC}. ` +
           "Split it into more discs, or into separate runs.",
       );
   });
-  const trackCount = parsed.reduce((n, rows) => n + rows.length, 0);
+  const trackCount = tracks.reduce((n, rows) => n + rows.length, 0);
   if (trackCount > MAX_TRACKS)
     err(
       `That's ${trackCount} tracks across all discs, but a run can have at most ${MAX_TRACKS}. ` +
         "Split the release into separate runs.",
     );
   if (albumErr) err("Fix the album details at the top of the page.");
-  if (readErr)
-    err(
-      `${readErr} line(s) couldn't be read. They're marked in the disc tables. Fix or remove them.`,
-    );
   if (dupes.size) err(`Track numbers repeat within a disc: ${[...dupes].join(", ")}.`);
   if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`);
   if (unmapped.size) err(`No performer QID for: ${[...unmapped].join(", ")}.`);
@@ -792,7 +767,7 @@ export function buildPlan(state: State): Plan {
     err("Fix the single description template in Item settings.");
 
   const blocked = messages.some((m) => m[0] === "err");
-  if (blocked) return { parsed, fieldErrs, singleErrs, messages, ops: [], ready: false };
+  if (blocked) return { tracks, fieldErrs, singleErrs, messages, ops: [], ready: false };
 
   /* operations */
   const ops: Op[] = [];
@@ -831,8 +806,6 @@ export function buildPlan(state: State): Plan {
       ...mb.tidal.map((v) => cited("P4578", v)),
     ];
   };
-  // Only for a duration still as the import filled it in.
-  const durationRefs = (it: PlanItem) => (it.mb?.length === it.r.seconds ? mbRef(it.mb) : {});
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
@@ -856,7 +829,7 @@ export function buildPlan(state: State): Plan {
       op: "create",
       key: "album",
       kind: A.type === EP_CLASS ? "ep" : "album",
-      ...labelled(albumTitle, fillDesc(S.albumDesc, year, albumArtists, albumTypeLabel)),
+      ...labelled(albumTitle, fillDesc(S.albumDesc, year, albumNames, albumTypeLabel)),
       claims: [
         claim("P31", item(A.type)),
         ...(A.form ? [claim("P7937", item(A.form))] : []),
@@ -894,9 +867,9 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...(S.mbIds && it.mb?.work ? [str("P435", it.mb.work)] : []),
-        ...(S.mbIds && it.mb
-          ? it.mb.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.mb) }))
+        ...(S.mbIds && it.r.mb?.work ? [str("P435", it.r.mb.work)] : []),
+        ...(S.mbIds && it.r.mb
+          ? it.r.mb.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) }))
           : []),
       ],
     });
@@ -930,11 +903,11 @@ export function buildPlan(state: State): Plan {
           ? [
               {
                 ...claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT }),
-                ...durationRefs(it),
+                ...mbRef(it.r.mb),
               },
             ]
           : []),
-        ...trackIds(it.mb),
+        ...trackIds(it.r.mb),
       ],
     });
   }
@@ -1028,14 +1001,14 @@ export function buildPlan(state: State): Plan {
       `Wikidata allows ${MAX_TERM_LENGTH} characters at most in a label or description. ` +
         `Too long: ${[...tooLong].join(", ")}.`,
     );
-    return { parsed, fieldErrs, singleErrs, messages, ops: [], ready: false };
+    return { tracks, fieldErrs, singleErrs, messages, ops: [], ready: false };
   }
 
   if (ops.length > MAX_OPS) {
     err(
       `That's ${ops.length} edits, but a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
     );
-    return { parsed, fieldErrs, singleErrs, messages, ops: [], ready: false };
+    return { tracks, fieldErrs, singleErrs, messages, ops: [], ready: false };
   }
 
   const creates = (prefix: string) =>
@@ -1050,7 +1023,7 @@ export function buildPlan(state: State): Plan {
       ...(made || reused ? [`${made} single(s) to create, ${reused} reused`] : []),
     ].join(". ") + ".",
   ]);
-  return { parsed, fieldErrs, singleErrs, messages, ops, ready: ops.length > 0 };
+  return { tracks, fieldErrs, singleErrs, messages, ops, ready: ops.length > 0 };
 }
 
 // ---------------------------------------------------------------------------

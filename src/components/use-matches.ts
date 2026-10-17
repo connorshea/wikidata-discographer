@@ -11,27 +11,20 @@ export type Matches = MatchesResponse["rows"];
 export type MatchStatus = "off" | "pending" | "done" | "failed";
 
 /**
- * Existing compositions, tracks and singles in the mirror for the parsed
- * rows: same title and a shared performer, or on the existing album.
+ * Existing compositions, tracks and singles in the mirror for the tracks: same title and a shared performer, or on the existing album.
  */
 export function useMatches(state: State, plan: Plan): { matches: Matches; status: MatchStatus } {
   const albumQid = state.album.qid.trim();
   const request: MatchesRequest = {
     albumQid: state.album.mode === "existing" && QID.test(albumQid) ? albumQid : "",
-    rows: plan.parsed.flatMap((rows, di) =>
-      rows.flatMap((r) =>
-        r.error !== undefined
-          ? []
-          : [
-              {
-                key: `${di}:${r.n}`,
-                title: r.title,
-                performers: r.artists
-                  .map((a) => (state.artists[a] ?? "").trim())
-                  .filter((q) => QID.test(q)),
-              },
-            ],
-      ),
+    rows: plan.tracks.flatMap((tracks, di) =>
+      tracks.map((t) => ({
+        key: `${di}:${t.n}`,
+        title: t.title,
+        performers: t.artists
+          .map((a) => (state.artists[a] ?? "").trim())
+          .filter((q) => QID.test(q)),
+      })),
     ),
   };
   // Debounce the serialized request: a fresh object every render would never settle.

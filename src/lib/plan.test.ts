@@ -11,11 +11,10 @@ import {
   normalizeDate,
   normalizeQid,
   type Op,
-  parseDisc,
   splitArtists,
 } from "./plan.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
-import { EXAMPLE } from "./example.fixture.ts";
+import { EXAMPLE, track } from "./example.fixture.ts";
 
 const keys = (ops: Op[]) => ops.map((o) => (o.op === "create" ? o.key : `+${o.what}`));
 const find = (ops: Op[], key: string) => ops.find((o) => o.op === "create" && o.key === key);
@@ -47,22 +46,18 @@ describe("normalizeQid", () => {
 
 describe("splitArtists", () => {
   it("splits on commas, ampersands and feat.", () => {
-    expect(splitArtists("A, B & C feat. D", true)).toEqual(["A", "B", "C", "D"]);
-    expect(splitArtists("A & B", false)).toEqual(["A & B"]);
-  });
-});
-
-describe("parseDisc", () => {
-  it("reads tracks and flags unreadable lines", () => {
-    const rows = parseDisc("1. Song - Artist (3:05)\n\nnonsense", EMPTY.settings);
-    expect(rows[0]).toMatchObject({ n: 1, title: "Song", artists: ["Artist"], seconds: 185 });
-    expect(rows[1]).toMatchObject({ error: expect.any(String), raw: "nonsense" });
+    expect(splitArtists("A, B & C feat. D")).toEqual(["A", "B", "C", "D"]);
   });
 
-  it("reads a line without a length", () => {
-    const rows = parseDisc("1. Song (Live) - A & B\n2. Two - C (1:02:03)", EMPTY.settings);
-    expect(rows[0]).toMatchObject({ title: "Song (Live)", artists: ["A", "B"], seconds: null });
-    expect(rows[1]).toMatchObject({ title: "Two", artists: ["C"], seconds: 3723 });
+  it("keeps a name it's given whole", () => {
+    expect(splitArtists("Tyler, the Creator & A$AP Rocky", ["Tyler, the Creator"])).toEqual([
+      "Tyler, the Creator",
+      "A$AP Rocky",
+    ]);
+    expect(splitArtists("Earth, Wind & Fire feat. B", ["Earth, Wind & Fire", "Earth"])).toEqual([
+      "Earth, Wind & Fire",
+      "B",
+    ]);
   });
 });
 
@@ -72,9 +67,9 @@ describe("loadedReleaseGroup", () => {
     const state = structuredClone(EMPTY);
     state.album.ids.musicbrainz = musicbrainz;
     state.discs = [emptyDisc()];
+    state.discs[0].tracks = [track(1, "Get Busy Living", "3:20")];
     if (loaded)
-      state.discs[0].mb["1"] = {
-        title: "Get Busy Living",
+      state.discs[0].tracks[0].mb = {
         recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c",
         work: "",
         iswcs: [],
@@ -84,7 +79,6 @@ describe("loadedReleaseGroup", () => {
         deezer: [],
         tidal: [],
         source: { recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c", retrieved: "2026-10-12" },
-        length: 200,
       };
     return state;
   };
@@ -127,7 +121,7 @@ describe("buildPlan", () => {
 
   it("adds no duration to a track without a length", () => {
     const state = structuredClone(EXAMPLE);
-    state.discs[0].text = state.discs[0].text.replace(" (02:57)", "");
+    state.discs[0].tracks[1].seconds = null;
     const create = (key: string) =>
       buildPlan(state).ops.find((o) => o.op === "create" && o.key === key);
     const props = (key: string) =>
@@ -138,7 +132,6 @@ describe("buildPlan", () => {
 
   describe("identifiers from a MusicBrainz import", () => {
     const ids = {
-      title: "Habits of Creatures",
       recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
       work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
       iswcs: ["T-345.246.800-1"],
@@ -148,7 +141,6 @@ describe("buildPlan", () => {
       deezer: ["69018826"],
       tidal: ["454960380"],
       source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
-      length: 177,
     };
     const MB_REF = [
       [
@@ -162,7 +154,7 @@ describe("buildPlan", () => {
     ];
     const withIds = () => {
       const state = structuredClone(EXAMPLE);
-      state.discs[0].mb["2"] = ids;
+      state.discs[0].tracks[1].mb = ids;
       return state;
     };
     const claimsOf = (state: typeof EXAMPLE, key: string) =>
@@ -194,10 +186,7 @@ describe("buildPlan", () => {
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
     });
 
-    it("are left off once the row's title changes, or when the setting is off", () => {
-      const renamed = withIds();
-      renamed.discs[0].text = renamed.discs[0].text.replace("Habits of Creatures", "Habits");
-      expect(claimsOf(renamed, "track:0:2")).toEqual([]);
+    it("are left off when the setting is off", () => {
       const off = withIds();
       off.settings.mbIds = false;
       expect(claimsOf(off, "track:0:2")).toEqual([]);
@@ -209,14 +198,10 @@ describe("buildPlan", () => {
         return op?.op === "create" ? op.claims.find((c) => c.property === "P2047") : undefined;
       };
       expect(durationOf(withIds())?.references).toEqual(MB_REF);
-      // Even with identifiers off, but not once the length is edited.
+      // Even with identifiers off.
       const noIds = withIds();
       noIds.settings.mbIds = false;
       expect(durationOf(noIds)?.references).toHaveLength(1);
-      const edited = withIds();
-      edited.discs[0].text = edited.discs[0].text.replace("(02:57)", "(02:58)");
-      expect(durationOf(edited)).toMatchObject({ property: "P2047" });
-      expect(durationOf(edited)?.references).toBeUndefined();
     });
 
     describe("give each ISRC and track ID on the new track a MusicBrainz reference", () => {
@@ -234,7 +219,7 @@ describe("buildPlan", () => {
       };
       const only = (key: "isrcs" | "spotify" | "appleMusic" | "deezer" | "tidal") => {
         const state = withIds();
-        state.discs[0].mb["2"] = {
+        state.discs[0].tracks[1].mb = {
           ...ids,
           isrcs: [],
           spotify: [],
@@ -265,18 +250,11 @@ describe("buildPlan", () => {
         expect(refsOf(withIds(), "comp:0:2")).toEqual({ P435: undefined, P1827: MB_REF });
       });
 
-      it("even once the length is edited, or when an item already has the recording ID", () => {
+      it("even when an item already has the recording ID", () => {
         const state = withIds();
-        state.discs[0].text = state.discs[0].text.replace("(02:57)", "(02:58)");
-        state.discs[0].mb["2"] = { ...ids, recording: "" };
+        state.discs[0].tracks[1].mb = { ...ids, recording: "" };
         expect(refsOf(state).P1243).toEqual(MB_REF);
       });
-    });
-
-    it("match the title ignoring case and curly quotes", () => {
-      const state = withIds();
-      state.discs[0].mb["2"] = { ...ids, title: "habits  of creatures" };
-      expect(claimsOf(state, "track:0:2")).toHaveLength(6);
     });
   });
 
@@ -584,7 +562,7 @@ describe("buildPlan", () => {
     it("names each over-long track title and filled-in description once", () => {
       const state = structuredClone(EXAMPLE);
       const long = "x".repeat(MAX_TERM_LENGTH + 10);
-      state.discs = [{ ...emptyDisc(), text: `1. ${long} - Carly Rae Jepsen (3:00)` }];
+      state.discs = [{ ...emptyDisc(), tracks: [track(1, long, "3:00")] }];
       state.settings.trackDesc = `${"y".repeat(MAX_TERM_LENGTH)} by {artists}`;
       const plan = buildPlan(state);
       expect(plan.ready).toBe(false);
@@ -598,13 +576,10 @@ describe("buildPlan", () => {
 
   describe("size limits", () => {
     const tracklist = (count: number) =>
-      Array.from(
-        { length: count },
-        (_, i) => `${i + 1}. Song ${i + 1} - Carly Rae Jepsen (3:00)`,
-      ).join("\n");
+      Array.from({ length: count }, (_, i) => track(i + 1, `Song ${i + 1}`, "3:00"));
     const withDiscs = (...counts: number[]) => {
       const state = structuredClone(EXAMPLE);
-      state.discs = counts.map((n) => ({ ...emptyDisc(), text: tracklist(n) }));
+      state.discs = counts.map((n) => ({ ...emptyDisc(), tracks: tracklist(n) }));
       return state;
     };
     const errors = (plan: ReturnType<typeof buildPlan>) =>
