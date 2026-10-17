@@ -72,8 +72,9 @@ export default function StartSection({
 }) {
   const picking = !state.start;
   const [card, setCard] = useState<StartingPoint | null>(null);
-  // The starting point Change left, to go back to it.
-  const [prev, setPrev] = useState<StartingPoint | null>(null);
+  // The starting point Change left, and the album as it was then, to go back to them.
+  // The panels change the album while picking (a new album's title, artists and type).
+  const [prev, setPrev] = useState<{ start: StartingPoint; album: State["album"] } | null>(null);
   // The search, kept here so "Pick a different album" comes back to it.
   const [query, setQuery] = useState("");
   const mbImport = useRef<MusicBrainzImportHandle>(null);
@@ -88,7 +89,7 @@ export default function StartSection({
   const focusPanel = useRef(false);
 
   const change = (to?: StartingPoint) => {
-    if (state.start) setPrev(state.start);
+    if (state.start) setPrev({ start: state.start, album: structuredClone(state.album) });
     setCard(to ?? state.start);
     focusHead.current = true;
     update((s) => void (s.start = null));
@@ -134,7 +135,12 @@ export default function StartSection({
               <button
                 type="button"
                 className="link start-change"
-                onClick={() => update((s) => void (s.start = prev))}
+                onClick={() =>
+                  update((s) => {
+                    s.start = prev.start;
+                    s.album = structuredClone(prev.album);
+                  })
+                }
               >
                 Cancel
               </button>
