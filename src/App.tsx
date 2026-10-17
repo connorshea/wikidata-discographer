@@ -260,7 +260,12 @@ function Form() {
     }
   }, [state, stale]);
 
-  const { tracklist: albumTracklist, releaseGroup, checked } = useAlbumTracklist(state);
+  const {
+    tracklist: albumTracklist,
+    releaseGroup,
+    checked,
+    pending: tracklistPending,
+  } = useAlbumTracklist(state);
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
@@ -370,6 +375,7 @@ function Form() {
               loggedIn: !!user,
               ineligible: user && !user.eligibility.ok ? (user.eligibility.reason ?? null) : null,
               matchesPending: status === "pending",
+              albumPending: tracklistPending || albumFound?.status === "loading",
             })}
             slot={setSlot}
           />

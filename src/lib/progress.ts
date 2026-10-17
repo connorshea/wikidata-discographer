@@ -297,7 +297,13 @@ export interface Check {
 
 /** The run's checklist: each thing that has to be true before it can start. */
 export function runChecks(
-  p: ProgressInput & { loggedIn: boolean; ineligible: string | null; matchesPending: boolean },
+  p: ProgressInput & {
+    loggedIn: boolean;
+    ineligible: string | null;
+    matchesPending: boolean;
+    /** The existing album is still being looked up on Wikidata. */
+    albumPending: boolean;
+  },
 ): Check[] {
   const { state, plan, unreviewed, hasTracklist } = p;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
@@ -315,14 +321,16 @@ export function runChecks(
         ? { ok: false, text: "Choose or create the album", at: "album" }
         : hasTracklist
           ? { ok: false, text: "Album already has a tracklist", at: "album" }
-          : {
-              ok: true,
-              text:
-                state.album.mode === "create"
-                  ? "New album filled in"
-                  : "Album has no tracklist yet",
-              at: null,
-            },
+          : state.album.mode === "existing" && p.albumPending
+            ? { ok: false, text: "Checking the album on Wikidata…", at: "album" }
+            : {
+                ok: true,
+                text:
+                  state.album.mode === "create"
+                    ? "New album filled in"
+                    : "Album has no tracklist yet",
+                at: null,
+              },
     trackCount
       ? blockedAt(plan, "tracks")
         ? { ok: false, text: "Fix the errors in Tracks", at: "tracks" }

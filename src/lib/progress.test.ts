@@ -22,7 +22,7 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
 });
 
 const checks = (p: ProgressInput) =>
-  runChecks({ ...p, loggedIn: true, ineligible: null, matchesPending: false });
+  runChecks({ ...p, loggedIn: true, ineligible: null, matchesPending: false, albumPending: false });
 
 describe("buildPlan blockers", () => {
   it("names a section for each error", () => {
@@ -129,6 +129,20 @@ describe("runChecks", () => {
 
   it("passes a ready form", () => {
     expect(checks(input(EXAMPLE)).every((c) => c.ok)).toBe(true);
+  });
+
+  it("waits on the existing album's lookup", () => {
+    const list = runChecks({
+      ...input(EXAMPLE),
+      loggedIn: true,
+      ineligible: null,
+      matchesPending: false,
+      albumPending: true,
+    });
+    expect(list.find((c) => c.at === "album")).toMatchObject({
+      ok: false,
+      text: "Checking the album on Wikidata…",
+    });
   });
 
   it("asks for matches to be reviewed", () => {
