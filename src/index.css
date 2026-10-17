@@ -430,10 +430,13 @@ button.clear-form path {
   stroke: var(--warn);
 }
 /* What RunSection puts here: the run button, and what it says about it. */
-.run-slot > .row {
+.run-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 4px;
 }
-.run-slot > .row > button:first-child {
+.run-slot > button {
   width: 100%;
   min-height: 44px;
 }
@@ -2036,60 +2039,272 @@ table.album-list td.count {
 .earlier-runs li {
   padding: 2px 0;
 }
-.log {
-  list-style: none;
-  padding: 0;
-  margin: 10px 0 0;
-  font-size: 0.85rem;
-  max-height: 380px;
-  overflow: auto;
-}
-.log li {
-  padding: 2px 0;
-}
-.log li.fail {
-  color: var(--err);
-}
-.turntable-row {
+/* Create on Wikidata: the split of the run's edits, the run button, then the run. */
+.create-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 16px;
-  margin-top: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
-.run-status {
-  flex: 1 1 240px;
-  min-width: 0;
-}
-.run-status .hint {
+.create-head h2 {
   margin: 0;
 }
-.log.recent {
-  margin-top: 6px;
-  max-height: none;
-  overflow: visible;
+.create-head a {
+  font-size: 14px;
+  font-weight: 600;
 }
-.log.recent li {
-  transition: opacity 0.4s ease-out;
+section.block.create {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-/* Newest first, at the top, and each older one fainter. */
-.log.recent li:nth-child(2) {
-  opacity: 0.75;
+section.block.create > :not(dialog) {
+  margin: 0;
 }
-.log.recent li:nth-child(3) {
-  opacity: 0.5;
+.create-intro {
+  color: var(--ink);
 }
-.log.recent li:nth-child(4) {
-  opacity: 0.25;
+.edit-mix,
+.run-box {
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: var(--soft-bg);
+  border: 1px solid var(--line);
 }
-.log.recent li:first-child {
-  animation: log-in 0.4s ease-out;
+.edit-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-@keyframes log-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
+.edit-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.edit-bar > div {
+  min-width: 6px;
+}
+ul.edit-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 13.5px;
+}
+.edit-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.edit-legend .muted {
+  font-weight: 400;
+}
+.create-go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+button.go {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 28px;
+  font-size: 16px;
+}
+button.go circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+button.go circle + circle {
+  fill: currentColor;
+  stroke: none;
+}
+.create-go .hint {
+  flex: 1 1 260px;
+  margin: 0;
+}
+.create-held:empty {
+  display: none;
+}
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.run > p.msg {
+  margin: 0;
+}
+.run-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px 36px;
+  padding: 20px 24px 24px;
+}
+.run-figures {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.run-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.run-count {
+  font-size: 34px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.run-count span {
+  color: var(--muted);
+  font-size: 22px;
+  font-weight: 600;
+}
+.run-links {
+  margin: 0;
+  font-size: 14px;
+}
+.run-links a {
+  font-weight: 600;
+}
+.run-links .hint {
+  margin: 0;
+}
+.run-log {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.run-log-head {
+  padding: 10px 14px;
+  background: var(--soft-bg);
+  border-bottom: 1px solid var(--line);
+}
+.run-log ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  max-height: 480px;
+  overflow: auto;
+}
+.run-log li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--tint);
+}
+.run-log li:last-child {
+  border-bottom: 0;
+}
+.run-log-text {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.run-log li.fail .run-log-text {
+  color: var(--err);
+}
+.run-log li a {
+  font-size: 13px;
+  font-weight: 600;
+}
+.run-log li > .muted {
+  font-size: 13px;
+}
+.check.fail circle {
+  fill: var(--err);
+}
+.check.fail path {
+  stroke: var(--panel);
+}
+button.run-log-more {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 14px;
+}
+button.run-log-more:hover {
+  background: var(--hover);
+}
+/* The plan panel during a run. */
+.side-slot {
+  display: contents;
+}
+.this-run dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.this-run dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.this-run dt {
+  color: var(--muted);
+}
+.this-run dd {
+  margin: 0;
+  text-align: right;
+}
+.this-run p {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.recent-runs ul {
+  gap: 2px;
+}
+.recent-runs button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+}
+.recent-runs button:hover > span:first-child {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.recent-runs button[aria-current="true"] > span:first-child {
+  font-weight: 650;
+}
+.recent-runs button .pill {
+  flex: none;
+}
+.recent-runs > a {
+  font-size: 14px;
+  font-weight: 600;
 }
 .turntable {
   position: relative;
@@ -2290,10 +2505,6 @@ footer {
   }
   .turntable .bar-fill {
     transition: none;
-  }
-  .log.recent li {
-    transition: none;
-    animation: none;
   }
   .turntable .notes {
     display: none;

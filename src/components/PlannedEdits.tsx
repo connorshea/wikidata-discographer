@@ -1,16 +1,10 @@
 // "Planned edits": the plan as readable edits (src/lib/preview.ts), one card per
 // edit in run order, filtered by item type. A card's statements are only
 // rendered once it's opened.
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
-import { MUSICBRAINZ, type Plan, type State } from "../lib/plan.ts";
-import {
-  type PreviewEdit,
-  type PreviewKind,
-  type PreviewStatement,
-  previewPlan,
-  type PreviewValue,
-} from "../lib/preview.ts";
+import { MUSICBRAINZ } from "../lib/plan.ts";
+import type { PreviewEdit, PreviewKind, PreviewStatement, PreviewValue } from "../lib/preview.ts";
 
 /** Cards shown before "Show N more". */
 const FIRST = 8;
@@ -25,14 +19,8 @@ const KIND = new Map(KINDS.map((k) => [k.kind, k]));
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-export default function PlannedEdits({ plan, state }: { plan: Plan; state: State }) {
-  const edits = useMemo(
-    () =>
-      previewPlan(plan, state)
-        .flatMap((g) => g.edits)
-        .toSorted((a, b) => a.n - b.n),
-    [plan, state],
-  );
+/** `edits` in run order (`runEdits` in src/lib/run-view.ts). */
+export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] }) {
   const [filter, setFilter] = useState<PreviewKind | "all">("all");
   const [more, setMore] = useState(false);
   const count = (kind: PreviewKind) => edits.filter((e) => e.kind === kind).length;

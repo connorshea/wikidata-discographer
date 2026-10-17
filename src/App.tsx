@@ -277,6 +277,7 @@ function Form() {
   const props = { state, update, plan };
   const { user } = useAuth();
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [sideSlot, setSideSlot] = useState<HTMLDivElement | null>(null);
   const [running, setRunning] = useState<RunningInfo | null>(null);
   const empty = isEmpty(state);
   const unreviewed = reviews.filter((r) => !r.reviewed).length;
@@ -372,6 +373,12 @@ function Form() {
               stale={stale}
               onFinished={clear}
               slot={slot}
+              sideSlot={sideSlot}
+              albumName={
+                state.album.mode === "create"
+                  ? state.album.title.trim()
+                  : (albumFound?.status === "ok" && albumFound.label) || existingQid
+              }
               onRunning={setRunning}
             />
           </main>
@@ -385,6 +392,8 @@ function Form() {
               albumPending: tracklistPending || albumFound?.status === "loading",
             })}
             slot={setSlot}
+            sideSlot={setSideSlot}
+            running={!!running}
           />
         </div>
         <Footer />

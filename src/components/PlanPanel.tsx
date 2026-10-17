@@ -1,5 +1,6 @@
 // The panel beside the form: what the run will create, what still blocks it,
-// and the run button, which RunSection renders into `slot`.
+// and the run button, which RunSection renders into `slot`. During a run it
+// only has what RunSection puts in `sideSlot`: this run, and the recent runs.
 import type { Ref } from "react";
 import { useAuth } from "../lib/auth-context.ts";
 import { PROPERTY_LABELS } from "../lib/preview.ts";
@@ -81,60 +82,72 @@ export default function PlanPanel({
   counts,
   checks,
   slot,
+  sideSlot,
+  running,
 }: {
   counts: CreateCount[];
   checks: Check[];
   /** Where RunSection puts the run button. */
   slot: Ref<HTMLDivElement>;
+  /** Where RunSection puts its cards. */
+  sideSlot: Ref<HTMLDivElement>;
+  running: boolean;
 }) {
   const nothing = counts.every((c) => !c.count && !c.reused);
   const returnTo = window.location.pathname;
   return (
-    <aside className="plan-panel" aria-label="Plan">
-      <div className="card">
-        <div className="kicker">This will create…</div>
-        {nothing ? (
-          <p className="hint">
-            Nothing yet. Pick an album and add a tracklist to see what will be created.
-          </p>
-        ) : (
-          <ul className="counts">
-            {counts.map((c) => (
-              <li key={c.kind}>
-                <i className="sw" style={{ background: `var(--${c.edge})` }} />
-                <span>{c.label}</span>
-                <b>
-                  {c.count}
-                  {c.reused > 0 && <span className="muted"> +{c.reused} reused</span>}
-                </b>
-              </li>
-            ))}
-          </ul>
-        )}
-        <ItemModel />
-      </div>
-      <div className="card">
-        <ul className="checks-list">
-          {checks.map((c) => (
-            <li key={c.text} className={c.ok ? "ok" : "todo"}>
-              <CheckIcon ok={c.ok} />
-              {c.ok ? (
-                <span>{c.text}</span>
-              ) : c.login ? (
-                <span>
-                  <a href={`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>Log in</a>{" "}
-                  with your Wikimedia account
-                </span>
-              ) : c.at ? (
-                <a href={`#${c.at}`}>{c.text}</a>
-              ) : (
-                <span>{c.text}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-        <div className="run-slot" ref={slot} />
-      </div>
+    <aside className="plan-panel" aria-label={running ? "Run" : "Plan"}>
+      {!running && (
+        <>
+          <div className="card">
+            <div className="kicker">This will create…</div>
+            {nothing ? (
+              <p className="hint">
+                Nothing yet. Pick an album and add a tracklist to see what will be created.
+              </p>
+            ) : (
+              <ul className="counts">
+                {counts.map((c) => (
+                  <li key={c.kind}>
+                    <i className="sw" style={{ background: `var(--${c.edge})` }} />
+                    <span>{c.label}</span>
+                    <b>
+                      {c.count}
+                      {c.reused > 0 && <span className="muted"> +{c.reused} reused</span>}
+                    </b>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ItemModel />
+          </div>
+          <div className="card">
+            <ul className="checks-list">
+              {checks.map((c) => (
+                <li key={c.text} className={c.ok ? "ok" : "todo"}>
+                  <CheckIcon ok={c.ok} />
+                  {c.ok ? (
+                    <span>{c.text}</span>
+                  ) : c.login ? (
+                    <span>
+                      <a href={`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>
+                        Log in
+                      </a>{" "}
+                      with your Wikimedia account
+                    </span>
+                  ) : c.at ? (
+                    <a href={`#${c.at}`}>{c.text}</a>
+                  ) : (
+                    <span>{c.text}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="run-slot" ref={slot} />
+          </div>
+        </>
+      )}
+      <div className="side-slot" ref={sideSlot} />
     </aside>
   );
 }
