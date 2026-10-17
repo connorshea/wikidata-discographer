@@ -108,6 +108,8 @@ export interface MbRowIds {
   spotify: string[];
   /** P10110 Apple Music track IDs, for the track. */
   appleMusic: string[];
+  /** P2724 Deezer track IDs, for the track. */
+  deezer: string[];
   /**
    * The recording and day the import came from, for the references on the
    * duration and identifiers. Kept even when an item already has the recording ID.
@@ -821,6 +823,7 @@ export function buildPlan(state: State): Plan {
       ...mb.isrcs.map((v) => cited("P1243", v)),
       ...mb.spotify.map((v) => cited("P2207", v)),
       ...mb.appleMusic.map((v) => cited("P10110", v)),
+      ...mb.deezer.map((v) => cited("P2724", v)),
     ];
   };
   // Only for a duration still as the import filled it in.

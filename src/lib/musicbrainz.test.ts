@@ -215,6 +215,7 @@ describe("releaseToForm", () => {
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
       appleMusic: [],
+      deezer: [],
       source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
       length: 252,
     });
@@ -312,6 +313,56 @@ describe("releaseToForm", () => {
         url: { resource: "https://music.apple.com/gb/music-video/1065973702" },
       };
       expect(releaseIds(withApple(video)).appleMusicTracks).toEqual([]);
+    });
+  });
+
+  describe("Deezer track IDs", () => {
+    const deezer = (url: string) => ({
+      type: "free streaming",
+      "target-type": "url",
+      url: { resource: url },
+    });
+    const withDeezer = (...links: ReturnType<typeof deezer>[]) => {
+      const r = release();
+      r.media[0].tracks![0].recording.relations!.push(...links);
+      return r;
+    };
+
+    it("adds the one a recording links", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/track/69018826"));
+      expect(releaseIds(r).deezerTracks).toEqual(["69018826"]);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].deezer).toEqual(["69018826"]);
+      expect(form.discs[0].mb["2"].deezer).toEqual([]);
+      expect(form.summary).toContain("1 Deezer track ID");
+    });
+
+    it("reads a link with a language in it", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/fr/track/69018826"));
+      expect(releaseIds(r).deezerTracks).toEqual(["69018826"]);
+    });
+
+    it("adds none when a recording links more than one", () => {
+      const r = withDeezer(
+        deezer("https://www.deezer.com/track/69018826"),
+        deezer("https://www.deezer.com/track/69018827"),
+      );
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].mb["1"].deezer).toEqual([]);
+      expect(form.notes).toEqual([
+        "1 track links more than one Deezer track on MusicBrainz, so it gets no Deezer track ID.",
+      ]);
+    });
+
+    it("leaves out one an item already has", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/track/69018826"));
+      const form = releaseToForm(r, { ...NONE, taken: ["69018826"] });
+      expect(form.discs[0].mb["1"].deezer).toEqual([]);
+    });
+
+    it("ignores other Deezer links", () => {
+      const r = withDeezer(deezer("https://www.deezer.com/album/10535858"));
+      expect(releaseIds(r).deezerTracks).toEqual([]);
     });
   });
 

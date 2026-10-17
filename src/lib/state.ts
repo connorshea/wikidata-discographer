@@ -4,6 +4,7 @@ import type { AlbumMb, Disc, MbCited, MbRowIds, Settings, SingleState, State } f
 import {
   ALBUM_ID_FIELDS,
   APPLE_MUSIC_TRACK_PATTERN,
+  DEEZER_TRACK_PATTERN,
   ISRC_PATTERN,
   MBID_PATTERN,
   SPOTIFY_TRACK_PATTERN,
@@ -83,6 +84,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     isrcs: strList(ids.isrcs, ISRC_PATTERN),
     spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
     appleMusic: strList(ids.appleMusic, APPLE_MUSIC_TRACK_PATTERN),
+    deezer: strList(ids.deezer, DEEZER_TRACK_PATTERN),
     source,
     length: Number.isInteger(seconds) && (seconds as number) >= 0 ? (seconds as number) : null,
   };
