@@ -354,6 +354,7 @@ function Form() {
                   }
                 />
                 <MatchesSection
+                  key={formId}
                   {...props}
                   {...{ matches, status, reviews, dismissed, setDismissed }}
                 />

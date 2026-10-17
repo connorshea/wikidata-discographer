@@ -47,6 +47,10 @@
   --trk-ink: #2a3593;
   /* A quiet band, e.g. the album artists above the track table. */
   --soft-bg: #f7f8fb;
+  /* A possible match tied to the form beyond its title, and a reviewed group's edge. */
+  --match-tint: #e3e7fb;
+  --match-ink: #24308f;
+  --ok-edge: #cfe5d7;
   /* System fonts only: the CSP allows no third-party requests. */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -91,6 +95,9 @@
     --trk-tint: #22264a;
     --trk-ink: #c3caff;
     --soft-bg: #1d1f36;
+    --match-tint: #262c5a;
+    --match-ink: #c3caff;
+    --ok-edge: #2c5a3b;
   }
 }
 *,
@@ -1199,7 +1206,7 @@ tr.sub-row td {
 tr.is-single td {
   background: color-mix(in srgb, var(--rg-edge) 9%, var(--panel));
 }
-/* A track with possible matches to review: a warning icon by its title. */
+/* A track with possible matches to review: an amber dot by its title. */
 .title-cell {
   display: inline-flex;
   align-items: center;
@@ -1207,11 +1214,42 @@ tr.is-single td {
 }
 a.match-flag {
   display: inline-flex;
-  color: var(--warn);
-  border-radius: 4px;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+a.match-flag span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn-edge);
 }
 a.match-flag:hover {
-  color: var(--ink);
+  background: var(--warn-tint);
+}
+.match-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--warn-tint);
+  color: var(--warn);
+  font-size: 14px;
+}
+.match-notice span {
+  flex: 1 1 260px;
+}
+.match-notice a {
+  font-weight: 600;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
 }
 .chip {
   display: inline-block;
@@ -1232,37 +1270,6 @@ a.match-flag:hover {
   background: color-mix(in srgb, var(--ok) 14%, transparent);
   font-weight: 600;
 }
-.match-counts .chip {
-  font-size: 0.82rem;
-  padding: 2px 10px;
-  color: var(--ink);
-}
-.match-groups {
-  margin-top: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.match-group {
-  padding: 12px 14px;
-  scroll-margin-top: 16px;
-}
-.match-group + .match-group {
-  border-top: 1px solid var(--line);
-}
-.match-group:target {
-  outline: 2px solid var(--warn);
-  outline-offset: -2px;
-  border-radius: 8px;
-}
-.match-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-}
-.match-head .muted {
-  font-size: 0.82rem;
-}
 button.link {
   border: 0;
   background: none;
@@ -1271,46 +1278,171 @@ button.link {
   font-size: 0.82rem;
   text-decoration: underline;
 }
+/* Possible matches: the header, its states, then a group per track. */
+.match-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+.match-top h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  flex: 1 1 auto;
+}
+.match-folded .match-top {
+  margin-bottom: 0;
+}
+.match-folded .match-top h2 {
+  flex: 0 1 auto;
+}
+.match-sum {
+  flex: 1 1 auto;
+  font-size: 14px;
+  color: var(--muted);
+}
+.match-checking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+button.link.match-toggle {
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  min-height: 32px;
+  padding: 0 4px;
+}
+.pill.warn {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+.pill.strong {
+  background: var(--match-tint);
+  color: var(--match-ink);
+}
+.pill.bad.edge {
+  box-shadow: inset 0 0 0 1px var(--danger-edge);
+}
+.match-counts .pill {
+  font-weight: 500;
+}
+.match-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.match-state.err {
+  border-color: var(--danger-edge);
+}
+.match-state.err .match-empty {
+  color: var(--err-ink);
+}
+.match-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+.match-group {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  scroll-margin-top: 16px;
+}
+.match-group:target {
+  outline: 2px solid var(--warn-edge);
+  outline-offset: 1px;
+}
+.match-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 14px;
+  background: var(--soft-bg);
+  border-bottom: 1px solid var(--line);
+}
+.match-group:not(:has(.candidates)) .match-head {
+  border-bottom: 0;
+}
+.match-head .muted {
+  font-size: 13px;
+}
+.match-head > button:first-of-type {
+  margin-left: auto;
+}
+.match-head button.link {
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 4px;
+}
+.match-group.reviewed {
+  border-color: var(--ok-edge);
+}
+.match-group.reviewed .match-head {
+  background: var(--ok-tint);
+  border-bottom-color: var(--ok-edge);
+}
 .candidates {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
-  display: grid;
-  gap: 6px;
-  font-size: 0.85rem;
+  margin: 0;
 }
 .candidates li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg);
+  gap: 8px 16px;
+  padding: 12px 14px;
 }
-.candidates li.used {
-  background: color-mix(in srgb, var(--ok) 10%, var(--bg));
+.candidates li + li {
+  border-top: 1px solid var(--tint);
 }
 .match-kind {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: 12.5px;
   font-weight: 600;
-  min-width: 12ch;
-}
-.match-kind i {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
+  min-width: 96px;
 }
 .match-text {
-  flex: 1 1 240px;
+  flex: 1 1 200px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.match-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.match-label .mono {
+  font-size: 13px;
+}
+.match-text > .muted {
+  font-size: 13px;
 }
 .match-actions {
   display: inline-flex;
+  flex-wrap: wrap;
+  margin-left: auto;
   align-items: center;
-  gap: 6px;
+  gap: 6px 8px;
+  font-size: 13px;
 }
 .match-actions.done {
   color: var(--ok);

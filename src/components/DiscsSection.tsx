@@ -383,7 +383,9 @@ function DiscBlock({
           />
         )}
       </div>
-      {open.size > 0 && <UnreviewedNotice count={open.size} />}
+      {open.size > 0 && (
+        <UnreviewedNotice count={open.size} href={`#${groupId(di, Math.min(...open.keys()))}`} />
+      )}
       {rows.length > 0 && base.length > 0 && (
         <p className="album-line">
           <span>
@@ -1390,17 +1392,7 @@ function MatchFlag({ review }: { review: TrackReview }) {
       aria-label={`Track ${review.n}: ${what} to review`}
       title={`${what}. Review under Possible matches`}
     >
-      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-        <path
-          d="M8 1.5 15 14H1z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        <path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        <circle cx="8" cy="11.75" r="0.9" fill="currentColor" />
-      </svg>
+      <span aria-hidden="true" />
     </a>
   );
 }

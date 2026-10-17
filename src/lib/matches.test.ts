@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Match, RowMatches, TrackMatch } from "./api-types.ts";
 import {
   candidateId,
+  dismissAllIds,
   fillUnambiguous,
   isStrong,
   NO_ARTIST,
@@ -9,6 +10,7 @@ import {
   pickSingle,
   pickTrack,
   renumberDismissed,
+  reviewSummary,
   reviewTracks,
   stillValid,
   withoutDismissed,
@@ -289,6 +291,32 @@ describe("reviewTracks", () => {
     const left = withoutDismissed(rows, new Set([candidateId(0, 1, "comp", "Q1")]));
     expect(left["0:1"].comp).toEqual([match("Q2")]);
     expect(left["0:2"]).toEqual(rows["0:2"]);
+  });
+
+  it("dismisses every candidate left but a used one with Dismiss all", () => {
+    const disc = emptyDisc();
+    const [t1] = reviewTracks([disc], parsed, rows, new Set());
+    expect(dismissAllIds(t1)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
+    disc.comp[1] = "Q2";
+    const dismissed = new Set(dismissAllIds(reviewTracks([disc], parsed, rows, new Set())[0]));
+    expect([...dismissed]).toEqual(["0:1:comp:Q1", "0:1:single:Q3"]);
+    expect(reviewTracks([disc], parsed, rows, dismissed)[0]).toMatchObject({
+      dismissed: 2,
+      reviewed: true,
+    });
+  });
+
+  it("sums up the review across tracks", () => {
+    const disc = emptyDisc();
+    disc.comp[1] = "Q1";
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q2"), candidateId(0, 2, "comp", "Q4")]);
+    expect(reviewSummary(reviewTracks([disc], parsed, rows, dismissed))).toEqual({
+      tracks: 2,
+      reviewed: 2,
+      reused: 1,
+      dismissed: 2,
+    });
+    expect(reviewSummary([])).toEqual({ tracks: 0, reviewed: 0, reused: 0, dismissed: 0 });
   });
 });
 

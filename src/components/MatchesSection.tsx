@@ -1,12 +1,14 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
 import {
   type Candidate,
+  dismissAllIds,
   fillUnambiguous,
   groupId,
   isSimilarOnly,
   pickSingle,
   pickTrack,
+  reviewSummary,
   type Slot,
   type TrackReview,
   withoutDismissed,
@@ -20,7 +22,7 @@ import type { SectionProps } from "./types.ts";
 const KINDS: Record<Slot, { name: string; edge: string; used: string }> = {
   comp: { name: "Composition", edge: "cmp-edge", used: "Reused as composition" },
   track: { name: "Track", edge: "trk-edge", used: "Reused as track" },
-  single: { name: "Single", edge: "rg-edge", used: "Linked as this track’s single" },
+  single: { name: "Single", edge: "rg-edge", used: "Reused as single" },
 };
 
 /** A row's fields as they were before a candidate was used, to undo it. */
@@ -64,8 +66,22 @@ export default function MatchesSection({
   );
   const hasRows = plan.tracks.some((tracks) => tracks.length > 0);
 
-  const setDisc = (di: number, fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
+  // Once every track is reviewed the card folds into a summary, unless it was
+  // opened, or the last one was reviewed here (so Undo stays at hand).
+  const [kept, setKept] = useState(false);
+  // The control that takes the place of the one just clicked, to keep focus on.
+  const focusTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusTo.current) return;
+    document.querySelector<HTMLElement>(`#matches [data-focus="${focusTo.current}"]`)?.focus();
+    focusTo.current = null;
+  });
+  const setDisc = (di: number, fn: (disc: Disc) => void) => {
+    setKept(true);
+    update((s) => fn(s.discs[di]));
+  };
   const use = (r: TrackReview, c: Candidate) => {
+    focusTo.current = `undo:${c.id}`;
     const d = state.discs[r.di];
     before.current.set(c.id, {
       comp: d.comp[r.n],
@@ -79,6 +95,7 @@ export default function MatchesSection({
     });
   };
   const undo = (r: TrackReview, c: Candidate) => {
+    focusTo.current = `use:${c.id}`;
     const was = before.current.get(c.id);
     before.current.delete(c.id);
     setDisc(r.di, (disc) => {
@@ -101,87 +118,170 @@ export default function MatchesSection({
       if (c.slot === "track") put("track", was.track);
     });
   };
-  const dismiss = (id: string) => setDismissed((prev) => new Set(prev).add(id));
-  const restore = (r: TrackReview) =>
+  const dismiss = (r: TrackReview, ids: string[]) => {
+    focusTo.current = `restore:${r.di}:${r.n}`;
+    setKept(true);
+    setDismissed((prev) => new Set([...prev, ...ids]));
+  };
+  const restore = (r: TrackReview) => {
+    setKept(true);
     setDismissed((prev) => new Set([...prev].filter((id) => !id.startsWith(`${r.di}:${r.n}:`))));
+  };
+  const fill = () => {
+    setKept(true);
+    update((s) => s.discs.forEach((d, di) => fillUnambiguous(d, di, left)));
+  };
+  const sum = reviewSummary(reviews);
+  const allReviewed = sum.tracks > 0 && sum.reviewed === sum.tracks;
+  const folded = allReviewed && !kept;
+
+  if (!reviews.length)
+    return (
+      <section
+        className={`block match-state${status === "failed" && hasRows ? " err" : ""}`}
+        id="matches"
+      >
+        <h2>Possible matches</h2>
+        <p className="match-empty" role="status">
+          {!hasRows ? (
+            "Tracks that may already be on Wikidata are listed here."
+          ) : status === "off" ? (
+            <>
+              Give the performers QIDs to look for items already on Wikidata.{" "}
+              <a href="#performers">Go to Performers</a>
+            </>
+          ) : status === "pending" ? (
+            <>
+              <span className="spinner" aria-hidden="true" />
+              Looking for items already on Wikidata…
+            </>
+          ) : status === "failed" ? (
+            "Couldn't look for items already on Wikidata."
+          ) : (
+            "No items already on Wikidata match these tracks. Everything will be created new."
+          )}
+        </p>
+      </section>
+    );
 
   return (
-    <section className="block" id="matches">
-      <h2>Possible matches</h2>
-      <p className="hint">
-        Items already on Wikidata with a track's title, or a similar one that differs only in
-        punctuation, accents or “&” and “and”. Use one to reuse it instead of creating a duplicate,
-        or dismiss it.
-      </p>
-      {!reviews.length ? (
-        <p className="msg muted">
-          {!hasRows
-            ? "Tracks that may already be on Wikidata are listed here."
-            : status === "off"
-              ? "Give the performers QIDs to look for items already on Wikidata."
-              : status === "pending"
-                ? "Looking for items already on Wikidata…"
-                : status === "failed"
-                  ? "Couldn't look for items already on Wikidata."
-                  : "No items already on Wikidata match these tracks."}
-        </p>
-      ) : (
-        <>
-          <div className="row match-counts">
-            <span className="chip">
+    <section className={`block${folded ? " match-folded" : ""}`} id="matches">
+      <div className="match-top">
+        <h2>
+          Possible matches{" "}
+          {allReviewed ? (
+            <span className="pill ok">
+              {sum.reviewed} of {sum.tracks} reviewed
+            </span>
+          ) : (
+            <span className="pill warn">
+              {open} of {plural(reviews.length, "track")} to review
+            </span>
+          )}
+        </h2>
+        {folded && (
+          <span className="match-sum">
+            {[
+              sum.reused > 0 && `${sum.reused} reused`,
+              sum.dismissed > 0 && `${sum.dismissed} dismissed`,
+            ]
+              .filter(Boolean)
+              .join(", ") || "Other QIDs are filled in"}
+          </span>
+        )}
+        {status === "pending" && (
+          <span className="match-checking" role="status">
+            <span className="spinner" aria-hidden="true" />
+            Checking for changes…
+          </span>
+        )}
+        {!folded && fillable > 0 && (
+          <button type="button" className="ghost" onClick={fill}>
+            Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
+          </button>
+        )}
+        {allReviewed && (
+          <button
+            type="button"
+            className="link match-toggle"
+            aria-expanded={!folded}
+            aria-controls={folded ? undefined : "match-body"}
+            onClick={() => setKept(folded)}
+          >
+            {folded ? "Show" : "Hide"}
+          </button>
+        )}
+      </div>
+      {!folded && (
+        <div id="match-body">
+          <p className="hint">
+            Items already on Wikidata with a track's title, or one that differs only in punctuation,
+            accents or “&” and “and”. Use one to reuse it, or dismiss it.
+          </p>
+          <div className="pills match-counts">
+            <span className="pill">
               <strong>{strong}</strong> title + performer
             </span>
-            <span className="chip">
+            <span className="pill">
               <strong>{visible.length - strong}</strong> title only
             </span>
-            <span className="chip">
-              <strong>{open}</strong> of {plural(reviews.length, "track")} to review
-            </span>
-            {status === "pending" && <span className="muted">Checking for changes…</span>}
-            {fillable > 0 && (
-              <button
-                type="button"
-                className="ghost small"
-                onClick={() =>
-                  update((s) => s.discs.forEach((d, di) => fillUnambiguous(d, di, left)))
-                }
-              >
-                Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
-              </button>
-            )}
           </div>
           <div className="match-groups">
-            {reviews.map((r) => (
-              <div className="match-group" id={groupId(r.di, r.n)} key={`${r.di}:${r.n}`}>
-                <div className="match-head">
-                  <span className="muted">
-                    Disc {r.di + 1} · {r.n}
-                  </span>
-                  <strong>{r.title}</strong>
-                  {r.reviewed && <span className="chip ok">Reviewed</span>}
-                  {r.dismissed > 0 && (
-                    <button type="button" className="link" onClick={() => restore(r)}>
-                      {r.dismissed} dismissed · Restore
-                    </button>
+            {reviews.map((r) => {
+              const rest = dismissAllIds(r);
+              return (
+                <div
+                  className={`match-group${r.reviewed ? " reviewed" : ""}`}
+                  id={groupId(r.di, r.n)}
+                  key={`${r.di}:${r.n}`}
+                >
+                  <div className="match-head">
+                    <span className="muted">
+                      Disc {r.di + 1} · {r.n}
+                    </span>
+                    <strong>{r.title}</strong>
+                    {r.candidates.length > 1 && (
+                      <span className="muted">· {plural(r.candidates.length, "candidate")}</span>
+                    )}
+                    {r.reviewed && <span className="pill ok">Reviewed</span>}
+                    {r.dismissed > 0 && (
+                      <button
+                        type="button"
+                        className="link"
+                        data-focus={`restore:${r.di}:${r.n}`}
+                        onClick={() => restore(r)}
+                      >
+                        {r.dismissed} dismissed · Restore
+                      </button>
+                    )}
+                    {!r.reviewed && rest.length > 1 && (
+                      <button
+                        type="button"
+                        className="ghost small"
+                        onClick={() => dismiss(r, rest)}
+                      >
+                        Dismiss all
+                      </button>
+                    )}
+                  </div>
+                  {r.candidates.length > 0 && (
+                    <ul className="candidates">
+                      {r.candidates.map((c) => (
+                        <CandidateItem
+                          key={c.id}
+                          c={c}
+                          onUse={() => use(r, c)}
+                          onUndo={() => undo(r, c)}
+                          onDismiss={() => dismiss(r, [c.id])}
+                        />
+                      ))}
+                    </ul>
                   )}
                 </div>
-                {r.candidates.length > 0 && (
-                  <ul className="candidates">
-                    {r.candidates.map((c) => (
-                      <CandidateItem
-                        key={c.id}
-                        c={c}
-                        onUse={() => use(r, c)}
-                        onUndo={() => undo(r, c)}
-                        onDismiss={() => dismiss(c.id)}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
-        </>
+        </div>
       )}
     </section>
   );
@@ -204,30 +304,39 @@ function CandidateItem({
   return (
     <li className={c.used ? "used" : undefined}>
       <span className="match-kind">
-        <i style={{ background: `var(--${kind.edge})` }} />
+        <span className="sw" style={{ background: `var(--${kind.edge})` }} aria-hidden="true" />
         {kind.name}
       </span>
-      <WikiLink base={wikiBaseUrl} qid={m.qid} />
       <span className="match-text">
-        <b>{m.label ?? "(no label)"}</b>{" "}
+        <span className="match-label">
+          <span className="mono">
+            <WikiLink base={wikiBaseUrl} qid={m.qid} />
+          </span>
+          <b>{m.label ?? "(no label)"}</b>
+        </span>
         {m.description && <span className="muted">{m.description}</span>}
       </span>
-      {c.others.length > 0 && (
-        <span className="chip warn">Description names {c.others.join(", ")}</span>
-      )}
-      <span className="chip" title={`Matched by ${m.reasons.join(", ")}`}>
-        {isSimilarOnly(m)
-          ? c.strong
-            ? "Similar title + performer"
-            : "Similar title only"
-          : c.strong
-            ? "Title + performer"
-            : "Title only"}
+      <span className="pills">
+        <span
+          className={`pill${c.strong ? " strong" : ""}`}
+          title={`Matched by ${m.reasons.join(", ")}`}
+        >
+          {isSimilarOnly(m)
+            ? c.strong
+              ? "Similar title + performer"
+              : "Similar title only"
+            : c.strong
+              ? "Title + performer"
+              : "Title only"}
+        </span>
+        {c.others.length > 0 && (
+          <span className="pill bad edge">Description names {c.others.join(", ")}</span>
+        )}
       </span>
       {c.used ? (
         <span className="match-actions done">
           {kind.used}
-          <button type="button" className="ghost small" onClick={onUndo}>
+          <button type="button" className="ghost" data-focus={`undo:${c.id}`} onClick={onUndo}>
             Undo
           </button>
         </span>
@@ -235,14 +344,14 @@ function CandidateItem({
         <span className="match-actions muted">Another QID is filled in</span>
       ) : (
         <span className="match-actions">
-          <button type="button" className="ghost small" onClick={onUse}>
+          <button type="button" data-focus={`use:${c.id}`} onClick={onUse}>
             {c.slot === "single"
               ? "Use as single"
               : c.slot === "track" && (m as TrackMatch).composition
                 ? "Use with its composition"
                 : "Use"}
           </button>
-          <button type="button" className="ghost small quiet" onClick={onDismiss}>
+          <button type="button" className="ghost quiet" onClick={onDismiss}>
             Dismiss
           </button>
         </span>
@@ -251,12 +360,12 @@ function CandidateItem({
   );
 }
 
-/** How many tracks still have possible matches to review, linked to the card. */
-export function UnreviewedNotice({ count }: { count: number }) {
+/** How many of a disc's tracks have possible matches to review, linked to the first one's group. */
+export function UnreviewedNotice({ count, href = "#matches" }: { count: number; href?: string }) {
   return (
-    <p className="msg warn">
-      <a href="#matches">{plural(count, "track")}</a> still {count === 1 ? "has" : "have"}{" "}
-      unreviewed possible matches.
+    <p className="match-notice">
+      <span>{plural(count, "track")} may already be on Wikidata.</span>
+      <a href={href}>Review possible matches ↓</a>
     </p>
   );
 }

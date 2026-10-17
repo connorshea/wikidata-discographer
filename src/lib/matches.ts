@@ -315,3 +315,29 @@ export function renumberDismissed(
   }
   return next;
 }
+
+/**
+ * The candidates "Dismiss all" takes out of a track's group: every one left
+ * that isn't used.
+ */
+export const dismissAllIds = (r: TrackReview): string[] =>
+  r.candidates.filter((c) => !c.used).map((c) => c.id);
+
+/** How the review stands, for the Possible matches header and its collapsed summary. */
+export interface ReviewSummary {
+  tracks: number;
+  reviewed: number;
+  /** Candidates used. */
+  reused: number;
+  /** Candidates dismissed. */
+  dismissed: number;
+}
+
+export function reviewSummary(reviews: readonly TrackReview[]): ReviewSummary {
+  return {
+    tracks: reviews.length,
+    reviewed: reviews.filter((r) => r.reviewed).length,
+    reused: reviews.reduce((sum, r) => sum + r.candidates.filter((c) => c.used).length, 0),
+    dismissed: reviews.reduce((sum, r) => sum + r.dismissed, 0),
+  };
+}
