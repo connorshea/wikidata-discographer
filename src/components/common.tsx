@@ -64,6 +64,22 @@ export function WikiLink({ base, qid }: { base: string; qid: string }) {
 }
 
 /**
+ * Text with each QID it mentions linked to its item. A QID inside “curly
+ * quotes” is part of a title or name, so it's left as text.
+ */
+export function Qids({ base, children }: { base: string; children: string }) {
+  return (
+    <>
+      {children
+        .split(/(“[^”]*”|\bQ\d+\b)/)
+        .map((part, i) =>
+          i % 2 && part.startsWith("Q") ? <WikiLink key={i} base={base} qid={part} /> : part,
+        )}
+    </>
+  );
+}
+
+/**
  * Text with each property ID it mentions (P175, say) showing the property's name
  * on hover. One span, so a flex label lays it out as a single run of text.
  */

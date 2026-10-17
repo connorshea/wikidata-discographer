@@ -3,7 +3,9 @@ import { api, FetchError } from "../lib/client.ts";
 import { applyMbForm, type MbForm, parseMbInput, type ReleaseChoice } from "../lib/musicbrainz.ts";
 import type { State } from "../lib/plan.ts";
 import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../lib/api-types.ts";
+import { useAuth } from "../lib/auth-context.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { Qids } from "./common.tsx";
 
 const message = (err: unknown, what: string) =>
   err instanceof FetchError && err.status < 500
@@ -32,6 +34,7 @@ export default function MusicBrainzImport({
   onLoad: (next: State) => void;
   ref?: Ref<MusicBrainzImportHandle>;
 }) {
+  const { wikiBaseUrl } = useAuth();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -203,10 +206,12 @@ export default function MusicBrainzImport({
       {error && <p className="msg err">{error}</p>}
       {loaded && (
         <>
-          <p className="msg ok">{loaded.summary}</p>
+          <p className="msg ok">
+            <Qids base={wikiBaseUrl}>{loaded.summary}</Qids>
+          </p>
           {loaded.notes.map((n) => (
             <p key={n} className="msg warn">
-              {n}
+              <Qids base={wikiBaseUrl}>{n}</Qids>
             </p>
           ))}
         </>
