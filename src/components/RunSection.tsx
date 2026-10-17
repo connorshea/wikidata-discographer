@@ -535,40 +535,62 @@ function RecreateGuard({
 /**
  * A record spinning while the run goes. The tonearm tracks progress, starting at
  * the outer groove and reaching the label as the last edit is made. Music notes
- * drift up off the record.
+ * drift up off the record, and a bar on the front of the player fills up.
  */
 function Turntable({ done, total }: { done: number; total: number }) {
   const fraction = total > 0 ? Math.min(done / total, 1) : 0;
   // Arm angles that put the needle on the outer groove and next to the label.
   const angle = 20 + fraction * 18;
   return (
-    <div className="turntable">
-      <svg
-        viewBox="0 0 120 100"
-        role="progressbar"
-        aria-label="Edits made"
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={done}
-        aria-valuetext={`${done} of ${total}`}
-      >
-        <rect className="plinth" x="1" y="1" width="118" height="98" rx="8" />
-        <g className="record">
-          <circle className="vinyl" cx="50" cy="52" r="42" />
-          {[38, 33, 28, 23].map((r) => (
-            <circle key={r} className="groove" cx="50" cy="52" r={r} />
-          ))}
-          <path className="sheen" d="M50 52 L50 12 A40 40 0 0 1 78 24 Z" />
-          <circle className="label" cx="50" cy="52" r="13" />
-          <circle className="label-mark" cx="50" cy="44" r="2" />
-          <circle className="spindle" cx="50" cy="52" r="1.5" />
-        </g>
-        <g className="tonearm" style={{ transform: `rotate(${angle}deg)` }}>
-          <line x1="106" y1="10" x2="106" y2="70" />
-          <rect className="headshell" x="102.5" y="68" width="7" height="9" rx="1.5" />
-        </g>
-        <circle className="pivot" cx="106" cy="10" r="5" />
-      </svg>
+    <div
+      className="turntable"
+      role="progressbar"
+      aria-label="Edits made"
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuenow={done}
+      aria-valuetext={`${done} of ${total}`}
+    >
+      {/* Tilted back in 3D, with the front hanging straight down from its near edge. */}
+      <div className="deck">
+        <svg viewBox="0 0 120 100">
+          {/* Square at the front, where it meets the front face. */}
+          <path className="plinth" d="M0 100 V4 A4 4 0 0 1 4 0 H116 A4 4 0 0 1 120 4 V100 Z" />
+          <circle className="vinyl-edge" cx="50" cy="54" r="42" />
+          <g className="record">
+            <circle className="vinyl" cx="50" cy="52" r="42" />
+            {[38, 33, 28, 23].map((r) => (
+              <circle key={r} className="groove" cx="50" cy="52" r={r} />
+            ))}
+            <path className="sheen" d="M50 52 L50 12 A40 40 0 0 1 78 24 Z" />
+            <circle className="label" cx="50" cy="52" r="13" />
+            <circle className="label-mark" cx="50" cy="44" r="2" />
+            <circle className="spindle" cx="50" cy="52" r="1.5" />
+          </g>
+          <circle className="pivot-base" cx="106" cy="11" r="8" />
+          <g className="tonearm" style={{ transform: `rotate(${angle}deg)` }}>
+            {/* The needle riding the grooves. */}
+            <g className="jitter">
+              {/* The arm floats above the deck, so its shadow falls a little off it. */}
+              <g className="arm-shadow" transform="translate(2.5 3)">
+                <line x1="106" y1="1" x2="106" y2="70" />
+                <rect x="102.5" y="68" width="7" height="9" rx="1.5" />
+              </g>
+              <line className="arm" x1="106" y1="1" x2="106" y2="70" />
+              <line className="arm-shine" x1="105.4" y1="2" x2="105.4" y2="68" />
+              <rect className="counterweight" x="102" y="-3" width="8" height="6" rx="1.5" />
+              <rect className="headshell" x="102.5" y="68" width="7" height="9" rx="1.5" />
+              <rect className="cartridge" x="103.5" y="73" width="5" height="3" rx="0.8" />
+            </g>
+          </g>
+          <circle className="pivot" cx="106" cy="10" r="4" />
+        </svg>
+        <div className="front">
+          <div className="bar">
+            <div className="bar-fill" style={{ width: `${fraction * 100}%` }} />
+          </div>
+        </div>
+      </div>
       {/* Outside the SVG so they can drift up past its edge. */}
       <span className="notes" aria-hidden="true">
         <span>♪</span>
