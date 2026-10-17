@@ -17,6 +17,14 @@ describe("coerceState", () => {
     expect(s.artists).toEqual(EXAMPLE.artists);
   });
 
+  it("ignores the saved settings that are now always on", () => {
+    const s = coerceState({ settings: { duration: false, mbRefs: false, splitArtists: true } });
+    expect(s.settings).toEqual(coerceState(null).settings);
+    expect(s.settings).not.toHaveProperty("duration");
+    expect(s.settings).not.toHaveProperty("mbRefs");
+    expect(s.settings).not.toHaveProperty("splitArtists");
+  });
+
   it("drops mistyped values", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },
