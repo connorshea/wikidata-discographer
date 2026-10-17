@@ -81,6 +81,7 @@ export const LINK_PROPERTIES: Readonly<Record<string, string>> = {
   P1433: "published in",
   P361: "part of",
   P658: "tracklist",
+  P13602: "single taken from",
 };
 
 /** Pick the kind for an item from its P31 values and the properties it has. */

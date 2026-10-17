@@ -14,6 +14,9 @@
 //
 // so reusing a track also reuses the composition it already records, rather
 // than creating a second one and giving the track two P2550s.
+//
+// A single already taken from (P13602) another album isn't this album's
+// single, so it's never suggested.
 import { and, eq, exists, inArray, lte, notExists, or, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
@@ -61,24 +64,37 @@ function score(m: Match): number {
 /**
  * Turn the mirror's facts into each row's matches. `items` holds the direct
  * candidates and the items they link to; `albumTracks` the existing album's
- * tracks (its P658, and tracks published in or part of it).
+ * tracks (its P658, and tracks published in or part of it); `album` the
+ * existing album, if any.
  */
 export function assembleMatches(
   rows: MatchesRequest["rows"],
-  { items, albumTracks }: { items: Map<string, ItemFacts>; albumTracks: Set<string> },
+  {
+    items,
+    albumTracks,
+    album = null,
+  }: { items: Map<string, ItemFacts>; albumTracks: Set<string>; album?: string | null },
 ): MatchesResponse {
+  // A single taken from some album, but not this one.
+  const takenElsewhere = (it: ItemFacts) => {
+    const from = targets(it, "P13602");
+    return from.length > 0 && (album === null || !from.includes(album));
+  };
   const byTitle = new Map<string, ItemFacts[]>();
   // Singles by the tracks on their tracklist, for a track's `singles`.
   const singlesListing = new Map<string, string[]>();
   for (const it of items.values()) {
     if (it.labelSearch) byTitle.set(it.labelSearch, [...(byTitle.get(it.labelSearch) ?? []), it]);
-    if (it.kind === "single")
+    if (it.kind === "single" && !takenElsewhere(it))
       for (const t of targets(it, "P658"))
         singlesListing.set(t, [...(singlesListing.get(t) ?? []), it.qid]);
   }
   const singlesOf = (track: ItemFacts) => [
     ...new Set([
-      ...targets(track, "P1433", "P361").filter((q) => items.get(q)?.kind === "single"),
+      ...targets(track, "P1433", "P361").filter((q) => {
+        const it = items.get(q);
+        return it?.kind === "single" && !takenElsewhere(it);
+      }),
       ...(singlesListing.get(track.qid) ?? []),
     ]),
   ];
@@ -100,7 +116,7 @@ export function assembleMatches(
     const add = (qid: string, reasons: string[]) => {
       const it = items.get(qid);
       const slot = it && SLOTS[it.kind];
-      if (!it || !slot) return;
+      if (!it || !slot || (it.kind === "single" && takenElsewhere(it))) return;
       const m = found[slot].get(qid);
       if (m) {
         // Similar only while every way of reaching it is.
@@ -349,5 +365,9 @@ export async function findMatches(body: Partial<MatchesRequest>): Promise<Matche
     [...items.values()].filter((it) => !direct.has(it.qid)),
     items,
   );
-  return assembleMatches(rows, { items, albumTracks });
+  return assembleMatches(rows, {
+    items,
+    albumTracks,
+    album: album === null ? null : toQid(album),
+  });
 }
