@@ -494,10 +494,11 @@ const joinNames = (a: string[]) =>
   a.length < 2 ? (a[0] ?? "") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`;
 
 function fillDesc(tpl: string, year: string, artists: string[], type = ""): string {
+  // Replaced by functions, so a `$` in a name isn't read as a replacement pattern.
   return tpl
-    .replace(/\{year\}/g, year)
-    .replace(/\{artists\}/g, joinNames(artists))
-    .replace(/\{type\}/g, type)
+    .replace(/\{year\}/g, () => year)
+    .replace(/\{artists\}/g, () => joinNames(artists))
+    .replace(/\{type\}/g, () => type)
     .replace(/\s+/g, " ")
     .replace(/\s+([;,])/g, "$1")
     .replace(/[;,]\s*$/, "")
@@ -872,7 +873,7 @@ export function buildPlan(state: State): Plan {
   // shows in every language without a label for each. `mul` takes no descriptions.
   const labelled = (t: string, desc: string) => ({
     labels: lang !== "mul" ? { [lang]: t, mul: t } : { [lang]: t },
-    descriptions: desc ? { [lang]: desc } : {},
+    descriptions: desc && lang !== "mul" ? { [lang]: desc } : {},
   });
   const str = (property: string, value: string) => claim(property, { type: "string", value });
   // Stated in MusicBrainz, with the recording and the day of the import.

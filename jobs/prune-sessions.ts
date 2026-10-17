@@ -1,5 +1,5 @@
-// Toolforge scheduled job: delete sessions past their absolute expiry, and the
-// OAuth tokens of anyone left with no session. The session middleware already
+// Toolforge scheduled job: delete sessions past their absolute expiry or idle
+// for too long, and the OAuth tokens of anyone left with no session. The session middleware already
 // ignores (and drops) an expired session when its cookie shows up, but
 // abandoned ones would otherwise accumulate forever, tokens included.
 //

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
-import { ALBUM_CLASSES, QID } from "../lib/plan.ts";
+import { ALBUM_CLASSES, type Plan, QID, SINGLE_CLASS, type State } from "../lib/plan.ts";
 import type { DescribeResponse, ItemSummary } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
 
@@ -74,4 +74,35 @@ export function albumProblem(qid: string, found: ItemLookup | undefined): string
   return found.classes.length === 0
     ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
     : `${name} isn't an album or EP. Check the QID.`;
+}
+
+/**
+ * Why an existing single's QID can't be used, or null if it's fine or still
+ * being looked up. The run checks this again before it starts.
+ */
+export function singleProblem(qid: string, found: ItemLookup | undefined): string | null {
+  if (found?.status === "missing") return `${qid} doesn't exist on Wikidata.`;
+  if (found?.status === "redirect") return `${qid} redirects to ${found.to}. Use ${found.to}.`;
+  if (found?.status === "ok" && !found.classes.includes(SINGLE_CLASS)) {
+    const name = found.label ? `${qid} (${found.label})` : qid;
+    return `${name} isn't an instance of single (${SINGLE_CLASS}).`;
+  }
+  return null;
+}
+
+/** The existing singles in the tracklist that can't be used, keyed "disc:track". */
+export function singleProblems(
+  state: State,
+  plan: Plan,
+  lookup: (qid: string) => ItemLookup | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  plan.tracks.forEach((rows, di) => {
+    for (const r of rows) {
+      const qid = state.discs[di]?.single[r.n]?.qid.trim() ?? "";
+      const problem = QID.test(qid) ? singleProblem(qid, lookup(qid)) : null;
+      if (problem) out[`${di}:${r.n}`] = problem;
+    }
+  });
+  return out;
 }

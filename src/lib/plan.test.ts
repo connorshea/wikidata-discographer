@@ -476,7 +476,22 @@ describe("buildPlan", () => {
     for (const key of ["track:0:2", "comp:0:2", "single:0:2", "album"]) {
       const o = find(ops, key);
       expect(o?.op === "create" && Object.keys(o.labels)).toEqual(["mul"]);
+      expect(o?.op === "create" && o.descriptions).toEqual({});
     }
+  });
+
+  it("writes a $ in an artist's name as it is", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].tracks[0].artists = ["Joey Bada$$"];
+    state.discs[0].tracks[1].artists = ["A$'B"];
+    state.artists = { ...state.artists, "Joey Bada$$": "Q1", "A$'B": "Q2" };
+    const { ops } = buildPlan(state);
+    const desc = (key: string) => {
+      const o = find(ops, key);
+      return o?.op === "create" ? o.descriptions.en : undefined;
+    };
+    expect(desc("track:0:1")).toContain("Joey Bada$$");
+    expect(desc("track:0:2")).toContain("A$'B");
   });
 
   it("gives compositions a language but not tracks, and neither a publication date", () => {
