@@ -373,6 +373,21 @@ describe("buildPlan", () => {
     expect(buildPlan(state).singleErrs).toEqual({});
   });
 
+  it("gives an existing single the track's title only if it has none", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].single["2"] = { date: "", qid: "Q30", discogs: "" };
+    const op = buildPlan(state).ops.find(
+      (o) => o.op === "addClaims" && o.what.startsWith("single"),
+    );
+    const titles = op?.claims.filter((c) => c.property === "P1476");
+    expect(titles).toHaveLength(1);
+    expect(titles![0].ifMissing).toBe(true);
+    expect(titles![0].value).toMatchObject({
+      type: "monolingual",
+      text: "Habits of Creatures",
+    });
+  });
+
   describe("a single's Discogs master ID", () => {
     const P1954 = { property: "P1954", value: { type: "string", value: "4348311" } };
     const withSingle = (sg: { date?: string; qid?: string; discogs?: string }) => {
