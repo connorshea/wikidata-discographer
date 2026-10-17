@@ -68,8 +68,9 @@ export default function MatchesSection({
   // opened, or the last one was reviewed here (so Undo stays at hand).
   const [kept, setKept] = useState(false);
   // The track last acted on keeps its place once it's reviewed, so Undo stays
-  // at hand. Other reviewed tracks fold into a line under Reviewed, and Change
-  // opens one there again.
+  // at hand, unless every candidate in it was dismissed and there's nothing
+  // left to undo. Other reviewed tracks fold into a line under Reviewed, and
+  // Change opens one there again.
   const [held, setHeld] = useState<string | null>(null);
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   // The control that takes the place of the one just clicked, to keep focus on.
@@ -158,7 +159,8 @@ export default function MatchesSection({
   const sum = reviewSummary(reviews);
   const allReviewed = sum.tracks > 0 && sum.reviewed === sum.tracks;
   const folded = allReviewed && !kept;
-  const below = (r: TrackReview) => opened.has(keyOf(r)) || (r.reviewed && keyOf(r) !== held);
+  const below = (r: TrackReview) =>
+    opened.has(keyOf(r)) || (r.reviewed && (keyOf(r) !== held || !r.candidates.length));
   const queue = reviews.filter((r) => !below(r));
   const done = reviews.filter(below);
 
