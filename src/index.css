@@ -1830,8 +1830,18 @@ details summary {
 .planned-st dt {
   color: var(--muted);
 }
+/* A statement's property ID, or a term's language, as a tag after its name. */
 .planned-st dt .mono,
-.planned-lang,
+.planned-lang {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--chip);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+  vertical-align: 1px;
+}
 .planned-qid {
   font-size: 12.5px;
   color: var(--muted);
