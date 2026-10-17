@@ -9,18 +9,41 @@ import type { SectionProps } from "./types.ts";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
-  const rows = performerRows(state, plan);
+  const all = performerRows(state, plan);
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);
   const lookup = useItemSummaries(
-    rows.map((r) => (state.artists[r.name] ?? "").trim()),
+    all.map((r) => (state.artists[r.name] ?? "").trim()),
     state.settings.lang,
   );
-  const linked = rows.filter(({ name }) => {
+  const isLinked = (name: string) => {
     const v = (state.artists[name] ?? "").trim();
     const s = lookup(v)?.status;
     return QID.test(v) && s !== "missing" && s !== "redirect";
-  }).length;
+  };
+  // Rows the user opened (with Change, or by typing in one), by whether each was linked then.
+  // An open row stays open, and in its place, until Done or Use.
+  const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const settled = (name: string) => opened[name] ?? isLinked(name);
+  const rows = [...all].sort((a, b) => Number(settled(a.name)) - Number(settled(b.name)));
+  const linked = all.filter((r) => isLinked(r.name)).length;
+  // A row that just closed, for focus to go to its Change button.
+  const closing = useRef<string | null>(null);
+  useEffect(() => {
+    const name = closing.current;
+    if (name === null) return;
+    closing.current = null;
+    findRow(name)?.querySelector<HTMLButtonElement>(".perf-change")?.focus();
+  });
+  const open = (name: string) =>
+    setOpened((o) => (name in o ? o : { ...o, [name]: isLinked(name) }));
+  const close = (name: string) => {
+    closing.current = name;
+    setOpened((o) => {
+      const { [name]: _closed, ...rest } = o;
+      return rest;
+    });
+  };
   const { user, wikiBaseUrl } = useAuth();
   // The button that opened the Add a new item dialog, for focus to go back to.
   const [adding, setAdding] = useState<HTMLElement | null>(null);
@@ -31,59 +54,106 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
     <section className="block" id="performers">
       <div className="perf-top">
         <h2>Performers</h2>
-        {rows.length > 0 && (
-          <span className="perf-count">
-            <b>
-              {linked} of {rows.length}
-            </b>{" "}
-            linked
+        {all.length > 0 && (
+          <span className={linked < all.length ? "pill warn" : "pill"}>
+            {linked} of {all.length} linked
           </span>
+        )}
+        {user && (
+          <button
+            type="button"
+            className="quiet small perf-add"
+            aria-haspopup="dialog"
+            onClick={openAdd}
+          >
+            Add a new item…
+          </button>
         )}
       </div>
       <p className="hint">
-        Every artist name in the tracklists, linked to a Wikidata item for performer. Each one needs
-        a QID before the run can start.
+        Link every artist name in the tracklist to its Wikidata item. Unlinked artists are listed
+        first.
       </p>
-      {rows.length > 0 && (
-        <div
-          className="perf-bar"
-          role="progressbar"
-          aria-label="Performers linked"
-          aria-valuemin={0}
-          aria-valuemax={rows.length}
-          aria-valuenow={linked}
-          aria-valuetext={`${linked} of ${rows.length} linked`}
-        >
-          <div style={{ width: `${(linked / rows.length) * 100}%` }} />
-        </div>
-      )}
+      <p className="perf-added" role="status">
+        {added && (
+          <>
+            Added {added.kind} “{added.label ?? added.qid}”{" "}
+            <span className="mono">
+              (<WikiLink base={wikiBaseUrl} qid={added.qid} />)
+            </span>
+            .
+          </>
+        )}
+      </p>
       {rows.length ? (
         <div className="perf-rows">
           {rows.map((r) => {
             const v = (state.artists[r.name] ?? "").trim();
+            const found = lookup(v);
+            const ok = isLinked(r.name);
             const set = (q: string) => update((s) => void (s.artists[r.name] = q.trim()));
+            if (ok && !(r.name in opened))
+              return (
+                <div className="perf-row linked" key={r.name} data-performer={r.name}>
+                  <StatusIcon linked />
+                  <PerformerName row={r} />
+                  <div className="perf-line">
+                    <Chosen qid={v} found={found} showQid />
+                    <button
+                      type="button"
+                      className="quiet small perf-change"
+                      aria-label={`Change the item for ${r.name}`}
+                      onClick={() => {
+                        open(r.name);
+                        // The row opens with its input where Change was.
+                        requestAnimationFrame(() =>
+                          findRow(r.name)?.querySelector("input")?.focus(),
+                        );
+                      }}
+                    >
+                      Change
+                    </button>
+                  </div>
+                </div>
+              );
+            const input = (
+              <QidInput
+                className="mono"
+                placeholder="Q… or Wikidata URL"
+                aria-label={`QID for ${r.name}`}
+                aria-invalid={v !== "" && !QID.test(v)}
+                value={state.artists[r.name] ?? ""}
+                onChange={(q) => {
+                  open(r.name);
+                  set(q);
+                }}
+              />
+            );
             return (
               <div className="perf-row" key={r.name} data-performer={r.name}>
+                <StatusIcon linked={ok} />
                 <PerformerName row={r} />
-                <label className="perf-qid">
-                  QID
-                  <QidInput
-                    className="mono"
-                    placeholder="Q… or URL"
-                    aria-label={`QID for ${r.name}`}
-                    aria-invalid={v !== "" && !QID.test(v)}
-                    value={state.artists[r.name] ?? ""}
-                    onChange={set}
-                  />
-                </label>
-                <div className="perf-result">
+                <div className="perf-pick">
+                  {ok ? (
+                    <div className="perf-edit">
+                      {input}
+                      <button type="button" className="quiet small" onClick={() => close(r.name)}>
+                        Done
+                      </button>
+                    </div>
+                  ) : (
+                    input
+                  )}
                   {v ? (
-                    <Chosen qid={v} found={lookup(v)} onUse={set} />
+                    <Chosen qid={v} found={found} onUse={set} />
                   ) : (
                     <Suggestions
                       name={r.name}
                       version={mirrorVersion}
-                      onPick={set}
+                      onPick={(q) => {
+                        set(q);
+                        close(r.name);
+                      }}
                       onAddNew={user ? openAdd : undefined}
                     />
                   )}
@@ -94,28 +164,6 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
         </div>
       ) : (
         <p className="hint perf-empty">Artists appear here once a disc has tracks.</p>
-      )}
-      {user && (
-        <div className="perf-foot">
-          <p>
-            Missing an artist that was just created on Wikidata?
-            <span role="status">
-              {added && (
-                <>
-                  {" "}
-                  Added {added.kind} “{added.label ?? added.qid}”{" "}
-                  <span className="mono">
-                    (<WikiLink base={wikiBaseUrl} qid={added.qid} />)
-                  </span>
-                  .
-                </>
-              )}
-            </span>
-          </p>
-          <button type="button" className="ghost" aria-haspopup="dialog" onClick={openAdd}>
-            Add a new item…
-          </button>
-        </div>
       )}
       <AddItemDialog
         open={adding !== null}
@@ -132,17 +180,37 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
   );
 }
 
+function findRow(name: string): HTMLElement | undefined {
+  return [...document.querySelectorAll<HTMLElement>("#performers [data-performer]")].find(
+    (el) => el.dataset.performer === name,
+  );
+}
+
+/** A green check once a name is linked, an amber ring until then. */
+function StatusIcon({ linked }: { linked: boolean }) {
+  return (
+    <svg className="perf-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      {linked ? (
+        <>
+          <circle className="done" cx="8" cy="8" r="7" />
+          <path d="M4.8 8.2l2 2 4.2-4.4" />
+        </>
+      ) : (
+        <circle className="todo" cx="8" cy="8" r="6.5" />
+      )}
+    </svg>
+  );
+}
+
 function PerformerName({ row }: { row: PerformerRow }) {
   return (
-    <div className="perf-name">
+    <span className="perf-name">
       <b>{row.name}</b>
-      <ul className="pills">
-        {row.albumArtist && <li className="pill">Album artist</li>}
-        <li className="pill">
-          {row.tracks} {row.tracks === 1 ? "track" : "tracks"}
-        </li>
-      </ul>
-    </div>
+      <span className="muted">
+        {row.albumArtist && "Album artist · "}
+        {row.tracks} {row.tracks === 1 ? "track" : "tracks"}
+      </span>
+    </span>
   );
 }
 
@@ -151,10 +219,13 @@ function Chosen({
   qid,
   found,
   onUse,
+  showQid,
 }: {
   qid: string;
   found: ItemLookup | undefined;
-  onUse: (qid: string) => void;
+  onUse?: (qid: string) => void;
+  /** Shows the QID by the label, for a closed row that has no input showing it. */
+  showQid?: boolean;
 }) {
   const { wikiBaseUrl } = useAuth();
   if (!QID.test(qid))
@@ -169,30 +240,29 @@ function Chosen({
     return (
       <p className="field-err">
         {qid} redirects to {found.to}.{" "}
-        <button type="button" className="ghost small" onClick={() => onUse(found.to)}>
-          Use {found.to}
-        </button>
+        {onUse && (
+          <button type="button" className="use small" onClick={() => onUse(found.to)}>
+            Use {found.to}
+          </button>
+        )}
       </p>
     );
-  if (found?.status === "ok")
-    return (
-      <div className="perf-linked">
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <circle cx="9" cy="9" r="8" />
-          <path d="M5.5 9.2l2.3 2.3 4.7-5" />
-        </svg>
-        <span className="perf-linked-text">
-          <a href={`${wikiBaseUrl}/wiki/${qid}`} target="_blank" rel="noreferrer">
-            {found.label ?? qid} ↗
-          </a>
-          {found.description && <span>{found.description}</span>}
-        </span>
-      </div>
-    );
   return (
-    <p className="muted perf-state">
-      {found?.status === "failed" ? "Couldn’t look it up on Wikidata" : "Looking it up…"}
-    </p>
+    <span className="perf-item">
+      <a href={`${wikiBaseUrl}/wiki/${qid}`} target="_blank" rel="noreferrer">
+        {(found?.status === "ok" && found.label) || qid} ↗
+      </a>
+      {showQid && found?.status === "ok" && found.label && (
+        <span className="mono muted">{qid}</span>
+      )}
+      {found?.status === "ok" ? (
+        found.description && <span className="muted">{found.description}</span>
+      ) : (
+        <span className="muted">
+          {found?.status === "failed" ? "Couldn’t look it up on Wikidata" : "Looking it up…"}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -237,14 +307,14 @@ function Suggestions({
     focusUse.current = false;
     firstUse.current?.focus();
   }, [items]);
-  if (items === null) return <p className="muted perf-state">Looking for matches…</p>;
+  if (items === null) return <p className="muted perf-note">Looking for matches…</p>;
   if (!items.length)
     return (
-      <p className="perf-none">
-        No matching artist on Wikidata. Paste a QID
+      <p className="muted perf-note">
+        No artist on Wikidata has this name. Paste a QID
         {onAddNew ? (
           <>
-            , or if you just created one,{" "}
+            , or{" "}
             <button
               ref={addLink}
               type="button"
@@ -252,7 +322,7 @@ function Suggestions({
               aria-haspopup="dialog"
               onClick={onAddNew}
             >
-              add it to Discographer
+              add one you just created
             </button>
             .
           </>
@@ -262,28 +332,26 @@ function Suggestions({
       </p>
     );
   return (
-    <div className="perf-suggest">
-      <p className="muted">
+    <>
+      <p className="muted perf-note">
         {items.length === 1
           ? "1 artist on Wikidata has this name"
           : `${items.length} artists on Wikidata have this name`}
       </p>
-      <ul>
+      <ul className="perf-suggest">
         {items.slice(0, 5).map((i, n) => (
           <li key={i.qid}>
-            <span className="perf-suggest-text">
-              <span className="match-label">
-                <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
-                  {i.label ?? i.qid} ↗
-                </a>
-                <span className="mono muted">{i.qid}</span>
-              </span>
+            <span className="perf-item">
+              <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
+                {i.label ?? i.qid} ↗
+              </a>
+              <span className="mono muted">{i.qid}</span>
               {i.description && <span className="muted">{i.description}</span>}
             </span>
             <button
               ref={n === 0 ? firstUse : undefined}
               type="button"
-              className={n === 0 ? "small" : "ghost small"}
+              className="use small"
               aria-label={`Use ${i.qid} for ${name}`}
               onClick={() => onPick(i.qid)}
             >
@@ -292,7 +360,7 @@ function Suggestions({
           </li>
         ))}
       </ul>
-    </div>
+    </>
   );
 }
 
