@@ -46,7 +46,8 @@ export interface AlbumState {
   mode: "existing" | "create";
   qid: string;
   title: string;
-  artists: string;
+  /** A new album's artists, by the names the Performers table maps. */
+  artists: string[];
   type: string;
   form: string;
   ids: Record<AlbumIdKey, string>;
@@ -361,44 +362,9 @@ export const isCustomLabelLang = (s: Settings) =>
 export const isCustomPart = (d: Disc) =>
   !!d.partCustom || (d.part.trim() !== "" && !KNOWN_PARTS.has(d.part.trim()));
 
-const SEPARATOR = /(\s*(?:,|&|\bfeat\.?|\bft\.?|\bfeaturing\b)\s+)/i;
-
-/**
- * Artist names written as "A, B & C feat. D". A name in `whole`, such as
- * "Tyler, the Creator", isn't split up.
- */
-export function splitArtists(s: string, whole: Iterable<string> = []): string[] {
-  const keep = new Set(whole);
-  // Names at the even indexes, with the separators between them.
-  const parts = s.split(SEPARATOR);
-  const names: string[] = [];
-  for (let i = 0; i < parts.length; i += 2) {
-    // The longest run of names from here that's one to keep whole.
-    let j = parts.length - 1;
-    while (
-      j > i &&
-      !keep.has(
-        parts
-          .slice(i, j + 1)
-          .join("")
-          .trim(),
-      )
-    )
-      j -= 2;
-    names.push(
-      parts
-        .slice(i, j + 1)
-        .join("")
-        .trim(),
-    );
-    i = j;
-  }
-  return names.filter(Boolean);
-}
-
-/** A new album's artists, keeping names the Performers table already has whole. */
+/** A new album's artists, leaving out blank rows. */
 export const albumArtists = (state: State) =>
-  splitArtists(state.album.artists, Object.keys(state.artists));
+  state.album.artists.map((a) => a.trim()).filter(Boolean);
 
 type ParsedDate =
   | { ok: true; val: null; year: "" }

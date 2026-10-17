@@ -17,7 +17,12 @@ const tracks = (titles: [string, string][]) => titles.map(([t, l], i) => track(i
 
 export const EXAMPLE: State = {
   settings: { ...EMPTY.settings, date: "2026-09-18", p407: "Q1860" },
-  album: { ...EMPTY.album, qid: "Q140316456", title: "Day and Night", artists: "Carly Rae Jepsen" },
+  album: {
+    ...EMPTY.album,
+    qid: "Q140316456",
+    title: "Day and Night",
+    artists: ["Carly Rae Jepsen"],
+  },
   artists: { "Carly Rae Jepsen": "Q52583" },
   discs: [
     {

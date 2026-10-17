@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import {
   applyMbForm,
-  creditText,
   type MbArtistCredit,
   type MbLookups,
   type MbRelease,
@@ -14,7 +13,7 @@ import {
   wikidataLink,
 } from "./musicbrainz.ts";
 import { normalizeAlbumId } from "./music.ts";
-import { albumArtists, buildPlan } from "./plan.ts";
+import { buildPlan } from "./plan.ts";
 import { EMPTY } from "./state.ts";
 import { EXAMPLE } from "./example.fixture.ts";
 
@@ -132,16 +131,6 @@ describe("releaseChoices", () => {
   });
 });
 
-describe("creditText", () => {
-  it("keeps join phrases the album artists field splits on", () => {
-    expect(creditText(credit(["A", " feat. "], ["B", " & "], ["C", ""]))).toBe("A feat. B & C");
-  });
-
-  it("uses a comma for join phrases it doesn't", () => {
-    expect(creditText(credit(["A", " x "], ["B", " and "], ["C", ""]))).toBe("A, B, C");
-  });
-});
-
 describe("wikidataLink", () => {
   it("reads the release group's Wikidata link", () => {
     expect(wikidataLink(RELEASE["release-group"].relations)).toBe("Q140316456");
@@ -167,7 +156,7 @@ describe("releaseToForm", () => {
       mode: "create",
       qid: "",
       title: "Day and Night",
-      artists: "Carly Rae Jepsen",
+      artists: ["Carly Rae Jepsen"],
       type: "Q482994",
       form: "Q208569",
       ids: {
@@ -651,18 +640,13 @@ describe("releaseToForm", () => {
     ]);
   });
 
-  it("keeps a name with a comma or ampersand whole", () => {
+  it("keeps each credited name whole", () => {
     const r = release();
     r["artist-credit"] = credit(["Simon & Garfunkel", " feat. "], ["Carly Rae Jepsen", ""]);
     r.media[1].tracks![0]["artist-credit"] = credit(["Simon & Garfunkel", ""]);
     const form = releaseToForm(r, NONE);
     expect(form.discs[1].tracks[0].artists).toEqual(["Simon & Garfunkel"]);
-    // Listed without a QID, so the album artists field doesn't split it either.
-    expect(form.artists).toEqual({ "Simon & Garfunkel": "" });
-    expect(albumArtists(applyMbForm(EMPTY, form))).toEqual([
-      "Simon & Garfunkel",
-      "Carly Rae Jepsen",
-    ]);
+    expect(form.album.artists).toEqual(["Simon & Garfunkel", "Carly Rae Jepsen"]);
     expect(form.notes).toEqual([]);
   });
 

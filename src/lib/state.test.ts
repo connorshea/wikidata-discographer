@@ -160,4 +160,20 @@ describe("coerceState", () => {
     const unsplit = coerceState({ settings: { splitArtists: false }, discs: [disc] });
     expect(unsplit.discs[0].tracks[0].artists).toEqual(["A & B"]);
   });
+
+  it("reads album artists saved as one field", () => {
+    const album = (artists: string, settings = {}) =>
+      coerceState({
+        settings,
+        album: { artists },
+        artists: { "Tyler, the Creator": "", "Earth, Wind & Fire": "Q1", Earth: "Q2" },
+      }).album.artists;
+    expect(album("A, B & C feat. D")).toEqual(["A", "B", "C", "D"]);
+    // Names the Performers table has stay whole.
+    expect(album("Tyler, the Creator & A$AP Rocky")).toEqual(["Tyler, the Creator", "A$AP Rocky"]);
+    expect(album("Earth, Wind & Fire feat. B")).toEqual(["Earth, Wind & Fire", "B"]);
+    expect(album(" A & B ", { splitArtists: false })).toEqual(["A & B"]);
+    expect(album("")).toEqual([]);
+    expect(coerceState({ album: { artists: ["A", 5, ""] } }).album.artists).toEqual(["A", ""]);
+  });
 });

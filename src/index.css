@@ -169,6 +169,14 @@ div.f {
   font-size: 0.85rem;
   font-weight: 500;
 }
+.artist-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.f button.add-artist {
+  align-self: flex-start;
+}
 .f span.sub {
   font-weight: 400;
   color: var(--muted);
