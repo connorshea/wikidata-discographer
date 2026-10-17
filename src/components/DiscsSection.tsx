@@ -33,7 +33,7 @@ import {
   type Renumbered,
 } from "../lib/tracks.ts";
 import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
-import { ConfirmButton } from "./ConfirmDialog.tsx";
+import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
@@ -191,8 +191,8 @@ function DiscBlock({
   const open = new Map(reviews.filter((r) => !r.reviewed).map((r) => [r.n, r]));
   const custom = isCustomPart(d);
   const creating = state.album.mode === "create";
-  // Rows typed in, or added to an import, can be moved and removed. A plain import is a
-  // release's tracklist, so it's left as it is.
+  // Rows typed in, or added to an import, can be moved. A plain import is a release's
+  // tracklist, so it keeps its order. Any row can be deleted.
   const manual = state.start !== "mb" || d.tracks.some((t) => !t.mb);
   const cols = manual ? 7 : 6;
   const setDisc = (fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
@@ -246,6 +246,9 @@ function DiscBlock({
   // The row (by key) whose artists are open in a dialog.
   const [artistsOf, setArtistsOf] = useState<number | null>(null);
   const artistsAt = artistsOf === null ? -1 : keys.indexOf(artistsOf);
+  // The MusicBrainz row (by key) waiting on a confirmation to delete it.
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const deletingAt = deleting === null ? -1 : keys.indexOf(deleting);
 
   const table = useRef<HTMLTableElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
@@ -290,7 +293,7 @@ function DiscBlock({
     setKeys((ks) => ks.filter((_, j) => j !== i));
     reorder((disc) => removeTrack(disc, i));
     setFocusNext({ row: Math.min(i, d.tracks.length - 2), col: "menu" });
-    setSaid(`Removed track ${i + 1}${title ? `, ${title}` : ""}.`);
+    setSaid(`Deleted track ${i + 1}${title ? `, ${title}` : ""}.`);
   };
   /** A list pasted into a title: its first line fills a blank row, the rest are rows after it. */
   const paste = (i: number, text: string): boolean => {
@@ -594,9 +597,12 @@ function DiscBlock({
                             ...(manual && i < rows.length - 1
                               ? [{ label: "Move down", onSelect: () => move(i, i + 1, "menu") }]
                               : []),
-                            ...(manual
-                              ? [{ label: "Remove track", danger: true, onSelect: () => remove(i) }]
-                              : []),
+                            {
+                              label: "Delete track",
+                              danger: true,
+                              // A row from MusicBrainz can't be typed back in as easily.
+                              onSelect: () => (t.mb ? setDeleting(keys[i]) : remove(i)),
+                            },
                           ]}
                         />
                       </td>
@@ -651,6 +657,25 @@ function DiscBlock({
           }}
         />
       )}
+      <ConfirmDialog
+        confirm={
+          deletingAt === -1
+            ? null
+            : {
+                title: `Delete track ${rows[deletingAt].n}, “${d.tracks[deletingAt].title.trim()}”?`,
+                body: "It came from MusicBrainz, along with its length and identifiers.",
+                action: "Delete track",
+              }
+        }
+        onConfirm={() => {
+          setDeleting(null);
+          remove(deletingAt);
+        }}
+        onClose={() => {
+          if (deletingAt !== -1) setFocusNext({ row: deletingAt, col: "menu" });
+          setDeleting(null);
+        }}
+      />
       {rows.length > 0 && (base.length > 0 || anyMb) && (
         <p className="table-note">
           {base.length > 0 &&
