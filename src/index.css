@@ -100,18 +100,18 @@ a {
   color: var(--accent);
 }
 .page {
-  max-width: 1360px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 28px 24px 64px;
+  padding: 28px 20px 64px;
 }
 header.top {
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
 .top-inner {
-  max-width: 1360px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 20px;
   min-height: 64px;
   display: flex;
   flex-wrap: wrap;
