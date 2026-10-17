@@ -626,7 +626,8 @@ export async function runPlan(
           id: qid,
           baserevid: String(entity.lastrevid ?? ""),
           data: JSON.stringify({ claims: fresh }),
-          summary: editSummary(what, editGroup),
+          // Counting what's sent, not what was planned: the log says how many were already there.
+          summary: editSummary(describeOp(op, fresh.length), editGroup),
         });
         const revid = (body.entity as { lastrevid?: number } | undefined)?.lastrevid ?? null;
         await log({ op: "addClaims", what, qid, revid, ok: true, skipped });

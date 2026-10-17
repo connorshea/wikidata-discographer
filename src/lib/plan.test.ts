@@ -6,6 +6,7 @@ import {
   albumDescPreview,
   descPreviews,
   descTypeLabel,
+  describeOp,
   loadedReleaseGroup,
   MAX_TERM_LENGTH,
   MAX_TRACKS,
@@ -731,5 +732,22 @@ describe("descPreviews", () => {
 
   it("waits for a track or album artist", () => {
     expect(previews(EMPTY)).toBeNull();
+  });
+});
+
+describe("describeOp", () => {
+  // The example's album exists, so its tracklist edit also has the number of
+  // tracks, only for when the album doesn't say already.
+  const tracklist = buildPlan(EXAMPLE).ops.find(
+    (o) => o.op === "addClaims" && o.what === "album tracklist",
+  )!;
+
+  it("counts every statement planned", () => {
+    expect(describeOp(tracklist)).toBe("Add 26 statements to album tracklist");
+  });
+
+  it("counts only the ones sent, for an edit summary", () => {
+    expect(describeOp(tracklist, 24)).toBe("Add 24 statements to album tracklist");
+    expect(describeOp(tracklist, 1)).toBe("Add 1 statement to album tracklist");
   });
 });
