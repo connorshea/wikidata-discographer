@@ -965,6 +965,8 @@ export function buildPlan(state: State): Plan {
         target: { id: sg.qid },
         what: `single for ${where(it)}`,
         claims: [
+          // A tracklist needs a title, which an older single may not have.
+          { ...title(it.r.title), ifMissing: true },
           tracklist,
           takenFrom,
           ...(S.extendExisting ? it.perf.map((p) => claim("P175", item(p))) : []),
