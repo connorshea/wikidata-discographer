@@ -52,10 +52,9 @@
   --trk-ink: #2a3593;
   /* A quiet band, e.g. the album artists above the track table. */
   --soft-bg: #f7f8fb;
-  /* A possible match tied to the form beyond its title, and a reviewed group's edge. */
-  --match-tint: #e3e7fb;
-  --match-ink: #24308f;
-  --ok-edge: #cfe5d7;
+  /* A possible match's Use button: outlined in a light accent. */
+  --use-edge: #b9c2f2;
+  --use-hover: #f3f5fe;
   /* System fonts only: the CSP allows no third-party requests. */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -106,9 +105,8 @@
     --trk-tint: #22264a;
     --trk-ink: #c3caff;
     --soft-bg: #1d1f36;
-    --match-tint: #262c5a;
-    --match-ink: #c3caff;
-    --ok-edge: #2c5a3b;
+    --use-edge: #4b5596;
+    --use-hover: #232a52;
   }
 }
 *,
@@ -1343,16 +1341,6 @@ button.link.match-toggle {
   background: var(--warn-tint);
   color: var(--warn);
 }
-.pill.strong {
-  background: var(--match-tint);
-  color: var(--match-ink);
-}
-.pill.bad.edge {
-  box-shadow: inset 0 0 0 1px var(--danger-edge);
-}
-.match-counts .pill {
-  font-weight: 500;
-}
 .match-empty {
   display: flex;
   flex-wrap: wrap;
@@ -1377,7 +1365,6 @@ button.link.match-toggle {
 .match-group {
   border: 1px solid var(--line);
   border-radius: 9px;
-  overflow: hidden;
   scroll-margin-top: 16px;
 }
 .match-group:target {
@@ -1387,17 +1374,13 @@ button.link.match-toggle {
 .match-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 10px 14px;
-  background: var(--soft-bg);
-  border-bottom: 1px solid var(--line);
-}
-.match-group:not(:has(.candidates)) .match-head {
-  border-bottom: 0;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 12px 16px 2px;
 }
 .match-head .muted {
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 .match-head > button:first-of-type {
   margin-left: auto;
@@ -1406,14 +1389,11 @@ button.link.match-toggle {
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
+  color: var(--muted);
   padding: 4px;
 }
-.match-group.reviewed {
-  border-color: var(--ok-edge);
-}
-.match-group.reviewed .match-head {
-  background: var(--ok-tint);
-  border-bottom-color: var(--ok-edge);
+.match-head button.link:hover {
+  color: var(--ink);
 }
 /* Reviewed tracks, under the open ones: a line each, or the group again once changed. */
 .match-done {
@@ -1462,57 +1442,117 @@ button.link.match-toggle {
   padding: 0;
   margin: 0;
 }
+/* A candidate: what it is, the item, then Use and Dismiss. */
 .candidates li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 16px;
 }
 .candidates li + li {
   border-top: 1px solid var(--tint);
 }
 .match-kind {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  min-width: 96px;
+  padding-top: 2px;
+}
+.candidates li.used .match-kind,
+.candidates li.used .match-text {
+  opacity: 0.75;
 }
 .match-text {
-  flex: 1 1 200px;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
 }
 .match-label {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  gap: 4px 8px;
 }
 .match-label .mono {
   font-size: 13px;
 }
-.match-text > .muted {
+.match-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--tint);
+}
+.match-note {
   font-size: 13px;
+  color: var(--muted);
+}
+.match-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--warn);
+}
+.match-warn svg,
+.match-using svg {
+  flex: none;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.match-warn path {
+  stroke: var(--warn-edge);
+  stroke-width: 1.5;
 }
 .match-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  margin-left: auto;
+  display: flex;
   align-items: center;
-  gap: 6px 8px;
+  gap: 4px;
   font-size: 13px;
+  white-space: nowrap;
 }
-.match-actions.done {
-  color: var(--ok);
+.match-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13.5px;
+}
+.match-using {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
 }
-button.ghost.quiet {
+.match-using path {
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+/* Outlined, since a page of them in solid accent shouts. */
+button.use {
+  background: var(--panel);
+  color: var(--accent);
+  border-color: var(--use-edge);
+}
+button.use:hover {
+  background: var(--use-hover);
+}
+button.quiet {
+  background: none;
+  border-color: transparent;
   color: var(--muted);
-  border-color: var(--line);
+}
+button.quiet:hover {
+  background: var(--tint);
+  color: var(--ink);
+}
+@media (max-width: 560px) {
+  .candidates li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
 }
 /* A track's single: a pill by its title once it's done, and its fields under the row. */
 .single-pill {

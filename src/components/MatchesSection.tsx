@@ -8,6 +8,7 @@ import {
   isSimilarOnly,
   pickSingle,
   pickTrack,
+  comesWithTrack,
   reviewedLine,
   reviewSummary,
   type Slot,
@@ -21,11 +22,7 @@ import { WikiLink } from "./common.tsx";
 import type { Matches, MatchStatus } from "./use-matches.ts";
 import type { SectionProps } from "./types.ts";
 
-const KINDS: Record<Slot, { name: string; edge: string; used: string }> = {
-  comp: { name: "Composition", edge: "cmp-edge", used: "Reused as composition" },
-  track: { name: "Track", edge: "trk-edge", used: "Reused as track" },
-  single: { name: "Single", edge: "rg-edge", used: "Reused as single" },
-};
+const KINDS: Record<Slot, string> = { comp: "Composition", track: "Track", single: "Single" };
 
 /** A row's fields as they were before a candidate was used, to undo it. */
 interface Before {
@@ -59,8 +56,6 @@ export default function MatchesSection({
 }) {
   // What each use replaced, by candidate, so Undo puts it back.
   const before = useRef(new Map<string, Before>());
-  const visible = reviews.flatMap((r) => r.candidates);
-  const strong = visible.filter((c) => c.strong).length;
   const open = reviews.filter((r) => !r.reviewed).length;
   const left = withoutDismissed(matches, dismissed);
   const fillable = state.discs.reduce(
@@ -202,7 +197,7 @@ export default function MatchesSection({
         <h2>
           Possible matches{" "}
           {allReviewed ? (
-            <span className="pill ok">
+            <span className="pill">
               {sum.reviewed} of {sum.tracks} reviewed
             </span>
           ) : (
@@ -241,14 +236,6 @@ export default function MatchesSection({
             Items already on Wikidata with a track's title, or one that differs only in punctuation,
             accents or “&” and “and”. Use one to reuse it, or dismiss it.
           </p>
-          <div className="pills match-counts">
-            <span className="pill">
-              <strong>{strong}</strong> title + performer
-            </span>
-            <span className="pill">
-              <strong>{visible.length - strong}</strong> title only
-            </span>
-          </div>
           {queue.length > 0 && <div className="match-groups">{queue.map((r) => group(r))}</div>}
           {done.length > 0 && (
             <div className="match-done">
@@ -285,18 +272,10 @@ export default function MatchesSection({
   function group(r: TrackReview) {
     const rest = dismissAllIds(r);
     return (
-      <div
-        className={`match-group${r.reviewed ? " reviewed" : ""}`}
-        id={groupId(r.di, r.n)}
-        key={`${r.di}:${r.n}`}
-      >
+      <div className="match-group" id={groupId(r.di, r.n)} key={`${r.di}:${r.n}`}>
         <div className="match-head">
           <span className="muted">{label(r)}</span>
           <strong>{r.title}</strong>
-          {r.candidates.length > 1 && (
-            <span className="muted">· {plural(r.candidates.length, "candidate")}</span>
-          )}
-          {r.reviewed && <span className="pill ok">Reviewed</span>}
           {r.dismissed > 0 && (
             <button
               type="button"
@@ -308,7 +287,7 @@ export default function MatchesSection({
             </button>
           )}
           {!r.reviewed && rest.length > 1 && (
-            <button type="button" className="ghost small" onClick={() => dismiss(r, rest)}>
+            <button type="button" className="link" onClick={() => dismiss(r, rest)}>
               Dismiss all
             </button>
           )}
@@ -329,6 +308,9 @@ export default function MatchesSection({
               <CandidateItem
                 key={c.id}
                 c={c}
+                title={r.title}
+                // Used on its own here, it's undone on its own too.
+                withTrack={comesWithTrack(r, c) && !before.current.has(c.id)}
                 onUse={() => use(r, c)}
                 onUndo={() => undo(r, c)}
                 onDismiss={() => dismiss(r, [c.id])}
@@ -341,56 +323,83 @@ export default function MatchesSection({
   }
 }
 
+const Warn = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 1.5l7 12.5H1z" />
+    <path d="M8 6.2v3.6M8 11.8v.2" />
+  </svg>
+);
+
+const Check = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3.5 8.4l3 3 6-6.4" />
+  </svg>
+);
+
 function CandidateItem({
   c,
+  title,
+  withTrack,
   onUse,
   onUndo,
   onDismiss,
 }: {
   c: Candidate;
+  /** The track's title, to say when the item's label differs. */
+  title: string;
+  /** It was filled in by using the track, so it's undone with that. */
+  withTrack: boolean;
   onUse: () => void;
   onUndo: () => void;
   onDismiss: () => void;
 }) {
   const { wikiBaseUrl } = useAuth();
-  const kind = KINDS[c.slot];
   const m = c.match;
+  const composition = c.slot === "track" ? (m as TrackMatch).composition : null;
+  const tag = isSimilarOnly(m)
+    ? c.strong
+      ? "Similar title"
+      : "Similar title only"
+    : c.strong
+      ? null
+      : "Title only";
   return (
     <li className={c.used ? "used" : undefined}>
-      <span className="match-kind">
-        <span className="sw" style={{ background: `var(--${kind.edge})` }} aria-hidden="true" />
-        {kind.name}
-      </span>
+      <span className="match-kind">{KINDS[c.slot]}</span>
       <span className="match-text">
         <span className="match-label">
           <span className="mono">
             <WikiLink base={wikiBaseUrl} qid={m.qid} />
           </span>
-          <b>{m.label ?? "(no label)"}</b>
+          <span>{m.description ?? m.label ?? "No label or description"}</span>
+          {tag && (
+            <span className="match-tag" title={`Matched by ${m.reasons.join(", ")}`}>
+              {tag}
+            </span>
+          )}
         </span>
-        {m.description && <span className="muted">{m.description}</span>}
-      </span>
-      <span className="pills">
-        <span
-          className={`pill${c.strong ? " strong" : ""}`}
-          title={`Matched by ${m.reasons.join(", ")}`}
-        >
-          {isSimilarOnly(m)
-            ? c.strong
-              ? "Similar title + performer"
-              : "Similar title only"
-            : c.strong
-              ? "Title + performer"
-              : "Title only"}
-        </span>
+        {m.label && m.description && m.label !== title && (
+          <span className="match-note">Titled “{m.label}”</span>
+        )}
+        {composition && !c.used && (
+          <span className="match-note">Using it also uses its composition, {composition}</span>
+        )}
         {c.others.length > 0 && (
-          <span className="pill bad edge">Description names {c.others.join(", ")}</span>
+          <span className="match-warn">
+            <Warn />
+            Description names {c.others.join(", ")}
+          </span>
         )}
       </span>
-      {c.used ? (
-        <span className="match-actions done">
-          {kind.used}
-          <button type="button" className="ghost" data-focus={`undo:${c.id}`} onClick={onUndo}>
+      {withTrack ? (
+        <span className="match-actions muted">Comes with the track</span>
+      ) : c.used ? (
+        <span className="match-actions">
+          <span className="match-using">
+            <Check />
+            Using
+          </span>
+          <button type="button" className="quiet" data-focus={`undo:${c.id}`} onClick={onUndo}>
             Undo
           </button>
         </span>
@@ -398,14 +407,10 @@ function CandidateItem({
         <span className="match-actions muted">Another QID is filled in</span>
       ) : (
         <span className="match-actions">
-          <button type="button" data-focus={`use:${c.id}`} onClick={onUse}>
-            {c.slot === "single"
-              ? "Use as single"
-              : c.slot === "track" && (m as TrackMatch).composition
-                ? "Use with its composition"
-                : "Use"}
+          <button type="button" className="use" data-focus={`use:${c.id}`} onClick={onUse}>
+            Use
           </button>
-          <button type="button" className="ghost quiet" onClick={onDismiss}>
+          <button type="button" className="quiet" onClick={onDismiss}>
             Dismiss
           </button>
         </span>
