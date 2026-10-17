@@ -528,6 +528,7 @@ function DiscBlock({
                           )}
                           <RowArtists
                             n={r.n}
+                            title={t.title}
                             track={t}
                             performers={rowPerformers(
                               { artists: r.artists, feat: featOf(i) },
@@ -772,12 +773,11 @@ function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
 
 /**
  * Who a row credits beyond the artists above the table, as chips, and the
- * field that edits its artists ("A, B feat. C"), opened by Edit artists. The
- * field is read when it's left or Enter is pressed, and Escape drops what
- * was typed.
+ * button that opens a dialog to edit its artists.
  */
 function RowArtists({
   n,
+  title,
   track,
   performers: p,
   prefixed,
@@ -788,6 +788,7 @@ function RowArtists({
   onCommit,
 }: {
   n: number;
+  title: string;
   track: Track;
   performers: ReturnType<typeof rowPerformers>;
   /** Whether there are artists above the table that the chips differ from. */
@@ -799,50 +800,8 @@ function RowArtists({
   onCommit: (names: Pick<Track, "artists" | "feat">) => void;
 }) {
   const id = useId();
-  const [draft, setDraft] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const wasEditing = useRef(false);
-  useEffect(() => {
-    const editing = draft !== null;
-    if (editing === wasEditing.current) return;
-    wasEditing.current = editing;
-    if (editing) input.current?.focus();
-    else if (document.activeElement === document.body) button.current?.focus();
-  }, [draft]);
-  const text = artistsText(track);
-  const close = (commit: boolean) => {
-    if (commit && draft !== null && draft !== text) onCommit(parseArtists(draft, known));
-    setDraft(null);
-  };
-
-  if (draft !== null)
-    return (
-      <span className="who editing">
-        <input
-          ref={input}
-          type="text"
-          className="cell"
-          data-col="artists"
-          aria-label={`Track ${n} artists`}
-          aria-describedby={`${id}-hint`}
-          placeholder={placeholder}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => close(true)}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
-            if (e.key === "Enter" || e.key === "Escape") {
-              e.preventDefault();
-              close(e.key === "Enter");
-            }
-          }}
-        />
-        <span className="sub" id={`${id}-hint`}>
-          Separate names with commas, and put featured artists after "feat."
-        </span>
-      </span>
-    );
   const chips = (names: string[]) =>
     names.map((a) => <PerformerChip key={a} name={a} linked={linked(a)} />);
   const groups = [
@@ -857,10 +816,26 @@ function RowArtists({
         type="button"
         className={cls("link who-edit", !!error && "shown")}
         aria-label={`Edit artists for track ${n}`}
-        onClick={() => setDraft(text)}
+        aria-haspopup="dialog"
+        onClick={() => setEditing(true)}
       >
         {track.artists.length ? "Edit artists" : "Add artists"}
       </button>
+      {editing && (
+        <ArtistsDialog
+          n={n}
+          title={title}
+          track={track}
+          linked={linked}
+          known={known}
+          placeholder={placeholder}
+          onCommit={onCommit}
+          onClose={() => {
+            setEditing(false);
+            button.current?.focus();
+          }}
+        />
+      )}
       {(groups.length > 0 || error) && (
         <span className="who">
           {groups.map(([label, names], g) => (
@@ -878,6 +853,103 @@ function RowArtists({
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * A modal dialog that edits a row's artists as "A, B feat. C", showing the
+ * names as they'll be read. Done or Enter keeps them, and Cancel, Escape or a
+ * click on the backdrop drops what was typed. It opens when it mounts, and
+ * `onClose` should unmount it.
+ */
+function ArtistsDialog({
+  n,
+  title,
+  track,
+  linked,
+  known,
+  placeholder,
+  onCommit,
+  onClose,
+}: {
+  n: number;
+  title: string;
+  track: Track;
+  linked: (name: string) => boolean;
+  known: string[];
+  placeholder: string;
+  onCommit: (names: Pick<Track, "artists" | "feat">) => void;
+  onClose: () => void;
+}) {
+  const ids = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const text = artistsText(track);
+  const [draft, setDraft] = useState(text);
+  useEffect(() => {
+    const d = dialog.current;
+    if (d && !d.open) d.showModal();
+    input.current?.select();
+  }, []);
+  const close = () => dialog.current?.close();
+  const parsed = parseArtists(draft, known);
+  const feat = new Set(parsed.feat);
+  return (
+    <dialog
+      ref={dialog}
+      className="confirm add-item artists-dialog"
+      aria-labelledby={`${ids}-title`}
+      onClose={onClose}
+      // As in ConfirmDialog: a click on the backdrop lands on the <dialog> itself.
+      onClick={(e) => e.target === e.currentTarget && close()}
+    >
+      <form
+        className="confirm-body"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (draft !== text) onCommit(parsed);
+          close();
+        }}
+      >
+        <div className="add-item-head">
+          <h2 id={`${ids}-title`}>Artists · {title.trim() || `Track ${n}`}</h2>
+          <button type="button" className="add-item-x" aria-label="Close" onClick={close}>
+            ×
+          </button>
+        </div>
+        <label className="f">
+          Artists
+          <input
+            ref={input}
+            type="text"
+            data-col="artists"
+            aria-describedby={`${ids}-hint`}
+            placeholder={placeholder}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </label>
+        <p id={`${ids}-hint`}>Separate names with commas, and put featured artists after "feat."</p>
+        {parsed.artists.length > 0 && (
+          <ul className="artists-preview" aria-label="Read as">
+            {parsed.artists.map((a) => (
+              <li key={a} className={cls("who-chip", !linked(a) && "todo")}>
+                <i aria-hidden="true" />
+                {feat.has(a) && <span className="muted">feat.</span>}
+                {a}
+                {linked(a) ? <span className="visually-hidden">, linked</span> : " · needs QID"}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="row">
+          <button type="button" className="ghost" onClick={close}>
+            Cancel
+          </button>
+          <button type="submit">Done</button>
+        </div>
+      </form>
+    </dialog>
   );
 }
 

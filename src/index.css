@@ -934,20 +934,6 @@ td.title-col .cell-err {
   margin-left: -6px;
   white-space: pre;
 }
-.who.editing {
-  flex-direction: column;
-  align-items: stretch;
-  padding: 4px 0 0;
-}
-table.tracks td.title-col .who.editing input.cell {
-  flex: none;
-  font-weight: 400;
-}
-.who.editing .sub {
-  font-size: 12px;
-  color: var(--muted);
-  padding: 0 2px;
-}
 .who .cell-err {
   flex-basis: 100%;
   padding: 0;
@@ -967,7 +953,7 @@ button.link.who-edit {
     opacity: 0;
   }
 }
-a.who-chip {
+.who-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -984,18 +970,18 @@ a.who-chip:hover {
   background: var(--hover);
   box-shadow: inset 0 0 0 1px var(--line);
 }
-a.who-chip i {
+.who-chip i {
   flex: none;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--ok);
 }
-a.who-chip.todo {
+.who-chip.todo {
   background: var(--warn-tint);
   color: var(--warn);
 }
-a.who-chip.todo i {
+.who-chip.todo i {
   background: var(--warn-edge);
 }
 .album-line {
@@ -2556,6 +2542,18 @@ button.add-item-x:hover {
   margin: 0;
   font-size: 14px;
   color: var(--muted);
+}
+/* The names a row's artists field is read as. */
+.artists-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.artists-preview .muted {
+  font-weight: 400;
 }
 .add-item .confirm-body > p.field-err {
   color: var(--err);
