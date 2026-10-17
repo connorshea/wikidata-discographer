@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
-import { emptyDisc } from "../lib/state.ts";
 import { DISCOGS_FIELD, normalizeAlbumId } from "../lib/music.ts";
 import { groupId, type TrackReview } from "../lib/matches.ts";
 import {
@@ -58,11 +57,10 @@ export default function DiscsSection({
     <section className="block">
       <h2>Discs</h2>
       <p className="hint">
-        One tracklist per disc or side, a line per track: <code>1. Title - Artist (3:45)</code>. The
-        length is optional. Fill in a composition or track QID to reuse an existing item instead of
-        creating one. Items already on Wikidata with a track's title are listed under "Possible
-        matches". A row marked "MB" has identifiers from a MusicBrainz import, kept while its title
-        stays the same.
+        One tracklist per disc or side, filled in by a MusicBrainz import. Fill in a composition or
+        track QID to reuse an existing item instead of creating one. Items already on Wikidata with
+        a track's title are listed under "Possible matches". A row marked "MB" has identifiers from
+        a MusicBrainz import, kept while its title stays the same.
       </p>
       {state.discs.map((_, di) => (
         <DiscBlock
@@ -75,13 +73,6 @@ export default function DiscsSection({
           {...{ state, update, plan }}
         />
       ))}
-      <button
-        type="button"
-        className="ghost"
-        onClick={() => update((s) => void s.discs.push(emptyDisc()))}
-      >
-        Add disc
-      </button>
     </section>
   );
 }
@@ -156,15 +147,6 @@ function DiscBlock({
           <span className="sub">Blank for a single-disc album</span>
         </label>
       </div>
-      <label className="f" style={{ marginTop: 12 }}>
-        Tracklist
-        <textarea
-          rows={14}
-          spellCheck={false}
-          value={d.text}
-          onChange={(e) => setDisc((disc) => void (disc.text = e.target.value))}
-        />
-      </label>
       {open.size > 0 && <UnreviewedNotice count={open.size} />}
       {rows.length > 0 && (
         <div className="tablewrap">
@@ -444,7 +426,6 @@ function MbChip({
         ]
       : []),
     S.mbIds &&
-      S.mbRefs &&
       ids.source &&
       ids.isrcs.length +
         ids.iswcs.length +
@@ -454,9 +435,7 @@ function MbChip({
         ids.tidal.length >
         0 &&
       `A reference for the ISRCs, ISWCs and track IDs, stated in MusicBrainz`,
-    S.duration &&
-      S.mbRefs &&
-      ids.source &&
+    ids.source &&
       ids.length === row.seconds &&
       `A reference for the duration, stated in MusicBrainz`,
   ].filter(Boolean);

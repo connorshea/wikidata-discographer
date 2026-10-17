@@ -209,7 +209,7 @@ describe("buildPlan", () => {
         return op?.op === "create" ? op.claims.find((c) => c.property === "P2047") : undefined;
       };
       expect(durationOf(withIds())?.references).toEqual(MB_REF);
-      // Even with identifiers off, but not once the length is edited or references are off.
+      // Even with identifiers off, but not once the length is edited.
       const noIds = withIds();
       noIds.settings.mbIds = false;
       expect(durationOf(noIds)?.references).toHaveLength(1);
@@ -217,9 +217,6 @@ describe("buildPlan", () => {
       edited.discs[0].text = edited.discs[0].text.replace("(02:57)", "(02:58)");
       expect(durationOf(edited)).toMatchObject({ property: "P2047" });
       expect(durationOf(edited)?.references).toBeUndefined();
-      const off = withIds();
-      off.settings.mbRefs = false;
-      expect(durationOf(off)?.references).toBeUndefined();
     });
 
     describe("give each ISRC and track ID on the new track a MusicBrainz reference", () => {
@@ -255,20 +252,8 @@ describe("buildPlan", () => {
         ["appleMusic", "P10110"],
         ["deezer", "P2724"],
         ["tidal", "P4578"],
-      ] as const)("%s (%s), with the setting on", (key, property) => {
+      ] as const)("%s (%s)", (key, property) => {
         expect(refsOf(only(key))).toEqual({ P4404: undefined, [property]: MB_REF });
-      });
-
-      it.each([
-        ["isrcs", "P1243"],
-        ["spotify", "P2207"],
-        ["appleMusic", "P10110"],
-        ["deezer", "P2724"],
-        ["tidal", "P4578"],
-      ] as const)("%s (%s), not with the setting off", (key, property) => {
-        const state = only(key);
-        state.settings.mbRefs = false;
-        expect(refsOf(state)).toEqual({ P4404: undefined, [property]: undefined });
       });
 
       it("but not the recording or work ID", () => {
@@ -278,9 +263,6 @@ describe("buildPlan", () => {
 
       it("and the ISWC on the new composition", () => {
         expect(refsOf(withIds(), "comp:0:2")).toEqual({ P435: undefined, P1827: MB_REF });
-        const off = withIds();
-        off.settings.mbRefs = false;
-        expect(refsOf(off, "comp:0:2")).toEqual({ P435: undefined, P1827: undefined });
       });
 
       it("even once the length is edited, or when an item already has the recording ID", () => {
@@ -356,15 +338,12 @@ describe("buildPlan", () => {
       });
     });
 
-    it("lose the reference once edited, or when the setting is off", () => {
+    it("lose the reference once edited", () => {
       const edited = imported();
       edited.settings.date = "2026-09";
       edited.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTz";
       expect(refsOf(edited)).toMatchObject({ P577: undefined, P2205: undefined });
       expect(refsOf(edited).P1954).toEqual(refTo("P436", RG));
-      const off = imported();
-      off.settings.mbRefs = false;
-      expect(Object.values(refsOf(off)).every((r) => r === undefined)).toBe(true);
     });
 
     it("lose the reference once the album's release group is changed", () => {

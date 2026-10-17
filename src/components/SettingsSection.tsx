@@ -14,28 +14,16 @@ import { FieldErr, InfoTip, Pids } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc" | "singleDesc";
-type FlagKey =
-  | "compPerformer"
-  | "duration"
-  | "straight"
-  | "splitArtists"
-  | "extendExisting"
-  | "mbIds"
-  | "mbRefs";
+type FlagKey = "compPerformer" | "straight" | "splitArtists" | "extendExisting" | "mbIds";
 
 const FLAGS: [FlagKey, string][] = [
   ["compPerformer", "Add performer (P175) to compositions as well as tracks"],
-  ["duration", "Add duration (P2047, in seconds) to tracks"],
   ["straight", "Convert curly apostrophes and quotes to straight ones"],
   ["splitArtists", "Split artists on “,” “&” “feat.” “ft.”"],
   ["extendExisting", "Add missing links to existing items you reuse (P2550, P175)"],
   [
     "mbIds",
     "Add identifiers from a MusicBrainz import to new tracks (P4404, P1243 ISRC, P2207 Spotify, P10110 Apple Music, P2724 Deezer, P4578 Tidal) and compositions (P435, P1827 ISWC)",
-  ],
-  [
-    "mbRefs",
-    "Add a reference to what a MusicBrainz import filled in: a new album's publication date and identifiers, new tracks' durations, ISRCs and track IDs, and new compositions' ISWCs (stated in MusicBrainz, the release group, release or recording it came from, and the day it was imported)",
   ],
 ];
 

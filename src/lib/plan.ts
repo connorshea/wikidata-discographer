@@ -37,17 +37,11 @@ export interface Settings {
   singleDesc: string;
   albumDesc: string;
   compPerformer: boolean;
-  duration: boolean;
   straight: boolean;
   splitArtists: boolean;
   extendExisting: boolean;
   /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
   mbIds: boolean;
-  /**
-   * Add a MusicBrainz reference to what a MusicBrainz import filled in: track durations and
-   * identifiers, and the album's publication date and identifiers.
-   */
-  mbRefs: boolean;
 }
 
 export interface AlbumState {
@@ -546,14 +540,13 @@ export function loadedReleaseGroup(state: State, releaseGroup: string) {
 }
 
 /**
- * Whether a new album's detail gets a MusicBrainz reference: the setting is on, the
- * detail is still the value the import filled in, and the album still has the
- * imported release group.
+ * Whether a new album's detail gets a MusicBrainz reference: the detail is still
+ * the value the import filled in, and the album still has the imported release
+ * group.
  */
 export function citesMb(state: State, cited: MbCited | null | undefined, value: string) {
   const A = state.album;
   return (
-    state.settings.mbRefs &&
     A.mode === "create" &&
     !!A.mb &&
     !!cited &&
@@ -824,7 +817,7 @@ export function buildPlan(state: State): Plan {
   const str = (property: string, value: string) => claim(property, { type: "string", value });
   // Stated in MusicBrainz, with the recording and the day of the import.
   const mbRef = (mb: MbRowIds | null): Pick<Claim, "references"> =>
-    S.mbRefs && mb?.source ? statedInMb("P4404", mb.source.recording, mb.source.retrieved) : {};
+    mb?.source ? statedInMb("P4404", mb.source.recording, mb.source.retrieved) : {};
   // The recording ID itself goes unreferenced: citing MusicBrainz for its own ID adds nothing.
   const trackIds = (mb: MbRowIds | null) => {
     if (!mb || !S.mbIds) return [];
@@ -933,7 +926,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         claim("P2550", compOf(it)),
-        ...(S.duration && it.r.seconds !== null
+        ...(it.r.seconds !== null
           ? [
               {
                 ...claim("P2047", { type: "quantity", amount: it.r.seconds, unit: SECOND_UNIT }),
