@@ -271,6 +271,8 @@ function Form() {
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const [sideSlot, setSideSlot] = useState<HTMLDivElement | null>(null);
   const [running, setRunning] = useState<RunningInfo | null>(null);
+  // A run on show, such as one opened from the album list, which Clear closes.
+  const [showingRun, setShowingRun] = useState(false);
   const empty = isEmpty(state);
   const unreviewed = reviews.filter((r) => !r.reviewed).length;
   const progress = {
@@ -308,12 +310,17 @@ function Form() {
           <ProgressRail
             steps={railSteps(progress)}
             running={!!running}
-            empty={empty}
-            clearConfirm={{
-              title: "Clear the form?",
-              body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
-              action: "Clear the form",
-            }}
+            empty={empty && !showingRun}
+            // An empty form loses nothing, so closing the run needs no asking.
+            clearConfirm={
+              empty
+                ? null
+                : {
+                    title: "Clear the form?",
+                    body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
+                    action: "Clear the form",
+                  }
+            }
             onClear={clear}
           />
           <main className="steps">
@@ -379,6 +386,7 @@ function Form() {
                   : (albumFound?.status === "ok" && albumFound.label) || existingQid
               }
               onRunning={setRunning}
+              onShowing={setShowingRun}
             />
           </main>
           <PlanPanel

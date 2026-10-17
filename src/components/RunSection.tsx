@@ -108,6 +108,7 @@ export default function RunSection({
   sideSlot,
   albumName,
   onRunning,
+  onShowing,
 }: SectionProps & {
   /** Everything in the run's checklist (`runChecks`) is done. */
   checklistDone: boolean;
@@ -127,6 +128,8 @@ export default function RunSection({
   albumName: string;
   /** Told when a run starts, makes progress and ends. */
   onRunning: (r: RunningInfo | null) => void;
+  /** Told whether a run is on show, e.g. one opened from the album list. */
+  onShowing: (showing: boolean) => void;
 }) {
   const { user } = useAuth();
   // The album list's "Open run" links here with ?run=<id>.
@@ -144,6 +147,8 @@ export default function RunSection({
   const [cleared, setCleared] = useState(false);
   const keepRun = useRef(false);
   const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
+  const showing = runId !== null;
+  useEffect(() => onShowing(showing), [showing, onShowing]);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The last run ended "unknown": what the server wants done before another.
