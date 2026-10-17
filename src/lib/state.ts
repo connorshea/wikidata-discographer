@@ -10,7 +10,6 @@ import type {
   State,
   Track,
 } from "./plan.ts";
-import { splitArtists } from "./plan.ts";
 import { sameTitle } from "./titles.ts";
 import {
   ALBUM_ID_FIELDS,
@@ -52,7 +51,7 @@ export const EMPTY: State = {
     mode: "existing",
     qid: "",
     title: "",
-    artists: "",
+    artists: [],
     type: "Q482994",
     form: "Q208569",
     ids: {
@@ -117,6 +116,42 @@ function coerceTrack(t: Obj): Track | null {
     seconds: seconds(t.seconds),
     mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
   };
+}
+
+const SEPARATOR = /(\s*(?:,|&|\bfeat\.?|\bft\.?|\bfeaturing\b)\s+)/i;
+
+/**
+ * Artist names written as "A, B & C feat. D", as forms saved them before
+ * artists were kept one by one. A name in `whole`, such as "Tyler, the
+ * Creator", isn't split up.
+ */
+function splitArtists(s: string, whole: Iterable<string> = []): string[] {
+  const keep = new Set(whole);
+  // Names at the even indexes, with the separators between them.
+  const parts = s.split(SEPARATOR);
+  const names: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    // The longest run of names from here that's one to keep whole.
+    let j = parts.length - 1;
+    while (
+      j > i &&
+      !keep.has(
+        parts
+          .slice(i, j + 1)
+          .join("")
+          .trim(),
+      )
+    )
+      j -= 2;
+    names.push(
+      parts
+        .slice(i, j + 1)
+        .join("")
+        .trim(),
+    );
+    i = j;
+  }
+  return names.filter(Boolean);
 }
 
 const LEGACY_LINE =
@@ -217,7 +252,11 @@ export function coerceState(raw: unknown): State {
     mode: a.mode === "create" ? "create" : "existing",
     qid: str(a.qid),
     title: str(a.title),
-    artists: str(a.artists),
+    artists: Array.isArray(a.artists)
+      ? a.artists.filter((x): x is string => typeof x === "string")
+      : typeof a.artists === "string" && s.splitArtists !== false
+        ? splitArtists(a.artists, isObj(r.artists) ? Object.keys(r.artists) : [])
+        : [str(a.artists).trim()].filter(Boolean),
     type: a.type === "Q169930" ? "Q169930" : "Q482994",
     form: str(a.form, EMPTY.album.form),
     ids: {

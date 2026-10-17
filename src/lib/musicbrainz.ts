@@ -12,7 +12,6 @@ import {
   NO_LINGUISTIC_CONTENT,
   PARTS,
   parseDate,
-  splitArtists,
   STUDIO_ALBUM,
 } from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, State, Track } from "./plan.ts";
@@ -367,20 +366,10 @@ function iswcOf(t: MbTrack): string[] {
   return iswcs.length === 1 ? iswcs : [];
 }
 
-/**
- * An artist credit written so the album artists field splits it back into the
- * same artists: MusicBrainz's join phrases where the field understands them
- * (", ", " & ", " feat. "), and ", " for anything else (" x ", " and ", " with ").
- */
-export function creditText(credit: MbArtistCredit[]): string {
-  return credit
-    .map((c, i) => {
-      if (i === credit.length - 1) return c.name;
-      const split = splitArtists(`X${c.joinphrase}Y`);
-      return c.name + (split.length === 2 ? c.joinphrase : ", ");
-    })
-    .join("");
-}
+/** The names an artist credit lists, each once. */
+const creditNames = (credit: MbArtistCredit[]) => [
+  ...new Set(credit.map((c) => c.name.trim()).filter(Boolean)),
+];
 
 /** A MusicBrainz length in milliseconds as whole seconds. */
 const seconds = (ms: number) => Math.round(ms / 1000);
@@ -406,15 +395,11 @@ export function releaseToForm(
   const rg = release["release-group"];
 
   // Artists, keyed by the name they're credited as, as the Performers table is.
-  // A name like "Tyler, the Creator" is listed even without a QID, so the album
-  // artists field keeps it whole.
   const artists: Record<string, string> = {};
   const addCredit = (credit: MbArtistCredit[]) => {
     for (const c of credit) {
       const qid = lookups.artists[c.artist.id];
-      if (c.name in artists) continue;
-      if (qid) artists[c.name] = qid;
-      else if (splitArtists(c.name).length > 1) artists[c.name] = "";
+      if (qid && !(c.name in artists)) artists[c.name] = qid;
     }
   };
   addCredit(release["artist-credit"]);
@@ -503,7 +488,7 @@ export function releaseToForm(
       return {
         n: t.position,
         title: t.title.trim(),
-        artists: [...new Set(t["artist-credit"].map((c) => c.name.trim()).filter(Boolean))],
+        artists: creditNames(t["artist-credit"]),
         seconds: t.length === null ? null : seconds(t.length),
         mb: ids,
       };
@@ -607,9 +592,8 @@ export function releaseToForm(
     );
 
   const songs = discs.reduce((n, _, i) => n + (media[i].tracks?.length ?? 0), 0);
-  const foundArtists = Object.values(artists).filter(Boolean).length;
   const found = [
-    foundArtists && plural(foundArtists, "artist"),
+    Object.keys(artists).length && plural(Object.keys(artists).length, "artist"),
     comps && plural(comps, "composition"),
     tracks && plural(tracks, "track"),
   ].filter(Boolean);
@@ -635,7 +619,7 @@ export function releaseToForm(
       mode: albumQid ? "existing" : "create",
       qid: albumQid ?? "",
       title: release.title,
-      artists: creditText(release["artist-credit"]),
+      artists: creditNames(release["artist-credit"]),
       type: type ?? "Q482994",
       form,
       ids,

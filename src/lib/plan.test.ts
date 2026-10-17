@@ -11,7 +11,6 @@ import {
   normalizeDate,
   normalizeQid,
   type Op,
-  splitArtists,
 } from "./plan.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
 import { EXAMPLE, track } from "./example.fixture.ts";
@@ -41,23 +40,6 @@ describe("normalizeQid", () => {
     expect(normalizeQid("https://www.wikidata.org/wiki/Q52583")).toBe("Q52583");
     expect(normalizeQid(" q42 ")).toBe("Q42");
     expect(normalizeQid("not a qid")).toBe("not a qid");
-  });
-});
-
-describe("splitArtists", () => {
-  it("splits on commas, ampersands and feat.", () => {
-    expect(splitArtists("A, B & C feat. D")).toEqual(["A", "B", "C", "D"]);
-  });
-
-  it("keeps a name it's given whole", () => {
-    expect(splitArtists("Tyler, the Creator & A$AP Rocky", ["Tyler, the Creator"])).toEqual([
-      "Tyler, the Creator",
-      "A$AP Rocky",
-    ]);
-    expect(splitArtists("Earth, Wind & Fire feat. B", ["Earth, Wind & Fire", "Earth"])).toEqual([
-      "Earth, Wind & Fire",
-      "B",
-    ]);
   });
 });
 

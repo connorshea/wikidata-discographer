@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
@@ -141,17 +141,7 @@ export default function AlbumSection({
               </span>
               <FieldErr id="albumTitle" msg={errs.albumTitle} />
             </label>
-            <label className="f">
-              <Pids>Album artists (P175)</Pids>
-              <input
-                type="text"
-                value={A.artists}
-                aria-invalid={!!errs.albumArtists}
-                onChange={(e) => update((s) => void (s.album.artists = e.target.value))}
-              />
-              <span className="sub">Separated by “,” “&” or “feat.”, and mapped in Performers</span>
-              <FieldErr id="albumArtists" msg={errs.albumArtists} />
-            </label>
+            <AlbumArtists state={state} update={update} error={errs.albumArtists} />
             <label className="f">
               <Pids>Instance of (P31)</Pids>
               <select
@@ -326,6 +316,70 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * A new album's artists, an input each. Focus goes to a row just added, or to
+ * the row before one just removed.
+ */
+function AlbumArtists({
+  state,
+  update,
+  error,
+}: Pick<SectionProps, "state" | "update"> & { error?: string }) {
+  const rows = state.album.artists.length ? state.album.artists : [""];
+  const listRef = useRef<HTMLDivElement>(null);
+  const focusRow = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusRow.current === null) return;
+    listRef.current?.querySelectorAll("input")[focusRow.current]?.focus();
+    focusRow.current = null;
+  });
+  return (
+    <div className="f" ref={listRef}>
+      <Pids>Album artists (P175)</Pids>
+      {rows.map((name, i) => (
+        <div className="artist-row" key={i}>
+          <input
+            type="text"
+            value={name}
+            aria-label={`Album artist ${i + 1}`}
+            aria-invalid={!!error}
+            onChange={(e) => update((s) => void (s.album.artists[i] = e.target.value))}
+          />
+          {rows.length > 1 && (
+            <button
+              type="button"
+              className="ghost quiet small"
+              aria-label={`Remove album artist ${i + 1}`}
+              onClick={() => {
+                focusRow.current = Math.max(0, i - 1);
+                update((s) => void s.album.artists.splice(i, 1));
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        className="link add-artist"
+        onClick={() => {
+          focusRow.current = rows.length;
+          update((s) => {
+            // The one input shown for an empty list stands for its first row.
+            if (!s.album.artists.length) s.album.artists.push("");
+            s.album.artists.push("");
+          });
+        }}
+      >
+        Add an artist
+      </button>
+      <span className="sub">One name per artist, mapped in Performers</span>
+      <FieldErr id="albumArtists" msg={error} />
     </div>
   );
 }
