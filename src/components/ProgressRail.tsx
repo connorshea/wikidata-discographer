@@ -61,6 +61,15 @@ function useCurrentStep(): StepId {
   return current;
 }
 
+function Lock() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">
+      <rect x="2.5" y="6" width="9" height="6.5" rx="1.5" />
+      <path d="M4.5 6V4.5a2.5 2.5 0 0 1 5 0V6" />
+    </svg>
+  );
+}
+
 function Check() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
@@ -86,12 +95,31 @@ export default function ProgressRail({
   clearConfirm: Confirm | null;
   onClear: () => void;
 }) {
-  const current = useCurrentStep();
+  const scrolled = useCurrentStep();
+  // Scrolled down to a locked step, Start is still the one to do.
+  const current = steps.find((s) => s.id === scrolled)?.locked ? "start" : scrolled;
   return (
     <nav className="rail" aria-label="Form sections">
       <div className="kicker">This album</div>
       <ol>
         {steps.map((s, i) => {
+          // A locked step is no link: its section has nothing to fill in yet.
+          if (s.locked) {
+            return (
+              <li key={s.id}>
+                <span className="rail-item locked" aria-disabled="true">
+                  <span className="dot locked">
+                    <Lock />
+                    <span className="visually-hidden"> · Locked</span>
+                  </span>
+                  <span className="rail-text">
+                    <b>{s.name}</b>
+                    <span>{s.summary}</span>
+                  </span>
+                </span>
+              </li>
+            );
+          }
           const isCurrent = s.id === current;
           const dot = s.status === "pending" && isCurrent ? "current" : s.status;
           return (

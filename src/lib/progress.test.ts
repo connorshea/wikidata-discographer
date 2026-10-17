@@ -41,6 +41,18 @@ describe("railSteps", () => {
     expect(steps[5].summary).toBe("Nothing to create yet");
   });
 
+  it("locks the steps after Start until a starting point is picked", () => {
+    expect(railSteps(input(EMPTY)).map((s) => s.locked)).toEqual([
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(railSteps(input(EXAMPLE)).some((s) => s.locked)).toBe(false);
+  });
+
   it("sums up a filled-in form", () => {
     const steps = railSteps(input(EXAMPLE));
     const byId = Object.fromEntries(steps.map((s) => [s.id, s]));

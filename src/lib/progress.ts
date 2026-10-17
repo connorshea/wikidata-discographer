@@ -21,6 +21,8 @@ export interface Step {
   name: string;
   summary: string;
   status: StepStatus;
+  /** Can't be filled in yet: the steps after Start, until a starting point is picked. */
+  locked: boolean;
 }
 
 /** A run in progress. `total` is 0 when it's followed in the background, counts unknown. */
@@ -175,7 +177,7 @@ export function railSteps(p: ProgressInput): Step[] {
   const status = (attention: boolean, done: boolean): StepStatus =>
     locked ? "pending" : attention ? "attention" : done ? "done" : "pending";
 
-  const steps: Step[] = [
+  const steps: Omit<Step, "locked">[] = [
     state.start
       ? { id: "start", name: "Source", summary: START_NAMES[state.start], status: "done" }
       : { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" },
@@ -230,7 +232,7 @@ export function railSteps(p: ProgressInput): Step[] {
       status: "pending",
     },
   ];
-  return steps;
+  return steps.map((s) => ({ ...s, locked: locked && s.id !== "start" }));
 }
 
 /** The first thing holding up the run, in a few words. */
