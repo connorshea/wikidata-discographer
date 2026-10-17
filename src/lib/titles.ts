@@ -5,15 +5,19 @@
 // typed: case, curly or straight quotes and apostrophes, Unicode hyphens and
 // spacing. Two titles with the same `titleKey` are the "same title".
 // `labelSearchKey` folds further, for finding "similar title" items: `&` and
-// "and", punctuation, dashes and accents. It's the key stored in the mirror's
-// `label_search` column, so changing it means bumping TITLE_KEY_VERSION.
+// "and", punctuation, dashes and accents, and drops a trailing disambiguator
+// like "(song)". It's the key stored in the mirror's `label_search`
+// column, so changing it means bumping TITLE_KEY_VERSION.
 
 /**
  * The version of `labelSearchKey`. Bump it whenever a key could change:
  * scripts/migrate.ts then rebuilds the mirror's stored keys, and the server
  * won't start until it has.
+ *
+ * 1: folded punctuation, accents and "&"
+ * 2: dropped trailing disambiguators like "(song)"
  */
-export const TITLE_KEY_VERSION = 1; // 1: folded punctuation, accents and "&"
+export const TITLE_KEY_VERSION = 2;
 
 /** The length of the indexed `label_search` column. */
 export const LABEL_SEARCH_LENGTH = 191;
@@ -93,14 +97,28 @@ export function foldTitle(title: string): string {
 // it can't fold to nothing or into another title.
 const MIN_FOLDED = 3;
 
+// A trailing parenthetical that only tells items apart, as Wikipedia titles
+// do: "(song)", "(EP)", "(Foster the People song)", "(2014 album)". A real
+// title parenthetical like "(Ra Ra Ra)" or "(Elegant Too Remix)" doesn't end
+// in one of these words.
+const DISAMBIGUATOR = /\s*\((?:[^()]*\s)?(?:song|single|album|ep|composition)\)$/i;
+
+/** `title` without a trailing disambiguator, unless that's all there is. */
+function withoutDisambiguator(title: string): string {
+  return title.trim().replace(DISAMBIGUATOR, "") || title;
+}
+
 /**
  * The key a label is searched and matched by (`label_search`): `foldTitle`,
  * or `titleKey` for a title that is mostly punctuation, clipped to the index
  * length. A folded key always has at least MIN_FOLDED letters or digits, and
- * a fallback fewer, so the two never collide.
+ * a fallback fewer, so the two never collide. A trailing disambiguator is
+ * dropped first, so "Coming of Age (song)" is a similar title to "Coming of
+ * Age".
  */
 export function labelSearchKey(label: string | null | undefined): string | null {
   if (!label) return null;
+  label = withoutDisambiguator(label);
   const folded = foldTitle(label);
   const letters = folded.match(/[\p{L}\p{N}]/gu)?.length ?? 0;
   const key = letters >= MIN_FOLDED ? folded : titleKey(label);
