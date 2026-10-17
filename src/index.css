@@ -417,10 +417,15 @@ button.clear-form path {
 }
 .check.todo circle {
   fill: none;
+  stroke: var(--disc-edge);
+  stroke-width: 1.6;
+}
+.check.problem circle {
+  fill: none;
   stroke: var(--warn-edge);
   stroke-width: 1.6;
 }
-.check.todo path {
+.check.problem path {
   stroke: var(--warn);
 }
 /* What RunSection puts here: the run button, and what it says about it. */

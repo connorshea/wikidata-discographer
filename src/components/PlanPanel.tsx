@@ -64,16 +64,25 @@ function ItemModel() {
   );
 }
 
-function CheckIcon({ ok }: { ok: boolean }) {
-  return ok ? (
-    <svg className="check ok" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+function CheckIcon({ check }: { check: Check }) {
+  if (check.ok)
+    return (
+      <svg className="check ok" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" />
+        <path d="M4.8 8.2l2 2 4.2-4.4" />
+      </svg>
+    );
+  // Amber only when something's wrong. Still to do is an empty circle.
+  return (
+    <svg
+      className={`check ${check.problem ? "problem" : "todo"}`}
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
       <circle cx="8" cy="8" r="7" />
-      <path d="M4.8 8.2l2 2 4.2-4.4" />
-    </svg>
-  ) : (
-    <svg className="check todo" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="7" />
-      <path d="M8 4.6v4.2M8 11v.2" />
+      {check.problem && <path d="M8 4.6v4.2M8 11v.2" />}
     </svg>
   );
 }
@@ -94,7 +103,6 @@ export default function PlanPanel({
   running: boolean;
 }) {
   const nothing = counts.every((c) => !c.count && !c.reused);
-  const returnTo = window.location.pathname;
   return (
     <aside className="plan-panel" aria-label={running ? "Run" : "Plan"}>
       {!running && (
@@ -131,17 +139,10 @@ export default function PlanPanel({
           <div className="card">
             <ul className="checks-list">
               {checks.map((c) => (
-                <li key={c.text} className={c.ok ? "ok" : "todo"}>
-                  <CheckIcon ok={c.ok} />
+                <li key={c.text} className={c.ok ? "ok" : c.problem ? "problem" : "todo"}>
+                  <CheckIcon check={c} />
                   {c.ok ? (
                     <span>{c.text}</span>
-                  ) : c.login ? (
-                    <span>
-                      <a href={`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>
-                        Log in
-                      </a>{" "}
-                      with your Wikimedia account
-                    </span>
                   ) : c.at ? (
                     <a href={`#${c.at}`}>{c.text}</a>
                   ) : (

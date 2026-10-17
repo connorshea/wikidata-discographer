@@ -313,8 +313,8 @@ export interface Check {
   text: string;
   /** The section that fixes it, while it isn't ok. */
   at: StepId | "matches" | null;
-  /** Fixed by logging in, so it links to the login. */
-  login?: boolean;
+  /** Something's wrong, not just still to do, so it's marked for attention. */
+  problem?: boolean;
 }
 
 /** The run's checklist: each thing that has to be true before it can start. */
@@ -330,19 +330,20 @@ export function runChecks(
   const { state, plan, unreviewed, hasTracklist } = p;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const perf = linkedPerformers(state, plan);
-  const albumBlocked = blockedAt(plan, "album") || p.notAlbum || albumSummary(state) === null;
+  const albumWrong = blockedAt(plan, "album") || p.notAlbum;
+  const albumBlocked = albumWrong || albumSummary(state) === null;
   const checks: Check[] = [
     p.loggedIn
       ? p.ineligible
-        ? { ok: false, text: p.ineligible, at: null }
+        ? { ok: false, text: p.ineligible, at: null, problem: true }
         : { ok: true, text: "Logged in and eligible to edit", at: null }
-      : { ok: false, text: "Log in with your Wikimedia account", at: null, login: true },
+      : { ok: false, text: "Log in with your Wikimedia account", at: null },
     !state.start
       ? { ok: false, text: "Pick a starting point", at: "start" }
       : albumBlocked
-        ? { ok: false, text: "Choose or create the album", at: "album" }
+        ? { ok: false, text: "Choose or create the album", at: "album", problem: albumWrong }
         : hasTracklist
-          ? { ok: false, text: "Album already has a tracklist", at: "album" }
+          ? { ok: false, text: "Album already has a tracklist", at: "album", problem: true }
           : state.album.mode === "existing" && p.albumPending
             ? { ok: false, text: "Checking the album on Wikidata…", at: "album" }
             : {
@@ -355,7 +356,7 @@ export function runChecks(
               },
     trackCount
       ? blockedAt(plan, "tracks")
-        ? { ok: false, text: "Fix the errors in Tracks", at: "tracks" }
+        ? { ok: false, text: "Fix the errors in Tracks", at: "tracks", problem: true }
         : { ok: true, text: plural(trackCount, "track"), at: null }
       : { ok: false, text: "Add at least one track", at: "tracks" },
     perf.linked < perf.total || blockedAt(plan, "performers")
@@ -366,6 +367,8 @@ export function runChecks(
               ? `Link ${plural(perf.total - perf.linked, "more performer")}`
               : "Fix the performer QIDs",
           at: "performers",
+          // Once there are tracks, an unlinked performer holds the run up.
+          problem: trackCount > 0 || blockedAt(plan, "performers"),
         }
       : {
           ok: !!perf.total,
@@ -380,6 +383,7 @@ export function runChecks(
             ok: false,
             text: `Review ${plural(unreviewed, "possible match", "possible matches")}`,
             at: "matches",
+            problem: true,
           }
         : p.matchesPending
           ? { ok: false, text: "Looking for possible matches…", at: "matches" }
@@ -387,8 +391,18 @@ export function runChecks(
     );
   // Item settings stay locked, so they can't be fixed, until a starting point is picked.
   if (state.start && blockedAt(plan, "settings"))
-    checks.push({ ok: false, text: "Fix the errors in Item settings", at: "settings" });
+    checks.push({
+      ok: false,
+      text: "Fix the errors in Item settings",
+      at: "settings",
+      problem: true,
+    });
   if (blockedAt(plan, "create"))
-    checks.push({ ok: false, text: "Fix the problems under Create on Wikidata", at: "create" });
+    checks.push({
+      ok: false,
+      text: "Fix the problems under Create on Wikidata",
+      at: "create",
+      problem: true,
+    });
   return checks;
 }

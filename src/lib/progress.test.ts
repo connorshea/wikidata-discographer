@@ -158,6 +158,24 @@ describe("runChecks", () => {
     });
   });
 
+  it("leaves an empty form's checks to do, with no problems", () => {
+    const list = runChecks({
+      ...input(EMPTY),
+      loggedIn: false,
+      ineligible: null,
+      matchesPending: false,
+      albumPending: false,
+    });
+    expect(list.every((c) => !c.ok && !c.problem)).toBe(true);
+  });
+
+  it("marks an unlinked performer as a problem once there are tracks", () => {
+    const state = structuredClone(EXAMPLE);
+    state.artists = {};
+    const c = checks(input(state)).find((x) => x.at === "performers");
+    expect(c).toMatchObject({ ok: false, problem: true });
+  });
+
   it("asks for matches to be reviewed", () => {
     const c = checks(input(EXAMPLE, { unreviewed: 2 })).find((x) => x.at === "matches");
     expect(c?.text).toBe("Review 2 possible matches");

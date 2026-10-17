@@ -864,7 +864,7 @@ function kindName(edit: PreviewEdit): string {
 
 function StatusIcon({ status }: { status: "done" | "fail" | "unknown" }) {
   const label = { done: "Done", fail: "Failed", unknown: "Outcome unknown" }[status];
-  const cls = { done: "ok", fail: "fail", unknown: "todo" }[status];
+  const cls = { done: "ok", fail: "fail", unknown: "problem" }[status];
   return (
     <svg className={`check ${cls}`} width="16" height="16" viewBox="0 0 16 16" role="img">
       <title>{label}</title>
