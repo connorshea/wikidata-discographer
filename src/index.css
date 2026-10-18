@@ -164,8 +164,17 @@ h1.wordmark {
   color: var(--muted);
 }
 .record-icon .vinyl {
-  fill: #15171f;
+  fill: url(#record-sheen);
   stroke: var(--line);
+}
+.record-icon .sheen-hi {
+  stop-color: #5a5f78;
+}
+.record-icon .sheen-mid {
+  stop-color: #15171f;
+}
+.record-icon .sheen-lo {
+  stop-color: #464a60;
 }
 .record-icon .groove {
   fill: none;
@@ -176,6 +185,29 @@ h1.wordmark {
 }
 .record-icon .hole {
   fill: #ffffff;
+}
+/* A black disc is the same value as the dark header, so in dark mode the sheen is
+   brighter, the rim lighter, and the hole shows the header through it. */
+@media (prefers-color-scheme: dark) {
+  .record-icon .vinyl {
+    stroke: #6d7192;
+    stroke-width: 1.5;
+  }
+  .record-icon .sheen-hi {
+    stop-color: #4a4f80;
+  }
+  .record-icon .sheen-mid {
+    stop-color: #14162a;
+  }
+  .record-icon .sheen-lo {
+    stop-color: #3a3e66;
+  }
+  .record-icon .groove {
+    stroke: #2c3052;
+  }
+  .record-icon .hole {
+    fill: var(--panel);
+  }
 }
 h2 {
   font-size: 1.15rem;
