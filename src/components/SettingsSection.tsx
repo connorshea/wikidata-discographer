@@ -37,16 +37,6 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
     ],
   ],
   ["Text", [["straight", "Straight quotes", "Convert curly apostrophes and quotes"]]],
-  [
-    "MusicBrainz import",
-    [
-      [
-        "mbIds",
-        "Add identifiers",
-        "Recording, ISRC and streaming IDs on tracks, work ID and ISWC on compositions",
-      ],
-    ],
-  ],
 ];
 
 export default function SettingsSection({

@@ -39,8 +39,6 @@ export interface Settings {
   compPerformer: boolean;
   straight: boolean;
   extendExisting: boolean;
-  /** Add the identifiers a MusicBrainz import found to new tracks and compositions. */
-  mbIds: boolean;
 }
 
 export interface AlbumState {
@@ -881,7 +879,7 @@ export function buildPlan(state: State): Plan {
     mb?.source ? statedInMb("P4404", mb.source.recording, mb.source.retrieved) : {};
   // The recording ID itself goes unreferenced: citing MusicBrainz for its own ID adds nothing.
   const trackIds = (mb: MbRowIds | null) => {
-    if (!mb || !S.mbIds) return [];
+    if (!mb) return [];
     const cited = (property: string, value: string) => ({ ...str(property, value), ...mbRef(mb) });
     return [
       ...(mb.recording ? [str("P4404", mb.recording)] : []),
@@ -959,10 +957,8 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...(S.mbIds && it.r.mb?.work ? [str("P435", it.r.mb.work)] : []),
-        ...(S.mbIds && it.r.mb
-          ? it.r.mb.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) }))
-          : []),
+        ...(it.r.mb?.work ? [str("P435", it.r.mb.work)] : []),
+        ...(it.r.mb?.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) })) ?? []),
       ],
     });
   }

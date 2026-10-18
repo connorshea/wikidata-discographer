@@ -197,13 +197,13 @@ describe("settingsPills", () => {
       "Labels: English",
       "Language of work: English (Q1860)",
       "Published 2026-09-18",
-      "4 options on",
+      "3 options on",
     ]);
   });
 
   it("names what's missing", () => {
     const S = { ...EMPTY.settings, lang: "nds", straight: false };
-    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "3 options on"]);
+    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "2 options on"]);
   });
 });
 
