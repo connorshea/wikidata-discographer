@@ -80,6 +80,41 @@ describe("recreatedItems", () => {
     ).toEqual([]);
   });
 
+  it("ignores a new album with the same title by another artist", () => {
+    const created = [
+      { key: "album", qid: "Q9" },
+      { key: "comp:0:2", qid: "Q10" },
+    ];
+    const other = newAlbum();
+    other.album.artists = ["Douglas Adams"];
+    other.artists["Douglas Adams"] = "Q42";
+    const s = newAlbum();
+    expect(recreatedItems(opsOf(s), s, { input: other, albumQid: "Q9", created })).toEqual([]);
+    // The same title by the same artist is still the last run's album.
+    expect(
+      recreatedItems(opsOf(s), s, { input: newAlbum(), albumQid: "Q9", created }).map((r) => r.key),
+    ).toEqual(["album", "comp:0:2"]);
+  });
+
+  it("matches a new album's performers in any order", () => {
+    const both = (artists: string[]) => {
+      const s = newAlbum();
+      s.album.artists = artists;
+      s.artists = { "Carly Rae Jepsen": "Q52583", "Douglas Adams": "Q42" };
+      return s;
+    };
+    const s = both(["Douglas Adams", "Carly Rae Jepsen"]);
+    const last = {
+      input: both(["Carly Rae Jepsen", "Douglas Adams"]),
+      albumQid: "Q9",
+      created: [{ key: "album", qid: "Q9" }],
+    };
+    expect(recreatedItems(opsOf(s), s, last).map((r) => r.key)).toEqual(["album"]);
+    // One of the two artists alone is another album.
+    const one = both(["Carly Rae Jepsen"]);
+    expect(recreatedItems(opsOf(one), one, last)).toEqual([]);
+  });
+
   it("ignores a key that's another song now", () => {
     const s = copy(EXAMPLE);
     s.discs[0].tracks[1].title = "Something Else";

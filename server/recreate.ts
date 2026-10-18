@@ -26,13 +26,25 @@ export interface Recreated {
 const labelKey = (labels: Record<string, string>) =>
   JSON.stringify(Object.entries(labels).sort(([a], [b]) => (a < b ? -1 : 1)));
 
+/** An album's performers (P175) as a string to compare by, whatever their order. */
+const performerKey = (op: CreateOp | undefined) =>
+  JSON.stringify(
+    (op?.claims ?? [])
+      .filter((c) => c.property === "P175")
+      .map((c) => JSON.stringify(c.value))
+      .sort(),
+  );
+
 const creates = (ops: readonly Op[]) =>
   new Map(ops.filter((o): o is CreateOp => o.op === "create").map((o) => [o.key, o]));
 
 /**
  * The items `ops` would create that `last` already created: the same plan key,
  * with the same labels, for the same album. A plan key alone isn't enough,
- * since "comp:0:1" is another song in another album.
+ * since "comp:0:1" is another song in another album. A new album is the same
+ * one when it has the same title and the same performers, since two artists
+ * can each have an album called "Greatest Hits". Its description is left out,
+ * as it changes with the date or type when the user fixes one between runs.
  */
 export function recreatedItems(ops: readonly Op[], state: State, last: LastRun): Recreated[] {
   const lastInput = coerceState(last.input);
@@ -43,7 +55,8 @@ export function recreatedItems(ops: readonly Op[], state: State, last: LastRun):
       ? last.albumQid !== null && normalizeQid(state.album.qid.trim()) === last.albumQid
       : lastInput.album.mode === "create" &&
         !!next.get("album") &&
-        labelKey(next.get("album")!.labels) === labelKey(lastOps.get("album")?.labels ?? {});
+        labelKey(next.get("album")!.labels) === labelKey(lastOps.get("album")?.labels ?? {}) &&
+        performerKey(next.get("album")) === performerKey(lastOps.get("album"));
   if (!sameAlbum) return [];
   return last.created.flatMap(({ key, qid }) => {
     const op = next.get(key);
