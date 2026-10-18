@@ -82,14 +82,14 @@ const STATUS_LABELS = { done: "Done", attention: "Needs attention", pending: "To
 
 export default function ProgressRail({
   steps,
-  running,
+  locked,
   empty,
   clearConfirm,
   onClear,
 }: {
   steps: Step[];
-  /** A run is in progress, so the form can't be cleared. */
-  running: boolean;
+  /** A run is starting or in progress, so the form can't be cleared. */
+  locked: boolean;
   /** The form is already as Clear leaves it, with no run on show. */
   empty: boolean;
   clearConfirm: Confirm | null;
@@ -146,8 +146,8 @@ export default function ProgressRail({
       <ConfirmButton
         className="danger clear-form"
         label="Clear form and start over"
-        disabled={running || empty}
-        describedBy={running ? "clear-hint" : undefined}
+        disabled={locked || empty}
+        describedBy={locked ? "clear-hint" : undefined}
         confirm={clearConfirm}
         onConfirm={onClear}
       >
@@ -155,7 +155,7 @@ export default function ProgressRail({
           <path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v3h3" />
         </svg>
       </ConfirmButton>
-      {running && (
+      {locked && (
         <span className="hint" id="clear-hint">
           You can clear the form once the run finishes.
         </span>

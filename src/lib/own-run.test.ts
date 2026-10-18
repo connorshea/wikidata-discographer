@@ -3,6 +3,7 @@ import type { EditLogEntry } from "./api-types.ts";
 import { FetchError } from "./client.ts";
 import {
   adoptOwnRun,
+  afterOwnRun,
   applyCreated,
   createdAny,
   formOfRun,
@@ -16,6 +17,7 @@ import {
 } from "./own-run.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
 import { track } from "./example.fixture.ts";
+import { removeTrack } from "./tracks.ts";
 
 /** A Storage backed by a Map. */
 function memoryStore() {
@@ -231,5 +233,34 @@ describe("formOfRun", () => {
     const s = structuredClone(input);
     formOfRun(s, run);
     expect(s).toEqual(input);
+  });
+});
+
+describe("afterOwnRun", () => {
+  const input = structuredClone(EMPTY);
+  input.album = { ...input.album, mode: "create", title: "New" };
+  input.discs[0].tracks = [track(1, "Intro"), track(2, "Outro")];
+  const edits = [edit({ key: "album", qid: "Q1" }), edit({ key: "track:0:1", qid: "Q3" })];
+
+  it("clears the run's form once the run is done", () => {
+    expect(afterOwnRun(structuredClone(input), { status: "done", input, edits })).toBe("clear");
+    const s = structuredClone(input);
+    applyCreated(s, edits);
+    expect(afterOwnRun(s, { status: "done", input, edits })).toBe("clear");
+  });
+
+  it("writes the QIDs of a run that didn't finish back into its form", () => {
+    for (const status of ["failed", "interrupted", "unknown"] as const) {
+      expect(afterOwnRun(structuredClone(input), { status, input, edits })).toBe("apply");
+      expect(afterOwnRun(structuredClone(input), { status, input, edits: [] })).toBe("none");
+    }
+  });
+
+  it("leaves a form changed since the run started alone", () => {
+    // Removing track 1 renumbers "Outro" as track 1, which would get the old track 1's QID.
+    const s = structuredClone(input);
+    removeTrack(s.discs[0], 0);
+    for (const status of ["done", "failed"] as const)
+      expect(afterOwnRun(s, { status, input, edits })).toBe("none");
   });
 });

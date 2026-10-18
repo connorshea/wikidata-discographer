@@ -156,3 +156,18 @@ export function formOfRun(
   const missing = run.edits.filter((e) => isCreated(e) && blank(state, input, e.key!));
   return withCreated(state, missing) === target ? "behind" : "other";
 }
+
+/**
+ * What the own run's end does to the form it started from: "clear" it once the
+ * run is done, "apply" the QIDs it created, or "none". A form changed since
+ * the run started ("other") gets nothing: the QIDs go in by plan key, so with
+ * a track removed or moved they'd land on the wrong rows.
+ */
+export function afterOwnRun(
+  state: State,
+  r: Pick<SubmissionInfo, "status" | "input" | "edits">,
+): "clear" | "apply" | "none" {
+  if (formOfRun(state, r) === "other") return "none";
+  if (r.status === "done") return "clear";
+  return createdAny(r.edits) ? "apply" : "none";
+}
