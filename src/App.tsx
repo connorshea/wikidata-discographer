@@ -178,23 +178,40 @@ function Footer() {
 function LoginBanner() {
   const { configured, sessionEnded } = useAuth();
   const loggedOut = useLoggedOut();
-  if (!loggedOut) return null;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const loginRef = useRef<HTMLAnchorElement>(null);
+  // A session that ends makes the form inert, which drops the focus of anyone
+  // working in it. It goes to the login instead, so it isn't lost.
+  useEffect(() => {
+    if (!sessionEnded) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.closest("[inert]")) return;
+    (loginRef.current ?? headingRef.current)?.focus();
+  }, [sessionEnded]);
+  // The live region is always there, even empty, so a screen reader announces
+  // the banner when a session ends: one added along with its text isn't read.
   return (
-    <div className="login-banner" role="status">
-      <div>
-        <strong>{sessionEnded ? "Your session has ended" : "Log in to use Discographer"}</strong>
-        <p>
-          {sessionEnded
-            ? "Log in again to carry on."
-            : "You need to log in with your Wikidata account to search, import, or make edits."}
-        </p>
-      </div>
-      {configured ? (
-        <a className="btn" href={loginHref()}>
-          Log in with Wikimedia
-        </a>
-      ) : (
-        <p className="msg err">Login isn't configured on this server.</p>
+    <div role="status">
+      {loggedOut && (
+        <div className="login-banner">
+          <div>
+            <h2 ref={headingRef} tabIndex={-1}>
+              {sessionEnded ? "Your session has ended" : "Log in to use Discographer"}
+            </h2>
+            <p>
+              {sessionEnded
+                ? "Log in again to carry on."
+                : "You need to log in with your Wikidata account to search, import, or make edits."}
+            </p>
+          </div>
+          {configured ? (
+            <a ref={loginRef} className="btn" href={loginHref()}>
+              Log in with Wikimedia
+            </a>
+          ) : (
+            <p className="msg err">Login isn't configured on this server.</p>
+          )}
+        </div>
       )}
     </div>
   );

@@ -3552,6 +3552,13 @@ fieldset.lock:disabled .grip {
   border-left: 4px solid var(--accent);
   border-radius: 10px;
 }
+.login-banner h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+.login-banner h2:focus {
+  outline: none;
+}
 .login-banner p {
   margin: 4px 0 0;
   color: var(--muted);
