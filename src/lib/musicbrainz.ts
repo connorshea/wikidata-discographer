@@ -201,23 +201,23 @@ export function releaseIds(release: MbRelease) {
 const TRACK_LINKS = {
   spotify: {
     fromUrl: /open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/([0-9A-Za-z]{22})/,
-    song: "Spotify track",
+    service: "Spotify",
     label: "Spotify track ID",
   },
   // MusicBrainz rewrites older Apple links on recordings to this form.
   appleMusic: {
     fromUrl: /^https:\/\/music\.apple\.com\/[a-z]{2}\/song\/(\d+)$/,
-    song: "Apple Music song",
+    service: "Apple Music",
     label: "Apple Music track ID",
   },
   deezer: {
     fromUrl: /^https:\/\/www\.deezer\.com\/(?:[a-z]{2}\/)?track\/(\d+)$/,
-    song: "Deezer track",
+    service: "Deezer",
     label: "Deezer track ID",
   },
   tidal: {
     fromUrl: /^https:\/\/(?:listen\.)?tidal\.com\/(?:browse\/)?track\/(\d+)$/,
-    song: "Tidal track",
+    service: "Tidal",
     label: "Tidal track ID",
   },
 } as const;
@@ -271,8 +271,40 @@ const KIND_NOUNS: Record<MusicKind, string> = {
   work: "composition",
   track: "track",
 };
-const aKind = (kind: MusicKind) =>
-  `${/^[aeiouE]/.test(KIND_NOUNS[kind]) ? "an" : "a"} ${KIND_NOUNS[kind]}`;
+
+/** An identifier the import adds, and to how many items. */
+export interface MbIdCount {
+  label: string;
+  n: number;
+}
+
+/** What a load found and filled in, for the report under the start bar. */
+export interface MbReport {
+  /** Items on Wikidata with a work ID only a composition should have. */
+  misplaced: {
+    qid: string;
+    /** What the item is, as a noun: "single". */
+    kind: string;
+    /** The title of the track whose work ID it has. */
+    title: string;
+    /** No composition has the work ID, so the new one gets it. */
+    newComp: boolean;
+  }[];
+  /** By streaming service, the new tracks that link more than one track on it, so get none of its IDs. */
+  severalLinks: { service: string; titles: string[] }[];
+  /** How many tracks the run creates, rather than reusing one already on Wikidata. */
+  newTracks: number;
+  /** The album's identifiers left off, as the release or release group links more than one. */
+  severalAlbumLinks: { from: "release" | "release group"; n: number; what: string }[];
+  /** Items already on Wikidata, found by their MusicBrainz IDs. */
+  found: { album: string | null; artists: number; compositions: number; tracks: number };
+  /** The identifiers each kind of new item gets. */
+  added: { album: string[]; tracks: MbIdCount[]; compositions: MbIdCount[] };
+  /** What gets a MusicBrainz reference: "durations", "ISRCs". */
+  references: string[];
+  /** Things the user should check in the form, in plain sentences. */
+  notes: string[];
+}
 
 /** What the import fills in. Settings other than the date and language are left as they are. */
 export interface MbForm {
@@ -281,9 +313,7 @@ export interface MbForm {
   discs: Disc[];
   date: string;
   p407: string;
-  /** Things the user should check, in plain sentences. */
-  notes: string[];
-  summary: string;
+  report: MbReport;
 }
 
 // ISO 639-3, as MusicBrainz gives a release's language, → the languages the form lists.
@@ -422,18 +452,17 @@ export function releaseToForm(
   let missingLength = 0;
   let comps = 0;
   let tracks = 0;
-  const many: Record<TrackLinkKey, number> = {
-    spotify: 0,
-    appleMusic: 0,
-    deezer: 0,
-    tidal: 0,
+  const several: Record<TrackLinkKey, string[]> = {
+    spotify: [],
+    appleMusic: [],
+    deezer: [],
+    tidal: [],
   };
   const taken = new Set(lookups.taken);
   const misplaced = new Map<string, string>();
   const toAdd = {
     recordings: 0,
     works: 0,
-    iswcComps: 0,
     iswcs: 0,
     isrcs: 0,
     spotify: 0,
@@ -483,13 +512,12 @@ export function releaseToForm(
         toAdd.appleMusic += ids.appleMusic.length;
         toAdd.deezer += ids.deezer.length;
         toAdd.tidal += ids.tidal.length;
-        for (const key of Object.keys(many) as TrackLinkKey[])
-          if (trackLinks(t, key).length > 1) many[key]++;
+        for (const key of Object.keys(several) as TrackLinkKey[])
+          if (trackLinks(t, key).length > 1) several[key].push(t.title.trim());
         toAdd.durationRefs += t.length === null ? 0 : 1;
       }
       if (!disc.comp[t.position]) {
         toAdd.works += ids.work ? 1 : 0;
-        toAdd.iswcComps += ids.iswcs.length ? 1 : 0;
         toAdd.iswcs += ids.iswcs.length;
       }
       if (t.length === null) missingLength++;
@@ -506,24 +534,18 @@ export function releaseToForm(
     return disc;
   });
   // A work ID belongs on the composition, never on a single.
-  for (const [work, title] of misplaced) {
-    const holders = lookups.misplacedWorks![work];
-    const which = holders.map((h) => `${h.qid}, ${aKind(h.kind)},`).join(" and ");
-    const one = holders.length === 1;
-    const instead = lookups.works[work] ? "" : " The new composition gets it instead.";
-    notes.push(
-      `${which} ${one ? "has" : "have"} the work ID for “${title}”. Only a composition should have one. Remove it from ${one ? `the ${KIND_NOUNS[holders[0].kind]}` : "them"}.${instead}`,
-    );
-  }
+  const misplacedItems = [...misplaced].flatMap(([work, title]) =>
+    lookups.misplacedWorks![work].map((h) => ({
+      qid: h.qid,
+      kind: KIND_NOUNS[h.kind],
+      title,
+      newComp: !lookups.works[work],
+    })),
+  );
   if (missingLength)
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,
     );
-  for (const [key, n] of Object.entries(many) as [TrackLinkKey, number][])
-    if (n)
-      notes.push(
-        `${plural(n, "track links", "tracks link")} more than one ${TRACK_LINKS[key].song} on MusicBrainz, so ${n === 1 ? "it gets" : "they get"} no ${TRACK_LINKS[key].label}.`,
-      );
 
   const type = PRIMARY_TYPES[rg["primary-type"] ?? ""];
   if (!type)
@@ -550,6 +572,7 @@ export function releaseToForm(
   };
   // Each identifier is cited to the release or release group that links it.
   const citedIds: AlbumMb["ids"] = {};
+  const severalAlbumLinks: MbReport["severalAlbumLinks"] = [];
   for (const f of ALBUM_ID_FIELDS) {
     if (f.key === "musicbrainz") continue;
     // A Discogs master or AllMusic album is the album as a whole, so MusicBrainz links it
@@ -564,9 +587,11 @@ export function releaseToForm(
     // Several links leave no way to tell which is the album, so none is filled in.
     if (linked.length > 1) {
       if (!albumQid)
-        notes.push(
-          `The ${from === "releaseGroup" ? "release group" : "release"} links ${linked.length} ${SEVERAL_ALBUM_LINKS[f.key]}, so none was filled in. Add the right one under Album.`,
-        );
+        severalAlbumLinks.push({
+          from: from === "releaseGroup" ? "release group" : "release",
+          n: linked.length,
+          what: SEVERAL_ALBUM_LINKS[f.key],
+        });
     } else if (linked.length) {
       ids[f.key] = linked[0];
       citedIds[f.key] = { value: linked[0], from };
@@ -595,28 +620,43 @@ export function releaseToForm(
       `The release's language (${language}) isn't one the form lists. Set the language of the work in Item settings.`,
     );
 
-  const songs = discs.reduce((n, _, i) => n + (media[i].tracks?.length ?? 0), 0);
-  const found = [
-    Object.keys(artists).length && plural(Object.keys(artists).length, "artist"),
-    comps && plural(comps, "composition"),
-    tracks && plural(tracks, "track"),
-  ].filter(Boolean);
-  const summary =
-    `Loaded ${plural(discs.length, "disc")} and ${plural(songs, "track")}. ` +
-    (albumQid ? `The album is already on Wikidata as ${albumQid}. ` : "") +
-    (!albumQid && linkedIds.length
-      ? `The new album gets the ${joinList(linkedIds)} MusicBrainz links to. `
-      : "") +
-    (found.length
-      ? `Found ${joinList(found as string[])} already on Wikidata by their MusicBrainz IDs.`
-      : "Found nothing else already on Wikidata by its MusicBrainz ID.") +
-    idsSummary(toAdd) +
-    refsSummary({
+  const songs = media.reduce((n, m) => n + m.tracks!.length, 0);
+  const report: MbReport = {
+    misplaced: misplacedItems,
+    severalLinks: (Object.entries(several) as [TrackLinkKey, string[]][])
+      .filter(([, titles]) => titles.length)
+      .map(([key, titles]) => ({ service: TRACK_LINKS[key].service, titles })),
+    newTracks: songs - tracks,
+    severalAlbumLinks,
+    found: {
+      album: albumQid ?? null,
+      artists: Object.keys(artists).length,
+      compositions: comps,
+      tracks,
+    },
+    added: {
+      album: albumQid ? [] : linkedIds,
+      tracks: idCounts([
+        ["recording ID", toAdd.recordings],
+        ["ISRC", toAdd.isrcs],
+        [TRACK_LINKS.appleMusic.service, toAdd.appleMusic, false],
+        [TRACK_LINKS.spotify.service, toAdd.spotify, false],
+        [TRACK_LINKS.deezer.service, toAdd.deezer, false],
+        [TRACK_LINKS.tidal.service, toAdd.tidal, false],
+      ]),
+      compositions: idCounts([
+        ["work ID", toAdd.works],
+        ["ISWC", toAdd.iswcs],
+      ]),
+    },
+    references: references({
       ...toAdd,
       // Only a new album gets the date and identifiers.
       date: !albumQid && citesDate,
       albumIds: albumQid ? 0 : linkedIds.length,
-    });
+    }),
+    notes,
+  };
 
   return {
     album: {
@@ -635,13 +675,12 @@ export function releaseToForm(
     discs: discs.length ? discs : [emptyDisc()],
     date,
     p407,
-    notes,
-    summary,
+    report,
   };
 }
 
-/** Which of the new album's, tracks' and compositions' statements get a MusicBrainz reference, as a sentence. */
-function refsSummary(n: {
+/** Which of the new album's, tracks' and compositions' statements get a MusicBrainz reference. */
+function references(n: {
   date: boolean;
   albumIds: number;
   isrcs: number;
@@ -651,8 +690,8 @@ function refsSummary(n: {
   deezer: number;
   tidal: number;
   durationRefs: number;
-}) {
-  const what = [
+}): string[] {
+  return [
     n.date && "publication date",
     n.albumIds && "album IDs",
     n.durationRefs && "durations",
@@ -660,49 +699,27 @@ function refsSummary(n: {
     n.iswcs && "ISWCs",
     n.spotify + n.appleMusic + n.deezer + n.tidal && "track IDs",
   ].filter(Boolean) as string[];
-  if (!what.length) return "";
-  return ` The imported ${joinList(what)} get a MusicBrainz reference.`;
 }
 
-/** What the import adds to the items the run creates, as a sentence. */
-function idsSummary(n: {
-  recordings: number;
-  works: number;
-  /** New compositions that get at least one ISWC. */
-  iswcComps: number;
-  iswcs: number;
-  isrcs: number;
-  spotify: number;
-  appleMusic: number;
-  deezer: number;
-  tidal: number;
-}) {
-  const parts = [
-    n.recordings && plural(n.recordings, "recording ID"),
-    n.isrcs && plural(n.isrcs, "ISRC"),
-    n.spotify && plural(n.spotify, TRACK_LINKS.spotify.label),
-    n.appleMusic && plural(n.appleMusic, TRACK_LINKS.appleMusic.label),
-    n.deezer && plural(n.deezer, TRACK_LINKS.deezer.label),
-    n.tidal && plural(n.tidal, TRACK_LINKS.tidal.label),
-  ].filter(Boolean) as string[];
-  const tracks = parts.length ? `New tracks get ${joinList(parts)}` : "";
-  const gets = (k: number) => (k === 1 ? "gets its" : "get their");
-  const iswc = n.iswcs > n.iswcComps ? "ISWCs" : "ISWC";
-  const works = [
-    n.works && `${plural(n.works, "new composition")} ${gets(n.works)} work ID`,
-    n.iswcComps &&
-      (n.works
-        ? `${n.iswcComps} ${gets(n.iswcComps)} ${iswc}`
-        : `${plural(n.iswcComps, "new composition")} ${gets(n.iswcComps)} ${iswc}`),
-  ]
-    .filter(Boolean)
-    .join(" and ");
-  if (!tracks && !works) return "";
-  return ` ${[tracks, works].filter(Boolean).join(", and ")}.`;
-}
+/** The identifiers added at least once, each labelled for its count. A service's name stays as it is. */
+const idCounts = (xs: [label: string, n: number, plural?: boolean][]): MbIdCount[] =>
+  xs
+    .filter(([, n]) => n)
+    .map(([label, n, plural = true]) => ({ label: plural && n !== 1 ? `${label}s` : label, n }));
 
-const joinList = (xs: string[]) =>
+export const joinList = (xs: string[]) =>
   xs.length < 2 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
+
+/** How much a report counts, for the start bar. */
+export function reportCounts(r: MbReport) {
+  const { found, added } = r;
+  return {
+    found: (found.album ? 1 : 0) + found.artists + found.compositions + found.tracks,
+    added: [...added.tracks, ...added.compositions].reduce((n, c) => n + c.n, added.album.length),
+    // Something to fix on Wikidata or check in the form, so the report stays open.
+    attention: r.misplaced.length + r.notes.length + r.severalAlbumLinks.length > 0,
+  };
+}
 
 /** The form filled from `form`, keeping the settings other than the date and language. */
 export function applyMbForm(state: State, form: MbForm): State {

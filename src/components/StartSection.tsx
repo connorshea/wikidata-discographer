@@ -9,7 +9,11 @@ import type { AddItemResponse, SearchItem, SearchResponse } from "../lib/api-typ
 import { FieldErr, QidInput } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import { AlbumTypeSelect, ArtistChips } from "./AlbumSection.tsx";
-import MusicBrainzImport, { type MusicBrainzImportHandle } from "./MusicBrainzImport.tsx";
+import { type MbReport, reportCounts } from "../lib/musicbrainz.ts";
+import MusicBrainzImport, {
+  ImportReport,
+  type MusicBrainzImportHandle,
+} from "./MusicBrainzImport.tsx";
 import type { SectionProps } from "./types.ts";
 
 /** What the rest of the form can ask of the start step. */
@@ -77,6 +81,11 @@ export default function StartSection({
   const [prev, setPrev] = useState<{ start: StartingPoint; album: State["album"] } | null>(null);
   // The search, kept here so "Pick a different album" comes back to it.
   const [query, setQuery] = useState("");
+  // What the last MusicBrainz load found, and whether its report is open
+  // when nothing in it needs attention.
+  const [report, setReport] = useState<MbReport | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const reportId = useId();
   const mbImport = useRef<MusicBrainzImportHandle>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
@@ -117,6 +126,9 @@ export default function StartSection({
   }, [card]);
 
   const summary = startSummary(state, plan, albumLabel);
+  const shownReport = state.start === "mb" ? report : null;
+  const counts = shownReport && reportCounts(shownReport);
+  const reportShown = !!counts && (counts.attention || reportOpen);
   return (
     <section className={`block start${picking ? "" : " started"}`} id="start" ref={sectionRef}>
       {picking ? (
@@ -184,13 +196,33 @@ export default function StartSection({
                 {summary.details.length > 0 && (
                   <span className="muted"> · {summary.details.join(" · ")}</span>
                 )}
+                {counts && !reportShown && (
+                  <span className="muted">
+                    {counts.found > 0 && ` · ${counts.found} already on Wikidata`}
+                    {counts.added > 0 && ` · ${counts.added} IDs added`}
+                  </span>
+                )}
               </span>
             </div>
+            {counts && !counts.attention && (
+              <button
+                type="button"
+                className="link start-change"
+                aria-expanded={reportOpen}
+                aria-controls={reportOpen ? reportId : undefined}
+                onClick={() => setReportOpen(!reportOpen)}
+              >
+                {reportOpen ? "Hide details" : "Details"}
+              </button>
+            )}
             <button type="button" className="link start-change" onClick={() => change()}>
               Change
             </button>
           </div>
         )
+      )}
+      {!picking && shownReport && reportShown && (
+        <ImportReport id={reportId} report={shownReport} />
       )}
       {picking && card === "existing" && <ExistingPanel state={state} update={update} />}
       {picking && card === "search" && (
@@ -201,7 +233,11 @@ export default function StartSection({
         ref={mbImport}
         state={state}
         showForm={picking && card === "mb"}
-        onLoad={onLoad}
+        onLoad={(next, r) => {
+          setReport(r);
+          setReportOpen(false);
+          onLoad(next);
+        }}
       />
     </section>
   );

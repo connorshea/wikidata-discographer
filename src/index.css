@@ -2904,8 +2904,162 @@ button.link.start-change {
   text-decoration: none;
   min-height: 44px;
 }
-section.block.start > .msg:first-of-type {
-  margin-top: 12px;
+/* What a MusicBrainz load found, under the start bar: a section for each kind of thing. */
+.mb-report {
+  margin-top: 14px;
+}
+.mb-report-sec {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--tint);
+}
+.mb-report-sec > svg {
+  margin-top: 2px;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mb-report-sec > svg.warn {
+  stroke: var(--warn-edge);
+}
+.mb-report-sec > svg.left-off circle {
+  stroke: var(--warn-edge);
+}
+.mb-report-sec > svg.left-off path {
+  stroke: var(--warn);
+  stroke-width: 1.6;
+}
+.mb-report-sec > svg.ids {
+  stroke: var(--muted);
+}
+.mb-report-sec > svg.ok circle {
+  fill: var(--ok);
+}
+.mb-report-sec > svg.ok path {
+  stroke: var(--panel);
+  stroke-width: 1.6;
+}
+.mb-report-sec h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.mb-report-body {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.mb-report-body p {
+  margin: 0;
+}
+.mb-fix {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--warn-edge) 35%, var(--panel));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn-tint) 45%, var(--panel));
+}
+.mb-fix li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 9px 12px;
+}
+.mb-fix li + li {
+  border-top: 1px solid color-mix(in srgb, var(--warn-edge) 25%, var(--panel));
+}
+.mb-fix .mono {
+  font-size: 13px;
+}
+.mb-fix-open {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* Tracks left off each service's IDs. */
+.mb-skip {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 6px 12px;
+}
+.mb-skip dt {
+  font-weight: 600;
+}
+.mb-skip dd {
+  margin: 0;
+}
+.mb-skip-all {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mb-skip-all .link {
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mb-skip-list {
+  display: block;
+}
+.mb-report-body p.mb-report-aside {
+  font-size: 13px;
+  color: var(--muted);
+}
+.mb-ids {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: baseline;
+}
+.mb-ids dt {
+  font-weight: 600;
+}
+.mb-ids dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mb-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--tint);
+  font-size: 13px;
+  color: var(--muted);
+}
+.mb-count b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.mb-report-body p.mb-refs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .mb-ids,
+  .mb-skip {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .mb-ids dd + dt,
+  .mb-skip dd + dt {
+    margin-top: 6px;
+  }
 }
 
 /* Until a starting point is picked: muted, dashed and disabled. */

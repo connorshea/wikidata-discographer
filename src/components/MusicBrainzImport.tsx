@@ -1,10 +1,27 @@
-import { type Ref, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { api, FetchError } from "../lib/client.ts";
-import { applyMbForm, type MbForm, parseMbInput, type ReleaseChoice } from "../lib/musicbrainz.ts";
+import {
+  applyMbForm,
+  joinList,
+  type MbForm,
+  type MbReport,
+  parseMbInput,
+  type ReleaseChoice,
+  reportCounts,
+} from "../lib/musicbrainz.ts";
 import type { State } from "../lib/plan.ts";
 import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { Qids } from "./common.tsx";
+import { Qids, WikiLink } from "./common.tsx";
 
 const message = (err: unknown, what: string) =>
   err instanceof FetchError && err.status < 500
@@ -22,8 +39,8 @@ export interface MusicBrainzImportHandle {
 }
 
 /**
- * Loads a MusicBrainz release into the form, replacing what's there. It stays
- * mounted once the form is started, to show what the last load found and to
+ * Loads a MusicBrainz release into the form, replacing what's there, and
+ * hands `onLoad` what it found. It stays mounted once the form is started, to
  * load a release group the album section suggests, but only shows its URL
  * field while `showForm`.
  */
@@ -35,10 +52,9 @@ export default function MusicBrainzImport({
 }: {
   state: State;
   showForm: boolean;
-  onLoad: (next: State) => void;
+  onLoad: (next: State, report: MbReport) => void;
   ref?: Ref<MusicBrainzImportHandle>;
 }) {
-  const { wikiBaseUrl } = useAuth();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -53,8 +69,6 @@ export default function MusicBrainzImport({
   // releases to list asks for the release's URL instead. The server only
   // honors it for a release in that group.
   const albumFor = useRef<{ album: string; releaseGroup: string } | null>(null);
-  // What the last load found, until the next one.
-  const [loaded, setLoaded] = useState<MbForm | null>(null);
   const pickId = useId();
   const inputId = useId();
   // Set when a release group is loaded from elsewhere in the form, to move
@@ -62,8 +76,7 @@ export default function MusicBrainzImport({
   const focusPick = useRef(false);
 
   const apply = (form: MbForm) => {
-    onLoad(applyMbForm(state, form));
-    setLoaded(form);
+    onLoad(applyMbForm(state, form), form.report);
     setGroup(null);
     setInput("");
     albumFor.current = null;
@@ -77,7 +90,6 @@ export default function MusicBrainzImport({
     const id = ++latest.current;
     const current = () => latest.current === id;
     setError("");
-    setLoaded(null);
     setBusy(true);
     try {
       await fn(current);
@@ -215,18 +227,245 @@ export default function MusicBrainzImport({
           {error && <p className="msg err">{error}</p>}
         </div>
       )}
-      {loaded && (
-        <>
-          <p className="msg ok">
-            <Qids base={wikiBaseUrl}>{loaded.summary}</Qids>
+    </>
+  );
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Nodes joined as a list in a sentence: "a, b and c". */
+function joinNodes(xs: ReactNode[]) {
+  return xs.map((x, i) => (
+    <Fragment key={i}>
+      {i > 0 && (i === xs.length - 1 ? " and " : ", ")}
+      {x}
+    </Fragment>
+  ));
+}
+
+const ICONS = {
+  warn: (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className="warn">
+      <path d="M9 1.8l7.6 13.4H1.4z" />
+      <path d="M9 7v3.8M9 13v.2" />
+    </svg>
+  ),
+  leftOff: (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className="left-off">
+      <circle cx="9" cy="9" r="7.5" />
+      <path d="M9 8v5M9 5.3v.2" />
+    </svg>
+  ),
+  ok: (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className="ok">
+      <circle cx="9" cy="9" r="8" />
+      <path d="M5.4 9.2l2.4 2.4 4.8-5" />
+    </svg>
+  ),
+  ids: (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className="ids">
+      <rect x="2" y="3" width="14" height="12" rx="2" />
+      <path d="M5 7h8M5 10h5" />
+    </svg>
+  ),
+};
+
+/** Up to five tracks, listed. More are a count, with a button to list them. */
+function SkippedTracks({
+  titles,
+  every,
+  reused,
+}: {
+  titles: string[];
+  /** Every new track is one of them. */
+  every: boolean;
+  /** Some tracks are reused, so "every track" would overstate it. */
+  reused: boolean;
+}) {
+  const [shown, setShown] = useState(false);
+  const list = titles.join(", ");
+  if (titles.length <= 5) return list;
+  return (
+    <>
+      <span className="mb-skip-all">
+        {every ? (reused ? "Every new track" : "Every track") : plural(titles.length, "track")}
+        <button
+          type="button"
+          className="link"
+          aria-expanded={shown}
+          onClick={() => setShown(!shown)}
+        >
+          {shown ? "Hide" : `Show ${titles.length}`}
+        </button>
+      </span>
+      {shown && <span className="mb-skip-list">{list}</span>}
+    </>
+  );
+}
+
+function ReportSection({
+  icon,
+  title,
+  children,
+}: {
+  icon: keyof typeof ICONS;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mb-report-sec">
+      {ICONS[icon]}
+      <h3>{title}</h3>
+      <div className="mb-report-body">{children}</div>
+    </div>
+  );
+}
+
+/** What the last MusicBrainz load found and filled in, a section for each kind of thing. */
+export function ImportReport({ id, report }: { id?: string; report: MbReport }) {
+  const { wikiBaseUrl } = useAuth();
+  const { misplaced, severalLinks, severalAlbumLinks, found, added, references, notes } = report;
+  const counts = reportCounts(report);
+  const leftOff = severalLinks.reduce((n, l) => n + l.titles.length, severalAlbumLinks.length);
+
+  const kinds = new Set(misplaced.map((m) => m.kind));
+  const holders = kinds.size === 1 ? `${[...kinds][0]}s` : "items";
+  const oneHolder = misplaced.length === 1;
+
+  const foundParts: ReactNode[] = [
+    found.album && (
+      <>
+        the album <WikiLink base={wikiBaseUrl} qid={found.album} />
+      </>
+    ),
+    found.artists > 0 && plural(found.artists, "artist"),
+    found.compositions > 0 && plural(found.compositions, "composition"),
+    found.tracks > 0 && plural(found.tracks, "track"),
+  ].filter(Boolean);
+
+  const idRows: [string, string[] | MbReport["added"]["tracks"]][] = [
+    ["New album", added.album],
+    ["New tracks", added.tracks],
+    ["New compositions", added.compositions],
+  ];
+
+  return (
+    <div className="mb-report" id={id}>
+      {misplaced.length > 0 && (
+        <ReportSection icon="warn" title={`Fix on Wikidata · ${misplaced.length}`}>
+          <p>
+            {oneHolder ? `This ${misplaced[0].kind} has` : `These ${holders} have`} a composition's
+            work ID. Consider removing {oneHolder ? "it" : "them"} on Wikidata, as only a
+            composition should have one.
           </p>
-          {loaded.notes.map((n) => (
-            <p key={n} className="msg warn">
+          <ul className="mb-fix">
+            {misplaced.map((m) => (
+              <li key={`${m.qid} ${m.title}`}>
+                <span className="mono">
+                  <WikiLink base={wikiBaseUrl} qid={m.qid} />
+                </span>
+                <span>{m.kind}</span>
+                <span className="muted">has the work ID for</span>
+                <b>“{m.title}”</b>
+                {m.newComp && <span className="muted">The new composition gets it instead.</span>}
+                <a
+                  className="mb-fix-open"
+                  href={`${wikiBaseUrl}/wiki/${m.qid}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open on Wikidata ↗
+                </a>
+              </li>
+            ))}
+          </ul>
+        </ReportSection>
+      )}
+      {notes.length > 0 && (
+        <ReportSection icon="warn" title={`Check in the form · ${notes.length}`}>
+          {notes.map((n) => (
+            <p key={n}>
               <Qids base={wikiBaseUrl}>{n}</Qids>
             </p>
           ))}
-        </>
+        </ReportSection>
       )}
-    </>
+      {leftOff > 0 && (
+        <ReportSection icon="leftOff" title={`IDs left off · ${leftOff}`}>
+          {severalAlbumLinks.map((l) => (
+            <p key={l.what}>
+              The {l.from} links {l.n} {l.what}, so none was filled in. Add the right one under
+              Album.
+            </p>
+          ))}
+          {severalLinks.length > 0 && (
+            <>
+              <p>
+                MusicBrainz links multiple IDs for some tracks, so these IDs will be left off the
+                following tracks:
+              </p>
+              <dl className="mb-skip">
+                {severalLinks.map((l) => (
+                  <Fragment key={l.service}>
+                    <dt>{l.service}</dt>
+                    <dd>
+                      <SkippedTracks
+                        titles={l.titles}
+                        every={l.titles.length === report.newTracks}
+                        reused={found.tracks > 0}
+                      />
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+              <p className="mb-report-aside">The tracks will still be created.</p>
+            </>
+          )}
+        </ReportSection>
+      )}
+      {counts.found > 0 && (
+        <ReportSection icon="ok" title="Already on Wikidata">
+          <p>
+            Matched by MusicBrainz ID: {joinNodes(foundParts)}. {counts.found === 1 ? "It" : "They"}{" "}
+            will be reused.
+          </p>
+        </ReportSection>
+      )}
+      {counts.added > 0 && (
+        <ReportSection icon="ids" title="Identifiers added">
+          <dl className="mb-ids">
+            {idRows.map(
+              ([what, ids]) =>
+                ids.length > 0 && (
+                  <Fragment key={what}>
+                    <dt>{what}</dt>
+                    <dd>
+                      {ids.map((c) =>
+                        typeof c === "string" ? (
+                          <span key={c} className="mb-count">
+                            {c}
+                          </span>
+                        ) : (
+                          <span key={c.label} className="mb-count">
+                            <b>{c.n}</b> {c.label}
+                          </span>
+                        ),
+                      )}
+                    </dd>
+                  </Fragment>
+                ),
+            )}
+          </dl>
+          {references.length > 0 && (
+            <p className="mb-refs">
+              <span className="mb-badge" aria-hidden="true">
+                MB
+              </span>
+              The imported {joinList(references)} get a MusicBrainz reference.
+            </p>
+          )}
+        </ReportSection>
+      )}
+    </div>
   );
 }
