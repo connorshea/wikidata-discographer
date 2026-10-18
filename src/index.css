@@ -3024,10 +3024,10 @@ button.link.start-change {
   color: var(--muted);
 }
 .mb-ids {
-  margin: 0;
+  margin: 6px 0 0;
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
-  gap: 14px 12px;
+  gap: 8px 12px;
   align-items: baseline;
 }
 .mb-ids dt {
