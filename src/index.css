@@ -3967,6 +3967,9 @@ table.artist-albums {
   font-size: 13px;
   font-weight: 600;
 }
+.artist-albums td.act > a + a {
+  margin-left: 16px;
+}
 .artist-albums a.use-link {
   display: inline-flex;
   align-items: center;
