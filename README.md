@@ -43,8 +43,9 @@ pnpm db:migrate        # apply migrations
 pnpm dev               # Vite on :5173 (proxying /api) + the Hono server on :8000
 ```
 
-Every API endpoint but the login flow needs a login, so without the `OAUTH_*`
-variables nobody can log in and the app can't be used.
+Every API endpoint but the login flow and the album list needs a login, so
+without the `OAUTH_*` variables nobody can log in and only the album list can
+be used.
 
 ## Commands
 
@@ -164,9 +165,9 @@ from when it was first used on Wikidata. They're read from the OAuth profile
 at login: the age is measured from the stored registration date, so it isn't
 stale, but a new edit only counts once the user logs out and back in.
 
-Every API endpoint other than `/api/auth/*` answers 401 to a logged-out
-request, as they query the database or call Wikidata, SPARQL and MusicBrainz
-on the server's behalf.
+Every API endpoint other than `/api/auth/*` and the album list (`/api/albums`)
+answers 401 to a logged-out request, as they query the database or call
+Wikidata, SPARQL and MusicBrainz on the server's behalf.
 
 Session cookies are `HttpOnly; SameSite=Lax`, and the database stores only
 their hash. OAuth tokens are encrypted with `TOKEN_ENC_KEY`. Requests that

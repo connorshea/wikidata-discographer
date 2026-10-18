@@ -172,8 +172,8 @@ function Footer() {
 }
 
 /**
- * Above a page while logged out. Every API endpoint needs a login, so the page
- * below is shown dimmed and can't be used until then.
+ * Above the form while logged out. Every API endpoint it uses needs a login, so
+ * the form below is shown dimmed and can't be used until then.
  */
 function LoginBanner() {
   const { configured, sessionEnded } = useAuth();
@@ -211,7 +211,6 @@ export default function App() {
       <Route path="/albums">
         <Header />
         <main className="page">
-          <LoginBanner />
           <AlbumList />
           <Footer />
         </main>

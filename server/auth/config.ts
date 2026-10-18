@@ -1,7 +1,8 @@
 // Auth configuration, read from the environment on every call (not memoized) so
 // tests can set variables after import and the server never caches a half-set
 // config. When the OAuth consumer isn't configured, login returns 503, and as
-// every other API endpoint needs a login, the app can't be used.
+// every API endpoint but the album list needs a login, only the album list
+// can be used.
 import "dotenv/config";
 import { loadEncKeys } from "./crypto.ts";
 

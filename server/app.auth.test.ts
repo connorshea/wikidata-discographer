@@ -1,19 +1,17 @@
-// Every API endpoint but the login flow answers 401 logged out. Walks the
-// routes the app has registered, so a new one can't be left open by mistake.
+// Every API endpoint but the public ones (the login flow and the album list)
+// answers 401 logged out. Walks the routes the app has registered, so a new
+// one can't be left open by mistake.
 import { describe, expect, it } from "vite-plus/test";
-import { app } from "./app.ts";
+import { app, isPublicApi } from "./app.ts";
 
 /**
- * Each API route the app has, other than the login flow and the 404 catch-all.
+ * Each API route the app has, other than the public ones and the 404 catch-all.
  * A route with its own middleware is listed once per handler, so once here.
  */
 const routes = [
   ...new Map(
     app.routes
-      .filter(
-        (r) =>
-          r.path.startsWith("/api/") && !r.path.startsWith("/api/auth/") && !r.path.includes("*"),
-      )
+      .filter((r) => r.path.startsWith("/api/") && !isPublicApi(r.path) && !r.path.includes("*"))
       .map((r) => [`${r.method} ${r.path}`, r]),
   ).values(),
 ];
@@ -21,7 +19,7 @@ const routes = [
 describe("login gate", () => {
   it("finds the routes to check", () => {
     const paths = routes.map((r) => `${r.method} ${r.path}`);
-    expect(paths).toContain("GET /api/albums");
+    expect(paths).toContain("GET /api/items/search");
     expect(paths).toContain("POST /api/items/:qid");
     expect(paths).toContain("GET /api/musicbrainz/release/:mbid");
   });
@@ -35,6 +33,13 @@ describe("login gate", () => {
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "Login required" });
+  });
+
+  it("keeps only the login flow and the album list public", () => {
+    expect(isPublicApi("/api/auth/me")).toBe(true);
+    expect(isPublicApi("/api/albums")).toBe(true);
+    expect(isPublicApi("/api/albums/1")).toBe(false);
+    expect(isPublicApi("/api/items/search")).toBe(false);
   });
 
   it("leaves the login flow open", async () => {

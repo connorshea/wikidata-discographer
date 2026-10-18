@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import type { AlbumListEntry, AlbumListResponse, AlbumRun } from "../lib/api-types.ts";
-import { useAuth, useLoggedOut } from "../lib/auth-context.ts";
+import { useAuth } from "../lib/auth-context.ts";
 import { api } from "../lib/client.ts";
 
 const STATUS: Record<AlbumRun["status"], { label: string; tone: string }> = {
@@ -26,8 +26,9 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : "Couldn't lo
 
 export default function AlbumList() {
   const { user, loading } = useAuth();
-  const loggedOut = useLoggedOut();
   const [mine, setMine] = useState(false);
+  // The filter needs a login. One whose session ends goes back to every album.
+  const onlyMine = mine && !!user;
   const [albums, setAlbums] = useState<AlbumListEntry[]>([]);
   const [next, setNext] = useState<number | null>(null);
   const [busy, setBusy] = useState(true);
@@ -35,14 +36,13 @@ export default function AlbumList() {
 
   // The first page, again whenever the filter changes.
   useEffect(() => {
-    // Logged out, there's nothing to ask for. A list loaded before the
-    // session ended stays.
-    if (loading || loggedOut) return;
+    if (loading) return;
     const ctl = new AbortController();
-    fetchAlbums(null, mine, ctl.signal)
+    fetchAlbums(null, onlyMine, ctl.signal)
       .then((r) => {
         setAlbums(r.albums);
         setNext(r.next);
+        setError(null);
         setBusy(false);
       })
       .catch((e: unknown) => {
@@ -51,12 +51,12 @@ export default function AlbumList() {
         setBusy(false);
       });
     return () => ctl.abort();
-  }, [mine, loading, loggedOut]);
+  }, [onlyMine, loading]);
 
   const showMore = () => {
     setBusy(true);
     setError(null);
-    fetchAlbums(next, mine)
+    fetchAlbums(next, onlyMine)
       .then((r) => {
         setAlbums((prev) => [...prev, ...r.albums]);
         setNext(r.next);
@@ -66,7 +66,7 @@ export default function AlbumList() {
   };
 
   return (
-    <section className={loggedOut ? "block logged-out" : "block"} inert={loggedOut}>
+    <section className="block">
       <h2>Albums</h2>
       <p className="hint">All recent albums created with Discographer.</p>
       {user && (
@@ -83,11 +83,9 @@ export default function AlbumList() {
           Only albums I've worked on
         </label>
       )}
-      {/* Logged out, the banner above says why. */}
-      {error && !loggedOut && <p className="msg err">{error}</p>}
-      {loggedOut && !albums.length && <p className="hint">Log in to see the albums.</p>}
+      {error && <p className="msg err">{error}</p>}
       {!busy && !error && !albums.length && (
-        <p className="hint">{mine ? "You haven't run any albums yet." : "No albums yet."}</p>
+        <p className="hint">{onlyMine ? "You haven't run any albums yet." : "No albums yet."}</p>
       )}
       {albums.length > 0 && (
         <div className="tablewrap">

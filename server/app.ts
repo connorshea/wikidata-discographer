@@ -41,12 +41,14 @@ app.use(
 
 app.use("/api/*", sameOriginOnly);
 app.use("/api/*", sessionMiddleware);
-// Every endpoint but the login flow needs a login: they query the database or
-// call Wikidata and MusicBrainz on the server's behalf, which shouldn't be open
-// to anyone. /api/auth/* (login, callback, logout, me) works logged out.
-app.use("/api/*", (c, next) =>
-  c.req.path.startsWith("/api/auth/") ? next() : requireUser(c, next),
-);
+// Every endpoint but these needs a login: the rest query the database or call
+// Wikidata and MusicBrainz on the server's behalf, which shouldn't be open to
+// anyone. The login flow (/api/auth/*) has to work logged out, and the album
+// list is public, like the edits themselves.
+/** Whether an API path works logged out. */
+export const isPublicApi = (path: string) =>
+  path.startsWith("/api/auth/") || path === "/api/albums";
+app.use("/api/*", (c, next) => (isPublicApi(c.req.path) ? next() : requireUser(c, next)));
 app.route("/api/albums", albumRoutes);
 app.route("/api/auth", authRoutes); // /api/auth/{login,callback,logout,me}
 app.route("/api/items", items);
