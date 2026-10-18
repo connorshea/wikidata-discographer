@@ -1346,6 +1346,16 @@ button.link {
 .match-folded .match-top h2 {
   flex: 0 1 auto;
 }
+/* A quiet text button: the matches below are the section's point, not this. */
+button.link.match-fill {
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  min-height: 32px;
+}
+button.link.match-fill:hover {
+  text-decoration: underline;
+}
 .match-sum {
   flex: 1 1 auto;
   font-size: 14px;

@@ -421,7 +421,7 @@ export default function RunSection({
                     </>
                   )}
                 </p>
-                {unreviewed > 0 && <UnreviewedNotice count={unreviewed} />}
+                {unreviewed > 0 && <UnreviewedNotice count={unreviewed} up />}
                 <EditBar shares={editShares(edits, albumName)} total={count} />
                 <div className="create-go">
                   <button type="button" className="go" disabled={disabled} onClick={openConfirm}>
