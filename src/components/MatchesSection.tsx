@@ -254,11 +254,8 @@ export default function MatchesSection({
               Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
             </button>
             <InfoTip id="match-fill" label="About unambiguous matches" end>
-              A match is unambiguous when it's the only item for a field with the track's title that
-              also shares a performer, composer or lyricist, or is already on this album. This fills
-              each empty track and composition field that has one, and the single field of tracks
-              ticked as singles. Matches on a similar title, or on the title alone, are never filled
-              in and are left for you to review.
+              Fills each empty field that has exactly one match with the track's title and the same
+              artist. Anything less certain is left for you to review.
             </InfoTip>
           </span>
         )}
