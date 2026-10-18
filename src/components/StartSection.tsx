@@ -285,10 +285,18 @@ function SearchPanel({
   // (a tracklist removed since). Kept across searches: they're newer.
   const [refreshes, setRefreshes] = useState<ReadonlyMap<string, Refresh>>(() => new Map());
   const setRefresh = (qid: string, r: Refresh) => setRefreshes((m) => new Map(m).set(qid, r));
+  const resultsRef = useRef<HTMLUListElement>(null);
+  // A refreshed result whose Refresh button had focus. The button goes once
+  // it's done, so focus moves to what the result offers next.
+  const focusRefreshed = useRef<string | null>(null);
   const refresh = (qid: string) => {
     setRefresh(qid, { status: "busy" });
     api<AddItemResponse>(`/api/items/${encodeURIComponent(qid)}`, { method: "POST" })
-      .then((r) => setRefresh(qid, { status: "done", item: r.item }))
+      .then((r) => {
+        const focused = document.activeElement?.closest<HTMLElement>("[data-qid]");
+        if (focused?.dataset.qid === qid) focusRefreshed.current = qid;
+        setRefresh(qid, { status: "done", item: r.item });
+      })
       .catch((err: unknown) =>
         setRefresh(qid, {
           status: "failed",
@@ -296,6 +304,17 @@ function SearchPanel({
         }),
       );
   };
+  useEffect(() => {
+    const qid = focusRefreshed.current;
+    if (!qid) return;
+    focusRefreshed.current = null;
+    // "Use this album" if it can be used now, else "View on Wikidata".
+    resultsRef.current
+      ?.querySelector<HTMLElement>(
+        `[data-qid="${qid}"] .search-result-actions :is(button:enabled, a)`,
+      )
+      ?.focus();
+  }, [refreshes]);
   useEffect(() => {
     if (!q) return;
     let cancelled = false;
@@ -359,14 +378,14 @@ function SearchPanel({
         )}
       </div>
       {!!items?.length && (
-        <ul className="search-results">
+        <ul className="search-results" ref={resultsRef}>
           {items.map((i) => {
             const tracks = i.album?.tracks ?? 0;
             const type = i.kind === "ep" ? "EP" : "Album";
             const label = i.label ?? i.qid;
             const refreshing = refreshes.get(i.qid);
             return (
-              <li key={i.qid} className={`search-result${tracks ? " taken" : ""}`}>
+              <li key={i.qid} className={`search-result${tracks ? " taken" : ""}`} data-qid={i.qid}>
                 <span className="search-result-text">
                   <span className="search-result-title">
                     <b>{label}</b>
@@ -396,6 +415,23 @@ function SearchPanel({
                       {refreshing?.status === "done"
                         ? "It still has a tracklist on Wikidata, so Discographer can't modify it, sorry!"
                         : "Discographer can't modify an album that already has a tracklist, sorry!"}
+                      {/* The search is of the mirror, which can be behind Wikidata. Refreshing needs a login. */}
+                      {user && refreshing?.status !== "done" && (
+                        <>
+                          {" "}
+                          If you updated the item on Wikidata,{" "}
+                          <button
+                            type="button"
+                            className="link"
+                            // Not disabled, which would drop focus while it's busy.
+                            aria-disabled={refreshing?.status === "busy"}
+                            onClick={() => refreshing?.status !== "busy" && refresh(i.qid)}
+                          >
+                            {refreshing?.status === "busy" ? "refreshing…" : "you can refresh it"}
+                          </button>
+                          .
+                        </>
+                      )}
                     </span>
                   )}
                   {refreshing?.status === "failed" && (
@@ -425,18 +461,6 @@ function SearchPanel({
                     <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
                       View on Wikidata ↗
                     </a>
-                  )}
-                  {/* The search is of the mirror, which can be behind Wikidata. Refreshing needs a login. */}
-                  {tracks > 0 && user && refreshing?.status !== "done" && (
-                    <button
-                      type="button"
-                      className="link"
-                      disabled={refreshing?.status === "busy"}
-                      aria-label={`Refresh ${label} (${i.qid}) from Wikidata`}
-                      onClick={() => refresh(i.qid)}
-                    >
-                      {refreshing?.status === "busy" ? "Refreshing…" : "Refresh from Wikidata"}
-                    </button>
                   )}
                 </span>
               </li>
