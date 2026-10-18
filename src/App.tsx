@@ -21,6 +21,8 @@ import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
 import { albumProblem, singleProblems, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
+import { Lock } from "./components/common.tsx";
+import { LockedContext } from "./lib/lock-context.ts";
 
 /**
  * The ID Wikidata gave the production OAuth consumer when it was registered,
@@ -329,71 +331,87 @@ function Form() {
             onClear={clear}
           />
           <main className="steps">
-            <StartSection
-              key={clears}
-              ref={startRef}
-              {...props}
-              albumLabel={albumFound?.status === "ok" ? albumFound.label : null}
-              onLoad={replace}
-            />
-            {state.start ? (
-              <>
-                <AlbumSection
+            <LockedContext.Provider value={!!running}>
+              {running && (
+                <p className="msg">
+                  The form is locked while the run makes its edits. You can change it again once the
+                  run finishes.
+                </p>
+              )}
+              <Lock>
+                <StartSection
+                  key={clears}
+                  ref={startRef}
                   {...props}
-                  found={albumFound}
-                  albumTracklist={albumTracklist}
-                  checked={checked}
-                  releaseGroup={releaseGroup}
-                  onLoadReleaseGroup={(mbid, album) =>
-                    startRef.current?.loadReleaseGroup(mbid, album)
-                  }
-                  onPickAnother={() =>
-                    startRef.current?.change(state.start === "search" ? "search" : "existing")
-                  }
+                  albumLabel={albumFound?.status === "ok" ? albumFound.label : null}
+                  onLoad={replace}
                 />
-                {/* Picking a starting point doesn't collapse it, only a filled-in form does. */}
-                <SettingsSection
-                  key={formId}
-                  {...props}
-                  startCollapsed={!isEmpty({ ...state, start: null })}
-                />
-                <DiscsSection
-                  {...props}
-                  reviews={reviews}
-                  lookup={lookupSingle}
-                  onRowsMoved={(move) => {
-                    setDismissed((prev) => moveRowIds(prev, move));
-                    matchesRef.current?.moveRows(move);
-                  }}
-                />
-                <MatchesSection
-                  key={formId}
-                  ref={matchesRef}
-                  {...props}
-                  {...{ matches, status, reviews, dismissed, setDismissed }}
-                />
-                <PerformersSection {...props} />
-              </>
-            ) : (
-              <LockedSteps />
-            )}
-            <RunSection
-              {...props}
-              checklistDone={checks.every((c) => c.ok)}
-              unreviewed={unreviewed}
-              formId={formId}
-              stale={stale}
-              onFinished={clear}
-              slot={slot}
-              sideSlot={sideSlot}
-              albumName={
-                state.album.mode === "create"
-                  ? state.album.title.trim()
-                  : (albumFound?.status === "ok" && albumFound.label) || existingQid
-              }
-              onRunning={setRunning}
-              onShowing={setShowingRun}
-            />
+              </Lock>
+              {state.start ? (
+                <>
+                  <Lock>
+                    <AlbumSection
+                      {...props}
+                      found={albumFound}
+                      albumTracklist={albumTracklist}
+                      checked={checked}
+                      releaseGroup={releaseGroup}
+                      onLoadReleaseGroup={(mbid, album) =>
+                        startRef.current?.loadReleaseGroup(mbid, album)
+                      }
+                      onPickAnother={() =>
+                        startRef.current?.change(state.start === "search" ? "search" : "existing")
+                      }
+                    />
+                  </Lock>
+                  {/* Picking a starting point doesn't collapse it, only a filled-in form does. */}
+                  <SettingsSection
+                    key={formId}
+                    {...props}
+                    startCollapsed={!isEmpty({ ...state, start: null })}
+                  />
+                  <DiscsSection
+                    {...props}
+                    reviews={reviews}
+                    lookup={lookupSingle}
+                    onRowsMoved={(move) => {
+                      setDismissed((prev) => moveRowIds(prev, move));
+                      matchesRef.current?.moveRows(move);
+                    }}
+                  />
+                  <Lock>
+                    <MatchesSection
+                      key={formId}
+                      ref={matchesRef}
+                      {...props}
+                      {...{ matches, status, reviews, dismissed, setDismissed }}
+                    />
+                  </Lock>
+                  <Lock>
+                    <PerformersSection {...props} />
+                  </Lock>
+                </>
+              ) : (
+                <LockedSteps />
+              )}
+              <RunSection
+                {...props}
+                checklistDone={checks.every((c) => c.ok)}
+                unreviewed={unreviewed}
+                formId={formId}
+                stale={stale}
+                onFinished={clear}
+                slot={slot}
+                sideSlot={sideSlot}
+                albumName={
+                  state.album.mode === "create"
+                    ? state.album.title.trim()
+                    : (albumFound?.status === "ok" && albumFound.label) || existingQid
+                }
+                onRunning={setRunning}
+                onShowing={setShowingRun}
+              />
+            </LockedContext.Provider>
           </main>
           <PlanPanel
             counts={createCounts(state, plan)}

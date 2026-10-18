@@ -1,7 +1,17 @@
 // Small form pieces shared by the sections.
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { LockedContext } from "../lib/lock-context.ts";
 import { normalizeQid } from "../lib/plan.ts";
 import { PROPERTY_LABELS } from "../lib/preview.ts";
+
+/** Disables the form controls inside it while the form is locked. */
+export function Lock({ children }: { children: ReactNode }) {
+  return (
+    <fieldset className="lock" disabled={useContext(LockedContext)}>
+      {children}
+    </fieldset>
+  );
+}
 
 export function FieldErr({ id, msg }: { id: string; msg?: string }) {
   return (

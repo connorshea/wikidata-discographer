@@ -13,7 +13,7 @@ import {
   TRACK_TYPES,
 } from "../lib/plan.ts";
 import { SETTING_FLAGS, settingsPills } from "../lib/progress.ts";
-import { FieldErr } from "./common.tsx";
+import { FieldErr, Lock } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc" | "singleDesc";
@@ -138,154 +138,156 @@ export default function SettingsSection({
   return (
     <section className="block" id="settings">
       {header}
-      <div className="settings-body" id="settings-body">
-        <div className="grid">
-          <div className="f">
-            <label htmlFor="langSel">Label language</label>
-            <select
-              id="langSel"
-              value={labelLang}
-              onChange={(e) =>
-                update((s) => {
-                  const v = e.target.value;
-                  s.settings.langCustom = v === "other";
-                  s.settings.lang = v === "other" ? "" : v;
-                })
-              }
-            >
-              {LABEL_LANGS.map(([c, l]) => (
-                <option key={c} value={c}>{`${l} (${c})`}</option>
-              ))}
-              <option value="other">Other code…</option>
-            </select>
-            {labelLang === "other" && (
-              <input
-                type="text"
-                spellCheck={false}
-                placeholder="e.g. pt-br"
-                aria-label="Other label language code"
-                value={S.lang}
-                onChange={(e) => set("lang", e.target.value.toLowerCase().trim())}
-              />
-            )}
-            <span className="sub">Also used for the title</span>
-            <FieldErr id="lang" msg={errs.lang} />
-          </div>
-          <label className="f">
-            Publication date
-            <input
-              type="text"
-              className="mono"
-              spellCheck={false}
-              value={S.date}
-              onChange={(e) => set("date", e.target.value)}
-              onBlur={(e) => set("date", normalizeDate(e.target.value))}
-            />
-            {citesMbDate(state) ? (
-              <span className="sub with-badge">
-                <span
-                  className="mb-badge"
-                  title="Gets a MusicBrainz reference while it stays the same"
-                >
-                  MB
-                </span>
-                Album release date, from MusicBrainz
-              </span>
-            ) : (
-              <span className="sub">
-                Album release date. YYYY, YYYY-MM or YYYY-MM-DD (“June 12, 2012” is converted),
-                blank to skip
-              </span>
-            )}
-            <FieldErr id="date" msg={errs.date} />
-          </label>
-          <div className="f">
-            <label htmlFor="p407Sel">Language of work</label>
-            <select
-              id="p407Sel"
-              value={workLang}
-              onChange={(e) =>
-                update((s) => {
-                  const v = e.target.value;
-                  s.settings.p407Custom = v === "other";
-                  s.settings.p407 = v === "other" ? "" : v;
-                })
-              }
-            >
-              <option value="">None</option>
-              <optgroup label="Languages">
-                {LANGS.map(([q, l]) => (
-                  <option key={q} value={q}>{`${l} (${q})`}</option>
+      <Lock>
+        <div className="settings-body" id="settings-body">
+          <div className="grid">
+            <div className="f">
+              <label htmlFor="langSel">Label language</label>
+              <select
+                id="langSel"
+                value={labelLang}
+                onChange={(e) =>
+                  update((s) => {
+                    const v = e.target.value;
+                    s.settings.langCustom = v === "other";
+                    s.settings.lang = v === "other" ? "" : v;
+                  })
+                }
+              >
+                {LABEL_LANGS.map(([c, l]) => (
+                  <option key={c} value={c}>{`${l} (${c})`}</option>
                 ))}
-              </optgroup>
-              <optgroup label="Instrumental">
-                <option
-                  value={NO_LINGUISTIC_CONTENT}
-                >{`no linguistic content (${NO_LINGUISTIC_CONTENT})`}</option>
-              </optgroup>
-              <option value="other">Other QID…</option>
-            </select>
-            {workLang === "other" && (
+                <option value="other">Other code…</option>
+              </select>
+              {labelLang === "other" && (
+                <input
+                  type="text"
+                  spellCheck={false}
+                  placeholder="e.g. pt-br"
+                  aria-label="Other label language code"
+                  value={S.lang}
+                  onChange={(e) => set("lang", e.target.value.toLowerCase().trim())}
+                />
+              )}
+              <span className="sub">Also used for the title</span>
+              <FieldErr id="lang" msg={errs.lang} />
+            </div>
+            <label className="f">
+              Publication date
               <input
                 type="text"
+                className="mono"
                 spellCheck={false}
-                placeholder="Q…"
-                aria-label="Other language QID"
-                value={S.p407}
-                onChange={(e) => set("p407", normalizeQid(e.target.value))}
+                value={S.date}
+                onChange={(e) => set("date", e.target.value)}
+                onBlur={(e) => set("date", normalizeDate(e.target.value))}
               />
+              {citesMbDate(state) ? (
+                <span className="sub with-badge">
+                  <span
+                    className="mb-badge"
+                    title="Gets a MusicBrainz reference while it stays the same"
+                  >
+                    MB
+                  </span>
+                  Album release date, from MusicBrainz
+                </span>
+              ) : (
+                <span className="sub">
+                  Album release date. YYYY, YYYY-MM or YYYY-MM-DD (“June 12, 2012” is converted),
+                  blank to skip
+                </span>
+              )}
+              <FieldErr id="date" msg={errs.date} />
+            </label>
+            <div className="f">
+              <label htmlFor="p407Sel">Language of work</label>
+              <select
+                id="p407Sel"
+                value={workLang}
+                onChange={(e) =>
+                  update((s) => {
+                    const v = e.target.value;
+                    s.settings.p407Custom = v === "other";
+                    s.settings.p407 = v === "other" ? "" : v;
+                  })
+                }
+              >
+                <option value="">None</option>
+                <optgroup label="Languages">
+                  {LANGS.map(([q, l]) => (
+                    <option key={q} value={q}>{`${l} (${q})`}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Instrumental">
+                  <option
+                    value={NO_LINGUISTIC_CONTENT}
+                  >{`no linguistic content (${NO_LINGUISTIC_CONTENT})`}</option>
+                </optgroup>
+                <option value="other">Other QID…</option>
+              </select>
+              {workLang === "other" && (
+                <input
+                  type="text"
+                  spellCheck={false}
+                  placeholder="Q…"
+                  aria-label="Other language QID"
+                  value={S.p407}
+                  onChange={(e) => set("p407", normalizeQid(e.target.value))}
+                />
+              )}
+              <span className="sub">Added to a new album and compositions</span>
+              <FieldErr id="p407" msg={errs.p407} />
+            </div>
+          </div>
+
+          <div className="descs">
+            <h3 className="kicker">Descriptions</h3>
+            <p className="desc-vars">
+              Variables: <code>{"{year}"}</code> <code>{"{artists}"}</code>
+            </p>
+            {template("compDesc", "Compositions", "cmp-edge", previews?.comp ?? null)}
+            {template("trackDesc", "Tracks", "trk-edge", previews?.track ?? null)}
+            {template(
+              "singleDesc",
+              "Singles",
+              "rg-edge",
+              previews?.single ?? null,
+              "Year comes from each single's release date",
             )}
-            <span className="sub">Added to a new album and compositions</span>
-            <FieldErr id="p407" msg={errs.p407} />
+          </div>
+
+          <label className="f track-type">
+            Tracks are an instance of
+            <select value={S.trackType} onChange={(e) => set("trackType", e.target.value)}>
+              {TRACK_TYPES.map(([q, l]) => (
+                <option key={q} value={q}>{`${l} (${q})`}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="option-groups">
+            {OPTION_GROUPS.map(([group, opts]) => (
+              <fieldset key={group}>
+                <legend className="kicker">{group}</legend>
+                {opts.map(([k, title, about]) => (
+                  <label className="opt" key={k}>
+                    <input
+                      type="checkbox"
+                      checked={S[k]}
+                      onChange={(e) => set(k, e.target.checked)}
+                    />
+                    <span>
+                      <b>{title}</b>
+                      <span>{about}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            ))}
           </div>
         </div>
-
-        <div className="descs">
-          <h3 className="kicker">Descriptions</h3>
-          <p className="desc-vars">
-            Variables: <code>{"{year}"}</code> <code>{"{artists}"}</code>
-          </p>
-          {template("compDesc", "Compositions", "cmp-edge", previews?.comp ?? null)}
-          {template("trackDesc", "Tracks", "trk-edge", previews?.track ?? null)}
-          {template(
-            "singleDesc",
-            "Singles",
-            "rg-edge",
-            previews?.single ?? null,
-            "Year comes from each single's release date",
-          )}
-        </div>
-
-        <label className="f track-type">
-          Tracks are an instance of
-          <select value={S.trackType} onChange={(e) => set("trackType", e.target.value)}>
-            {TRACK_TYPES.map(([q, l]) => (
-              <option key={q} value={q}>{`${l} (${q})`}</option>
-            ))}
-          </select>
-        </label>
-
-        <div className="option-groups">
-          {OPTION_GROUPS.map(([group, opts]) => (
-            <fieldset key={group}>
-              <legend className="kicker">{group}</legend>
-              {opts.map(([k, title, about]) => (
-                <label className="opt" key={k}>
-                  <input
-                    type="checkbox"
-                    checked={S[k]}
-                    onChange={(e) => set(k, e.target.checked)}
-                  />
-                  <span>
-                    <b>{title}</b>
-                    <span>{about}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          ))}
-        </div>
-      </div>
+      </Lock>
     </section>
   );
 }

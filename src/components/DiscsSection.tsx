@@ -37,7 +37,7 @@ import {
   rowPerformers,
   type Renumbered,
 } from "../lib/tracks.ts";
-import { InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
+import { InfoTip, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import { type ItemLookup, singleProblem, singleProblems } from "./use-item-summaries.ts";
@@ -143,31 +143,35 @@ export default function DiscsSection({
             );
           })}
         </div>
-        <button
-          type="button"
-          className="link add-disc"
-          onClick={() => {
-            update((s) => void s.discs.push(emptyDisc()));
-            pick(state.discs.length);
-          }}
-        >
-          + Add disc
-        </button>
+        <Lock>
+          <button
+            type="button"
+            className="link add-disc"
+            onClick={() => {
+              update((s) => void s.discs.push(emptyDisc()));
+              pick(state.discs.length);
+            }}
+          >
+            + Add disc
+          </button>
+        </Lock>
       </div>
       <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${di}`}>
-        <DiscBlock
-          key={di}
-          di={di}
-          reviews={reviews.filter((r) => r.di === di)}
-          lookup={lookup}
-          onRenumber={(moved) => onRowsMoved(renumberedRows(di, moved))}
-          onRemove={() => {
-            update((s) => void s.discs.splice(di, 1));
-            onRowsMoved(removedDisc(di));
-            pick(Math.max(0, di - 1), true);
-          }}
-          {...{ state, update, plan }}
-        />
+        <Lock>
+          <DiscBlock
+            key={di}
+            di={di}
+            reviews={reviews.filter((r) => r.di === di)}
+            lookup={lookup}
+            onRenumber={(moved) => onRowsMoved(renumberedRows(di, moved))}
+            onRemove={() => {
+              update((s) => void s.discs.splice(di, 1));
+              onRowsMoved(removedDisc(di));
+              pick(Math.max(0, di - 1), true);
+            }}
+            {...{ state, update, plan }}
+          />
+        </Lock>
       </div>
     </section>
   );
