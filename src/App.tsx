@@ -389,6 +389,10 @@ function Form() {
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const [sideSlot, setSideSlot] = useState<HTMLDivElement | null>(null);
   const [running, setRunning] = useState<RunningInfo | null>(null);
+  // The run's QIDs are being checked before it starts. It runs the form as it
+  // was sent, and writes its QIDs back by row, so the form can't change meanwhile.
+  const [starting, setStarting] = useState(false);
+  const locked = !!running || starting;
   // A run on show, such as one opened from the album list, which Clear closes.
   const [showingRun, setShowingRun] = useState(false);
   const empty = isEmpty(state);
@@ -428,7 +432,7 @@ function Form() {
         <div className={loggedOut ? "shell logged-out" : "shell"} inert={loggedOut}>
           <ProgressRail
             steps={railSteps(progress)}
-            running={!!running}
+            locked={locked}
             empty={empty && !showingRun}
             // An empty form loses nothing, so closing the run needs no asking.
             clearConfirm={
@@ -443,12 +447,14 @@ function Form() {
             onClear={clear}
           />
           <main className="steps">
-            <LockedContext.Provider value={!!running}>
-              {running && (
+            <LockedContext.Provider value={locked}>
+              {running ? (
                 <p className="msg">
                   The form is locked while the run makes its edits. You can change it again once the
                   run finishes.
                 </p>
+              ) : (
+                starting && <p className="msg">The form is locked while the run starts.</p>
               )}
               <Lock>
                 <StartSection
@@ -522,6 +528,7 @@ function Form() {
                     : (albumFound?.status === "ok" && albumFound.label) || existingQid
                 }
                 onRunning={setRunning}
+                onStarting={setStarting}
                 onShowing={setShowingRun}
               />
             </LockedContext.Provider>

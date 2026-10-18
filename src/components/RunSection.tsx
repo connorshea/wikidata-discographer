@@ -15,8 +15,8 @@ import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
   adoptOwnRun,
+  afterOwnRun,
   applyCreated,
-  createdAny,
   formOfRun,
   initialRunId,
   isGone,
@@ -108,6 +108,7 @@ export default function RunSection({
   sideSlot,
   albumName,
   onRunning,
+  onStarting,
   onShowing,
 }: SectionProps & {
   /** Everything in the run's checklist (`runChecks`) is done. */
@@ -128,6 +129,8 @@ export default function RunSection({
   albumName: string;
   /** Told when a run starts, makes progress and ends. */
   onRunning: (r: RunningInfo | null) => void;
+  /** Told while the run's QIDs are checked before it starts, so the form is locked then too. */
+  onStarting: (starting: boolean) => void;
   /** Told whether a run is on show, e.g. one opened from the album list. */
   onShowing: (showing: boolean) => void;
 }) {
@@ -190,6 +193,7 @@ export default function RunSection({
     sectionRef.current?.scrollIntoView();
   }, [search, navigate]);
   const [starting, setStarting] = useState(false);
+  useEffect(() => onStarting(starting), [starting, onStarting]);
   // What the user has confirmed so far for this start, so confirming one
   // conflict doesn't take back another.
   const confirmed = useRef<Omit<SubmissionRequest, "state">>({});
@@ -208,12 +212,13 @@ export default function RunSection({
       followOwnRun(null);
       if (action !== "apply") return;
       // A done run leaves nothing to make, so the form is cleared for the next
-      // album, unless it's been changed during the run.
-      if (r.status === "done" && formOfRun(stateRef.current, r) !== "other") {
+      // album. A form changed since the run started is left as it is.
+      const after = afterOwnRun(stateRef.current, r);
+      if (after === "clear") {
         keepRun.current = true;
         setCleared(true);
         onFinished();
-      } else if (createdAny(r.edits)) update((s) => applyCreated(s, r.edits));
+      } else if (after === "apply") update((s) => applyCreated(s, r.edits));
     },
     [followOwnRun, update, onFinished],
   );
