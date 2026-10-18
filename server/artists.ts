@@ -4,7 +4,7 @@
 //   GET /api/artists/search?q=…   artists by name (exact, then prefix), or by QID or Wikidata URL
 //   GET /api/artists/:qid         the artist and its albums and EPs, oldest first
 import { Hono } from "hono";
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems, musicLinks, submissions } from "../db/schema.ts";
@@ -30,8 +30,8 @@ const P436 = propertyNumber("P436");
 const P658 = propertyNumber("P658");
 const ALBUM_KINDS: MusicKind[] = ["album", "ep"];
 
-/** The most albums an artist page lists. Far more than any artist has. */
-export const MAX_ARTIST_ALBUMS = 2000;
+/** The most albums an artist page lists: the oldest ones, if it has more. */
+export const MAX_ARTIST_ALBUMS = 500;
 
 /** The query's QID, if it's one or a Wikidata URL. */
 export function queryQid(q: string): string | null {
@@ -225,6 +225,8 @@ artistRoutes.get("/:qid", async (c) => {
         inArray(musicItems.kind, ALBUM_KINDS),
       ),
     )
+    // In the page's order, so a long discography keeps its oldest albums.
+    .orderBy(isNull(musicItems.released), asc(musicItems.released), asc(musicItems.qid))
     .limit(MAX_ARTIST_ALBUMS + 1);
   const truncated = rows.length > MAX_ARTIST_ALBUMS;
   const albums = rows.slice(0, MAX_ARTIST_ALBUMS);
