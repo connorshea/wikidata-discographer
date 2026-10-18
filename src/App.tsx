@@ -329,7 +329,6 @@ function Form() {
   };
   const checks = runChecks({
     ...progress,
-    loggedIn: !!user,
     ineligible: user && !user.eligibility.ok ? user.eligibility.reason : null,
     matchesPending: status === "pending",
     albumPending: tracklistPending || albumFound?.status === "loading",
@@ -433,7 +432,8 @@ function Form() {
               )}
               <RunSection
                 {...props}
-                checklistDone={checks.every((c) => c.ok)}
+                // A run needs a login, which the checklist leaves to the banner.
+                checklistDone={!!user && checks.every((c) => c.ok)}
                 unreviewed={unreviewed}
                 formId={formId}
                 stale={stale}
