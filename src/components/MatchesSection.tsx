@@ -251,8 +251,8 @@ export default function MatchesSection({
         {!folded && fillable > 0 && (
           <span className="f-head">
             <InfoTip id="match-fill" label="About unambiguous matches" end>
-              Fills each empty field that has exactly one match with the track's title and the same
-              artist. Anything less certain is left for you to review.
+              Fills any matches that have the exact same title and artist. Anything less certain is
+              left for you to review.
             </InfoTip>
             <button type="button" className="link match-fill" onClick={fill}>
               Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
