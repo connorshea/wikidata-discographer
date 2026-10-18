@@ -14,6 +14,7 @@ import {
   normalizeDate,
   normalizeQid,
   type Op,
+  PARTS,
 } from "./plan.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
 import { EXAMPLE, track } from "./example.fixture.ts";
@@ -654,12 +655,79 @@ describe("buildPlan", () => {
     });
   });
 
+  describe("discs' parts", () => {
+    const errors = (plan: ReturnType<typeof buildPlan>) =>
+      plan.messages.filter((m) => m[0] === "err").map((m) => m[1]);
+    const withParts = (...parts: string[]) => {
+      const state = structuredClone(EXAMPLE);
+      parts.forEach((p, di) => void (state.discs[di].part = p));
+      return state;
+    };
+
+    it("block several discs without parts", () => {
+      const plan = buildPlan(withParts("", ""));
+      expect(plan.ready).toBe(false);
+      expect(plan.ops).toEqual([]);
+      expect(plan.blockers).toContain("tracks");
+      expect(errors(plan)).toEqual([
+        "Discs 1 and 2 have no part. A release with several discs needs a part on each, " +
+          "e.g. CD1 and CD2, so their track numbers can be told apart.",
+      ]);
+      expect(plan.fieldErrs["part-0"]).toBe(
+        "Choose this disc's part. Each disc needs one when there are several.",
+      );
+      expect(plan.fieldErrs["part-1"]).toBe(plan.fieldErrs["part-0"]);
+    });
+
+    it("block a disc without a part among discs with them", () => {
+      const plan = buildPlan(withParts("Q61629664", ""));
+      expect(plan.ready).toBe(false);
+      expect(errors(plan)).toEqual([
+        "Disc 2 has no part. A release with several discs needs a part on each, " +
+          "e.g. CD1 and CD2, so their track numbers can be told apart.",
+      ]);
+      expect(plan.fieldErrs["part-0"]).toBe("");
+    });
+
+    it("block two discs with the same part", () => {
+      const plan = buildPlan(withParts("Q61629664", "Q61629664"));
+      expect(plan.ready).toBe(false);
+      expect(errors(plan)).toEqual([
+        "Discs 1 and 2 have the same part, CD1. Give each disc its own part.",
+      ]);
+      expect(plan.fieldErrs["part-0"]).toBe("Disc 2 has this part too. Each disc needs its own.");
+      expect(plan.fieldErrs["part-1"]).toBe("Disc 1 has this part too. Each disc needs its own.");
+    });
+
+    it("don't need a part on a lone disc, or on a disc without tracks", () => {
+      const lone = withParts("");
+      lone.discs = [lone.discs[0]];
+      expect(buildPlan(lone).ready).toBe(true);
+      const empty = withParts("", "");
+      empty.discs[1].tracks = [];
+      expect(buildPlan(empty).ready).toBe(true);
+    });
+
+    it("tell the discs apart in the tracklist", () => {
+      const op = buildPlan(EXAMPLE).ops.at(-1) as Extract<Op, { op: "addClaims" }>;
+      const parts = op.claims
+        .filter((c) => c.property === "P658")
+        .map((c) => c.qualifiers?.find((q) => q.property === "P518")?.value);
+      expect(new Set(parts.map((v) => JSON.stringify(v))).size).toBe(2);
+      expect(parts).not.toContain(undefined);
+    });
+  });
+
   describe("size limits", () => {
     const tracklist = (count: number) =>
       Array.from({ length: count }, (_, i) => track(i + 1, `Song ${i + 1}`, "3:00"));
     const withDiscs = (...counts: number[]) => {
       const state = structuredClone(EXAMPLE);
-      state.discs = counts.map((n) => ({ ...emptyDisc(), tracks: tracklist(n) }));
+      state.discs = counts.map((n, i) => ({
+        ...emptyDisc(),
+        part: PARTS[0][1][i][0],
+        tracks: tracklist(n),
+      }));
       return state;
     };
     const errors = (plan: ReturnType<typeof buildPlan>) =>

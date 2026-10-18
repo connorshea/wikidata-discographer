@@ -397,6 +397,13 @@ export const isCustomLabelLang = (s: Settings) =>
 export const isCustomPart = (d: Disc) =>
   !!d.partCustom || (d.part.trim() !== "" && !KNOWN_PARTS.has(d.part.trim()));
 
+/** A disc's part as the form shows it: "CD1", or the QID of one the app doesn't know. */
+export function partLabel(d: Disc): string {
+  const q = d.part.trim();
+  for (const [, opts] of PARTS) for (const [p, label] of opts) if (p === q) return label;
+  return q;
+}
+
 /** A new album's artists, leaving out blank rows. */
 export const albumArtists = (state: State) =>
   state.album.artists.map((a) => a.trim()).filter(Boolean);
@@ -816,6 +823,26 @@ export function buildPlan(state: State): Plan {
   }
   const sharedWorks = [...byWork.values()].filter((at) => at.length > 1);
 
+  // With several discs, the tracklist tells them apart only by their parts: each needs its own.
+  const listed = state.discs.flatMap((d, di) => (tracks[di].length ? [{ d, di }] : []));
+  const noPart: number[] = [];
+  const byPart = new Map<string, number[]>();
+  if (listed.length > 1)
+    for (const { d, di } of listed) {
+      const part = d.part.trim();
+      fieldErrs[`part-${di}`] = "";
+      if (!part) {
+        noPart.push(di + 1);
+        fieldErrs[`part-${di}`] =
+          "Choose this disc's part. Each disc needs one when there are several.";
+      } else if (QID.test(part)) byPart.set(part, [...(byPart.get(part) ?? []), di]);
+    }
+  const sharedParts = [...byPart.values()].filter((at) => at.length > 1);
+  for (const at of sharedParts)
+    for (const di of at)
+      fieldErrs[`part-${di}`] =
+        `Disc ${at.find((o) => o !== di)! + 1} has this part too. Each disc needs its own.`;
+
   if (!items.length) err("Add the album's tracks, or load them from MusicBrainz.", "tracks");
   tracks.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
@@ -838,6 +865,21 @@ export function buildPlan(state: State): Plan {
     err(
       `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are performances of the same MusicBrainz work. ` +
         "Discographer can't create this album for now.",
+      "tracks",
+    );
+  const discList = (ns: number[]) =>
+    ns.length === 1 ? `Disc ${ns[0]}` : `Discs ${ns.slice(0, -1).join(", ")} and ${ns.at(-1)}`;
+  if (noPart.length)
+    err(
+      `${discList(noPart)} ${noPart.length === 1 ? "has" : "have"} no part. ` +
+        "A release with several discs needs a part on each, e.g. CD1 and CD2, " +
+        "so their track numbers can be told apart.",
+      "tracks",
+    );
+  for (const at of sharedParts)
+    err(
+      `${discList(at.map((di) => di + 1))} have the same part, ${partLabel(state.discs[at[0]])}. ` +
+        "Give each disc its own part.",
       "tracks",
     );
   if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`, "performers");
