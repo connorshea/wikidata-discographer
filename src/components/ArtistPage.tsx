@@ -22,9 +22,11 @@ export default function ArtistPage({ qid }: { qid: string | null }) {
   const { user } = useAuth();
   return (
     <>
-      <ArtistSearch key={qid} />
+      {/* Siblings, so the keys must differ, or React keeps the old search
+          beside the new one when the artist changes. */}
+      <ArtistSearch key={`search:${qid}`} />
       {/* Every artist endpoint needs a login. */}
-      {qid && user && <ArtistAlbums key={qid} qid={qid} />}
+      {qid && user && <ArtistAlbums key={`albums:${qid}`} qid={qid} />}
     </>
   );
 }
@@ -74,9 +76,7 @@ function ArtistSearch() {
       </div>
       <div id={`${id}-status`} role="status" className="search-status">
         {!typed ? (
-          <span className="sub">
-            Searches artists from Wikidata. A QID or Wikidata URL also works.
-          </span>
+          <span className="sub">A QID or Wikidata URL also works.</span>
         ) : searching ? (
           <span className="search-state">
             <span className="spinner" aria-hidden="true" />
