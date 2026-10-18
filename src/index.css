@@ -3146,9 +3146,13 @@ section.block.locked-step {
   min-height: 38px;
   white-space: nowrap;
 }
-.search-result-actions a {
+.search-result-actions a,
+.search-result-actions button.link {
   font-size: 13px;
   font-weight: 600;
+}
+.search-result-actions button.link {
+  min-height: 0;
 }
 .pill.bad {
   background: var(--err-tint);

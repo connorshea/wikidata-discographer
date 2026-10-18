@@ -75,7 +75,8 @@ export interface DuplicatesResponse {
 }
 
 export interface AddItemResponse {
-  item: MirrorItem;
+  /** With its album facts as of the refreshed mirror, if it's an album or EP. */
+  item: SearchItem;
 }
 
 /** GET /api/items/:qid/tracklist: the item's tracks (P658) on Wikidata now. */

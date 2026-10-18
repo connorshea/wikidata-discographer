@@ -5,12 +5,12 @@
 //   POST /api/items/matches                  existing items for a tracklist (server/matches.ts)
 //   POST /api/items/describe                 labels, descriptions and classes, live from Wikidata
 //   GET  /api/items/:qid/tracklist           an album's tracklist and release groups, live from Wikidata
-//   POST /api/items/:qid                     fetch an item from Wikidata into the mirror
+//   POST /api/items/:qid                     fetch an item from Wikidata into the mirror, or refresh it
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { and, count, eq, inArray, like, or } from "drizzle-orm";
 import { db } from "./db.ts";
-import { propertyNumber, toProperty, toQid } from "./ids.ts";
+import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { type AuthEnv, requireUser } from "./auth/session.ts";
 import { rankDuplicates, titleReasons } from "./duplicates.ts";
@@ -294,7 +294,12 @@ items.post("/:qid", requireUser, async (c) => {
       422,
     );
   await upsertRows([row], { source: "app" });
-  return c.json({
-    item: { qid: row.qid, kind: row.kind, label: row.label, description: row.description },
-  } satisfies AddItemResponse);
+  const n = qidNumber(row.qid);
+  const { tracks, onMusicBrainz } = await albumFacts([n]);
+  const [item] = withAlbumFacts(
+    [{ qid: n, kind: row.kind, label: row.label, description: row.description }],
+    tracks,
+    onMusicBrainz,
+  );
+  return c.json({ item } satisfies AddItemResponse);
 });

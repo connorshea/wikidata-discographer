@@ -3,9 +3,9 @@
 import { type Ref, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import { QID, type StartingPoint, type State } from "../lib/plan.ts";
 import { startSummary } from "../lib/progress.ts";
-import { api } from "../lib/client.ts";
+import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import type { SearchItem, SearchResponse } from "../lib/api-types.ts";
+import type { AddItemResponse, SearchItem, SearchResponse } from "../lib/api-types.ts";
 import { FieldErr, QidInput } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
 import { AlbumTypeSelect, ArtistChips } from "./AlbumSection.tsx";
@@ -256,6 +256,12 @@ function ExistingPanel({ state, update }: Omit<SectionProps, "plan">) {
 /** A search's answer, tagged with the query it answers. `items` is null if it failed. */
 type SearchResult = { q: string; items: SearchItem[] | null };
 
+/** Where refreshing a search result from Wikidata stands. */
+type Refresh =
+  | { status: "busy" }
+  | { status: "done"; item: SearchItem }
+  | { status: "failed"; error: string };
+
 /**
  * A search of the albums and EPs already on Wikidata (as of the mirror), by
  * title. Picking one does what ExistingPanel does, with `start` "search". The
@@ -272,9 +278,24 @@ function SearchPanel({
   onPick: (card: StartingPoint) => void;
 }) {
   const id = useId();
-  const { wikiBaseUrl } = useAuth();
+  const { user, wikiBaseUrl } = useAuth();
   const q = useDebounced(query.trim(), 600);
   const [result, setResult] = useState<SearchResult | null>(null);
+  // Results refreshed from Wikidata, by QID, in case the mirror is behind
+  // (a tracklist removed since). Kept across searches: they're newer.
+  const [refreshes, setRefreshes] = useState<ReadonlyMap<string, Refresh>>(() => new Map());
+  const setRefresh = (qid: string, r: Refresh) => setRefreshes((m) => new Map(m).set(qid, r));
+  const refresh = (qid: string) => {
+    setRefresh(qid, { status: "busy" });
+    api<AddItemResponse>(`/api/items/${encodeURIComponent(qid)}`, { method: "POST" })
+      .then((r) => setRefresh(qid, { status: "done", item: r.item }))
+      .catch((err: unknown) =>
+        setRefresh(qid, {
+          status: "failed",
+          error: err instanceof FetchError ? err.message : "Couldn't refresh it. Try again.",
+        }),
+      );
+  };
   useEffect(() => {
     if (!q) return;
     let cancelled = false;
@@ -289,7 +310,10 @@ function SearchPanel({
   const typed = query.trim();
   // Still settling, or asked and not answered yet: never show a stale answer.
   const searching = !!typed && (q !== typed || result?.q !== typed);
-  const items = !searching && typed ? result?.items : undefined;
+  const items = (!searching && typed ? result?.items : undefined)?.map((i) => {
+    const r = refreshes.get(i.qid);
+    return r?.status === "done" ? r.item : i;
+  });
   // The first one that can be used gets the primary button.
   const first = items?.find((i) => !i.album?.tracks)?.qid;
   const create = (title: string) => {
@@ -340,6 +364,7 @@ function SearchPanel({
             const tracks = i.album?.tracks ?? 0;
             const type = i.kind === "ep" ? "EP" : "Album";
             const label = i.label ?? i.qid;
+            const refreshing = refreshes.get(i.qid);
             return (
               <li key={i.qid} className={`search-result${tracks ? " taken" : ""}`}>
                 <span className="search-result-text">
@@ -368,7 +393,14 @@ function SearchPanel({
                   </ul>
                   {tracks > 0 && (
                     <span className="search-result-err" id={`${id}-${i.qid}-err`}>
-                      Discographer can't modify an album that already has a tracklist, sorry!
+                      {refreshing?.status === "done"
+                        ? "It still has a tracklist on Wikidata, so Discographer can't modify it, sorry!"
+                        : "Discographer can't modify an album that already has a tracklist, sorry!"}
+                    </span>
+                  )}
+                  {refreshing?.status === "failed" && (
+                    <span className="search-result-err" role="alert">
+                      {refreshing.error}
                     </span>
                   )}
                 </span>
@@ -393,6 +425,18 @@ function SearchPanel({
                     <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">
                       View on Wikidata ↗
                     </a>
+                  )}
+                  {/* The search is of the mirror, which can be behind Wikidata. Refreshing needs a login. */}
+                  {tracks > 0 && user && refreshing?.status !== "done" && (
+                    <button
+                      type="button"
+                      className="link"
+                      disabled={refreshing?.status === "busy"}
+                      aria-label={`Refresh ${label} (${i.qid}) from Wikidata`}
+                      onClick={() => refresh(i.qid)}
+                    >
+                      {refreshing?.status === "busy" ? "Refreshing…" : "Refresh from Wikidata"}
+                    </button>
                   )}
                 </span>
               </li>
