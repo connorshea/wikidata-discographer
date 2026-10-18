@@ -25,3 +25,13 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->
+
+# No third-party requests from the browser
+
+The site runs on Toolforge, whose [terms of use](https://wikitech.wikimedia.org/wiki/Wikitech:Cloud_Services_Terms_of_use) treat a visitor's IP address and user agent as personal information and don't allow sending them to third parties. Any request the browser makes to another host sends that host the visitor's IP address, so the pages must make no requests to other hosts.
+
+- That rules out Google Fonts, Google Analytics or any other analytics, third-party CDNs (unpkg, jsDelivr, cdnjs), embedded widgets, and remote images and avatars.
+- Install fonts and libraries as packages, or put them in `public/`, so they're served from our own origin.
+- The CSP in `server/app.ts` enforces this. Don't loosen it to let a third-party host in. `vp dev` doesn't send the CSP, so a third-party request can go unnoticed in development.
+- Server-side requests to Wikidata, SPARQL and MusicBrainz are fine, as they don't come from the visitor's browser.
+- Plain links to other sites (Wikidata, MusicBrainz) are fine too, as the browser only contacts them when the visitor follows the link.
