@@ -35,3 +35,7 @@ The site runs on Toolforge, whose [terms of use](https://wikitech.wikimedia.org/
 - The CSP in `server/app.ts` enforces this. Don't loosen it to let a third-party host in. `vp dev` doesn't send the CSP, so a third-party request can go unnoticed in development.
 - Server-side requests to Wikidata, SPARQL and MusicBrainz are fine, as they don't come from the visitor's browser.
 - Plain links to other sites (Wikidata, MusicBrainz) are fine too, as the browser only contacts them when the visitor follows the link.
+
+# No accent stripes on the side of boxes
+
+Don't mark a banner, card, callout or row with a thick colored line down one side, whether it's a `border-left`, a `border-right` or an inset `box-shadow`. Show its kind with the background, a full border or an icon instead.
