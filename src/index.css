@@ -3146,13 +3146,16 @@ section.block.locked-step {
   min-height: 38px;
   white-space: nowrap;
 }
-.search-result-actions a,
-.search-result-actions button.link {
+.search-result-actions a {
   font-size: 13px;
   font-weight: 600;
 }
-.search-result-actions button.link {
-  min-height: 0;
+.search-result-err button.link {
+  font-size: inherit;
+}
+.search-result-err button.link[aria-disabled="true"] {
+  cursor: progress;
+  text-decoration: none;
 }
 .pill.bad {
   background: var(--err-tint);
