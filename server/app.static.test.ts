@@ -11,15 +11,20 @@ const dir = await vi.hoisted(async () => {
   const path = await import("node:path");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "discographer-client-"));
   fs.mkdirSync(path.join(dir, "assets"));
-  fs.writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>shell</title>");
+  fs.writeFileSync(
+    path.join(dir, "index.html"),
+    '<!doctype html><title>shell</title><meta property="og:url" content="__BASE_URL__/" />',
+  );
   fs.writeFileSync(path.join(dir, "assets", "index-abc123.js"), "console.log(1)");
   fs.writeFileSync(path.join(dir, "favicon.svg"), "<svg></svg>");
   process.env.CLIENT_DIR = dir;
+  process.env.BASE_URL = "https://discographer.example/";
   return dir;
 });
 
 afterAll(() => {
   delete process.env.CLIENT_DIR;
+  delete process.env.BASE_URL;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -44,6 +49,14 @@ describe("static SPA caching headers", () => {
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("shell");
       expect(res.headers.get("cache-control")).toBe("no-cache");
+    }
+  });
+
+  it("fills in BASE_URL for the link preview tags wherever the shell is served from", async () => {
+    for (const path of ["/", "/index.html", "/albums/Q123"]) {
+      const html = await (await app.request(path)).text();
+      expect(html).toContain('content="https://discographer.example/"');
+      expect(html).not.toContain("__BASE_URL__");
     }
   });
 
