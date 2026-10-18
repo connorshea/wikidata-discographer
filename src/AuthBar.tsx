@@ -2,7 +2,7 @@
 // full-page navigation, so the redirect to Wikidata and back needs no client
 // state), or once logged in, the username and a log out button.
 import { useEffect, useState } from "react";
-import { useAuth } from "./lib/auth-context.ts";
+import { loginHref, useAuth } from "./lib/auth-context.ts";
 
 /**
  * Whether the OAuth callback turned the login away because the account is
@@ -52,7 +52,6 @@ export default function AuthBar() {
       </div>
     );
   if (!configured) return <span className="hint">Login isn't configured on this server.</span>;
-  const returnTo = window.location.pathname;
   return (
     <div className="auth-bar">
       {blockedLogin && (
@@ -61,7 +60,7 @@ export default function AuthBar() {
           in again.
         </span>
       )}
-      <a className="btn" href={`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>
+      <a className="btn" href={loginHref()}>
         Log in with Wikimedia
       </a>
     </div>

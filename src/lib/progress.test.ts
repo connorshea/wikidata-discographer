@@ -24,7 +24,7 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
 });
 
 const checks = (p: ProgressInput) =>
-  runChecks({ ...p, loggedIn: true, ineligible: null, matchesPending: false, albumPending: false });
+  runChecks({ ...p, ineligible: null, matchesPending: false, albumPending: false });
 
 describe("buildPlan blockers", () => {
   it("names a section for each error", () => {
@@ -80,7 +80,7 @@ describe("railSteps", () => {
     const byId = Object.fromEntries(railSteps(p).map((s) => [s.id, s]));
     expect(byId.album).toMatchObject({ status: "attention" });
     expect(byId.create.summary).toBe("Blocked: album QID");
-    expect(checks(p)[1]).toMatchObject({ ok: false, at: "album" });
+    expect(checks(p).find((c) => c.at === "album")).toMatchObject({ ok: false });
   });
 
   it("flags an existing single that can't be used", () => {
@@ -88,7 +88,7 @@ describe("railSteps", () => {
     const byId = Object.fromEntries(railSteps(p).map((s) => [s.id, s]));
     expect(byId.tracks).toMatchObject({ status: "attention" });
     expect(byId.create.summary).toBe("Blocked: tracks");
-    expect(checks(p)[2]).toMatchObject({ ok: false, at: "tracks", problem: true });
+    expect(checks(p).find((c) => c.at === "tracks")).toMatchObject({ ok: false, problem: true });
   });
 
   it("locks the later steps until a starting point is picked", () => {
@@ -156,7 +156,6 @@ describe("runChecks", () => {
   it("waits on the existing album's lookup", () => {
     const list = runChecks({
       ...input(EXAMPLE),
-      loggedIn: true,
       ineligible: null,
       matchesPending: false,
       albumPending: true,
@@ -170,12 +169,28 @@ describe("runChecks", () => {
   it("leaves an empty form's checks to do, with no problems", () => {
     const list = runChecks({
       ...input(EMPTY),
-      loggedIn: false,
       ineligible: null,
       matchesPending: false,
       albumPending: false,
     });
     expect(list.every((c) => !c.ok && !c.problem)).toBe(true);
+  });
+
+  it("lists an account that can't edit yet as a problem, and nothing about logging in", () => {
+    expect(checks(input(EXAMPLE)).map((c) => c.text)).not.toContain(
+      "Logged in and eligible to edit",
+    );
+    const list = runChecks({
+      ...input(EXAMPLE),
+      ineligible: "Your account is too new to edit",
+      matchesPending: false,
+      albumPending: false,
+    });
+    expect(list[0]).toMatchObject({
+      ok: false,
+      problem: true,
+      text: "Your account is too new to edit",
+    });
   });
 
   it("marks an unlinked performer as a problem once there are tracks", () => {

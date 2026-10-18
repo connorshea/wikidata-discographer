@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
-import { useAuth } from "./lib/auth-context.ts";
+import { loginHref, useAuth, useLoggedOut } from "./lib/auth-context.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -171,11 +171,59 @@ function Footer() {
   );
 }
 
+/**
+ * Above the form while logged out. Every API endpoint it uses needs a login, so
+ * the form below is shown dimmed and can't be used until then.
+ */
+function LoginBanner() {
+  const { configured, sessionEnded } = useAuth();
+  const loggedOut = useLoggedOut();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const loginRef = useRef<HTMLAnchorElement>(null);
+  // A session that ends makes the form inert, which drops the focus of anyone
+  // working in it. It goes to the login instead, so it isn't lost.
+  useEffect(() => {
+    if (!sessionEnded) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.closest("[inert]")) return;
+    (loginRef.current ?? headingRef.current)?.focus();
+  }, [sessionEnded]);
+  // The live region is always there, even empty, so a screen reader announces
+  // the banner when a session ends: one added along with its text isn't read.
+  return (
+    <div role="status">
+      {loggedOut && (
+        <div className="login-banner">
+          <div>
+            <h2 ref={headingRef} tabIndex={-1}>
+              {sessionEnded ? "Your session has ended" : "Log in to use Discographer"}
+            </h2>
+            <p>
+              {sessionEnded
+                ? "Log in again to carry on."
+                : "You need to log in with your Wikidata account to search, import, or make edits."}
+            </p>
+          </div>
+          {configured ? (
+            <a ref={loginRef} className="btn" href={loginHref()}>
+              Log in with Wikimedia
+            </a>
+          ) : (
+            <p className="msg err">Login isn't configured on this server.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
+  const { loading } = useAuth();
   return (
     <Switch>
       <Route path="/">
-        <Form />
+        {/* Form decides on mount whether it's logged out, so it waits for that to be known. */}
+        {loading ? <Header /> : <Form />}
       </Route>
       <Route path="/albums">
         <Header />
@@ -203,7 +251,12 @@ export default function App() {
 
 /** The form for an album's tracklist, and the run that puts it on Wikidata. */
 function Form() {
-  const [state, setState] = useState<State>(loadState);
+  const loggedOut = useLoggedOut();
+  // Logged out when the page loaded, the form is shown empty, as filling it in
+  // would ask the API about it. The saved form is left as it is for after the
+  // login. One whose session ends while it's open keeps what it has.
+  const [preview] = useState(loggedOut);
+  const [state, setState] = useState<State>(() => (preview ? structuredClone(EMPTY) : loadState()));
   const [formId, renewFormId] = useFormId();
   // Clear also starts the import afresh, without the last load's summary.
   const [clears, setClears] = useState(0);
@@ -235,7 +288,7 @@ function Form() {
   const [otherTab, setOtherTab] = useState<string | null>(null);
   const json = useMemo(() => JSON.stringify(coerceState(state)), [state]);
   if (otherTab !== null && otherTab === json) setOtherTab(null);
-  const stale = otherTab !== null;
+  const stale = !preview && otherTab !== null;
   useStorageEvent(STORAGE_KEY, (saved) => {
     if (!saved) return;
     try {
@@ -245,13 +298,13 @@ function Form() {
     }
   });
   useEffect(() => {
-    if (stale) return;
+    if (stale || preview) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // storage full or blocked; the form still works
     }
-  }, [state, stale]);
+  }, [state, stale, preview]);
 
   const {
     tracklist: albumTracklist,
@@ -293,7 +346,6 @@ function Form() {
   };
   const checks = runChecks({
     ...progress,
-    loggedIn: !!user,
     ineligible: user && !user.eligibility.ok ? user.eligibility.reason : null,
     matchesPending: status === "pending",
     albumPending: tracklistPending || albumFound?.status === "loading",
@@ -302,6 +354,7 @@ function Form() {
     <>
       <Header />
       <div className="page">
+        <LoginBanner />
         {stale && (
           <div className="msg warn row">
             <span>
@@ -313,7 +366,7 @@ function Form() {
             </button>
           </div>
         )}
-        <div className="shell">
+        <div className={loggedOut ? "shell logged-out" : "shell"} inert={loggedOut}>
           <ProgressRail
             steps={railSteps(progress)}
             running={!!running}
@@ -396,7 +449,8 @@ function Form() {
               )}
               <RunSection
                 {...props}
-                checklistDone={checks.every((c) => c.ok)}
+                // A run needs a login, which the checklist leaves to the banner.
+                checklistDone={!!user && checks.every((c) => c.ok)}
                 unreviewed={unreviewed}
                 formId={formId}
                 stale={stale}

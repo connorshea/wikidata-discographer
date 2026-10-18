@@ -324,7 +324,7 @@ export interface Check {
 /** The run's checklist: each thing that has to be true before it can start. */
 export function runChecks(
   p: ProgressInput & {
-    loggedIn: boolean;
+    /** Why the logged-in account can't edit yet, if it can't. */
     ineligible: string | null;
     matchesPending: boolean;
     /** The existing album is still being looked up on Wikidata. */
@@ -337,11 +337,8 @@ export function runChecks(
   const albumWrong = blockedAt(plan, "album") || p.notAlbum;
   const albumBlocked = albumWrong || albumSummary(state) === null;
   const checks: Check[] = [
-    p.loggedIn
-      ? p.ineligible
-        ? { ok: false, text: p.ineligible, at: null, problem: true }
-        : { ok: true, text: "Logged in and eligible to edit", at: null }
-      : { ok: false, text: "Log in with your Wikimedia account", at: null },
+    // Logged out, the form can't be used at all, so a login isn't on the list.
+    ...(p.ineligible ? [{ ok: false, text: p.ineligible, at: null, problem: true }] : []),
     !state.start
       ? { ok: false, text: "Pick a starting point", at: "start" }
       : albumBlocked

@@ -27,6 +27,8 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : "Couldn't lo
 export default function AlbumList() {
   const { user, loading } = useAuth();
   const [mine, setMine] = useState(false);
+  // The filter needs a login. One whose session ends goes back to every album.
+  const onlyMine = mine && !!user;
   const [albums, setAlbums] = useState<AlbumListEntry[]>([]);
   const [next, setNext] = useState<number | null>(null);
   const [busy, setBusy] = useState(true);
@@ -36,10 +38,11 @@ export default function AlbumList() {
   useEffect(() => {
     if (loading) return;
     const ctl = new AbortController();
-    fetchAlbums(null, mine, ctl.signal)
+    fetchAlbums(null, onlyMine, ctl.signal)
       .then((r) => {
         setAlbums(r.albums);
         setNext(r.next);
+        setError(null);
         setBusy(false);
       })
       .catch((e: unknown) => {
@@ -48,12 +51,12 @@ export default function AlbumList() {
         setBusy(false);
       });
     return () => ctl.abort();
-  }, [mine, loading]);
+  }, [onlyMine, loading]);
 
   const showMore = () => {
     setBusy(true);
     setError(null);
-    fetchAlbums(next, mine)
+    fetchAlbums(next, onlyMine)
       .then((r) => {
         setAlbums((prev) => [...prev, ...r.albums]);
         setNext(r.next);
@@ -82,7 +85,7 @@ export default function AlbumList() {
       )}
       {error && <p className="msg err">{error}</p>}
       {!busy && !error && !albums.length && (
-        <p className="hint">{mine ? "You haven't run any albums yet." : "No albums yet."}</p>
+        <p className="hint">{onlyMine ? "You haven't run any albums yet." : "No albums yet."}</p>
       )}
       {albums.length > 0 && (
         <div className="tablewrap">
