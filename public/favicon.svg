@@ -1,1 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#2F43C9"/><circle cx="16" cy="16" r="10" fill="none" stroke="#8C9BFF" stroke-width="1"/><circle cx="16" cy="16" r="4" fill="#FFF3CC"/><circle cx="16" cy="16" r="1.2" fill="#181A26"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28">
+  <style>
+    .hi { stop-color: #5a5f78; }
+    .mid { stop-color: #15171f; }
+    .lo { stop-color: #464a60; }
+    .vinyl { stroke: #d7dae4; stroke-width: 1; }
+    .groove { stroke: #3a3e4c; }
+    .label { fill: #2f43c9; }
+    @media (prefers-color-scheme: dark) {
+      .hi { stop-color: #4a4f80; }
+      .mid { stop-color: #14162a; }
+      .lo { stop-color: #3a3e66; }
+      .vinyl { stroke: #6d7192; stroke-width: 1.5; }
+      .groove { stroke: #2c3052; }
+      .label { fill: #8c9bff; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop class="hi" offset="0" />
+      <stop class="mid" offset="0.45" />
+      <stop class="mid" offset="0.55" />
+      <stop class="lo" offset="1" />
+    </linearGradient>
+    <mask id="hole">
+      <rect width="28" height="28" fill="#fff" />
+      <circle cx="14" cy="14" r="1.4" fill="#000" />
+    </mask>
+  </defs>
+  <g mask="url(#hole)">
+    <circle class="vinyl" cx="14" cy="14" r="13" fill="url(#sheen)" />
+    <circle class="groove" cx="14" cy="14" r="8.5" fill="none" />
+    <circle class="label" cx="14" cy="14" r="4.5" />
+  </g>
+</svg>
