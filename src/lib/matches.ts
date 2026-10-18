@@ -167,8 +167,89 @@ export const isStrong = (m: Match) => m.reasons.some((r) => !isTitleReason(r) &&
 // Where a description's "by …" phrase ends, e.g. "song by X from the album Y".
 const BY_END =
   /\s+(?:from|on|off|for|in|at|released|recorded|written|composed|produced)\b|\s*[(;:[]/i;
-const BY_SPLIT = /\s*(?:,|&|\+|\band\b|\bfeat\.?|\bft\.|\bfeaturing\b|\bwith\b|\bx\b)\s*/i;
+const BY_SPLIT = /\s*(?:,|&|\+|\band\b|\bfeaturing\b|\bfeat\.?|\bft\.|\bwith\b|\bx\b)\s*/i;
 const ACT_WORD = /\s+(?:band|group|duo|trio)$/i;
+// "by" and the word before it, e.g. "performed by" or "written by".
+const BY = /(?:([\p{L}-]+)[\s,]*)?\bby\s+/giu;
+// The words before "by" that name who wrote or made it rather than who performs it.
+const MAKER =
+  /^(?:(?:co-)?written|composed|lyrics|words|music|produced|arranged|directed|video|translated|adapted)$/i;
+// A description that names the artist up front, e.g. "2017 Portugal. The Man song".
+const ARTIST_FIRST = /^(?:\d{4}\s+)?(.+?)\s+(?:song|single|track|recording)$/i;
+// Capitalized words that describe a song rather than name its artist, as in
+// "English folk song" or "Christmas song".
+const DESCRIPTIVE = new Set(
+  [
+    "American",
+    "Argentine",
+    "Australian",
+    "Austrian",
+    "Belgian",
+    "Brazilian",
+    "British",
+    "Canadian",
+    "Chinese",
+    "Christmas",
+    "Colombian",
+    "Croatian",
+    "Czech",
+    "Danish",
+    "Dutch",
+    "Easter",
+    "English",
+    "Estonian",
+    "Eurovision",
+    "Filipino",
+    "Finnish",
+    "Flemish",
+    "French",
+    "German",
+    "Greek",
+    "Halloween",
+    "Hebrew",
+    "Hindi",
+    "Hungarian",
+    "Icelandic",
+    "Indian",
+    "Indonesian",
+    "Irish",
+    "Israeli",
+    "Italian",
+    "J-pop",
+    "Japanese",
+    "K-pop",
+    "Korean",
+    "Latin",
+    "Latvian",
+    "Lithuanian",
+    "Mexican",
+    "New",
+    "North",
+    "Norwegian",
+    "Polish",
+    "Portuguese",
+    "Romanian",
+    "Russian",
+    "Scottish",
+    "Serbian",
+    "Slovak",
+    "Slovenian",
+    "South",
+    "Soviet",
+    "Spanish",
+    "Swedish",
+    "Swiss",
+    "Taiwanese",
+    "Thai",
+    "Turkish",
+    "UK",
+    "US",
+    "Ukrainian",
+    "Vietnamese",
+    "Welsh",
+    "Zealand",
+  ].map((w) => w.toLowerCase()),
+);
 const squash = (s: string) =>
   s
     .normalize("NFKD")
@@ -177,18 +258,38 @@ const squash = (s: string) =>
     .replace(/[^\p{L}\p{N}]/gu, "");
 
 /**
- * The artists a description names after "by" that aren't among `artists`, e.g.
- * ["the Black Keys"] for "2022 single by the Black Keys" on a track by
- * someone else. Loose on purpose: a name counts as the track's when either
- * contains the other.
+ * The phrases a description names its performers in: what follows "by" (but
+ * not "written by", "words by" and the like, which name its writers), or what
+ * comes before "song" in one like "Owl City song", unless that only describes
+ * it, as in "English folk song".
+ */
+function performerPhrases(description: string): string[] {
+  const first = description.trim().match(ARTIST_FIRST)?.[1];
+  if (first && !/\bby\b/i.test(first)) {
+    const descriptive = first
+      .split(/\s+/)
+      .every((w) => !/^\p{Lu}/u.test(w) || DESCRIPTIVE.has(w.toLowerCase()));
+    return descriptive ? [] : [first];
+  }
+  const bys = [...description.matchAll(BY)];
+  return bys.flatMap((m, i) =>
+    MAKER.test(m[1] ?? "")
+      ? []
+      : [description.slice(m.index + m[0].length, bys[i + 1]?.index).split(BY_END)[0]],
+  );
+}
+
+/**
+ * The artists a description names as its performers that aren't among
+ * `artists`, e.g. ["the Black Keys"] for "2022 single by the Black Keys" or
+ * "Black Keys song" on a track by someone else. Loose on purpose: a name
+ * counts as the track's when either contains the other.
  */
 export function otherArtists(description: string | null, artists: readonly string[]): string[] {
-  const by = description?.match(/\bby\s+(.+)$/i)?.[1];
-  if (!by) return [];
+  if (!description) return [];
   const own = artists.map(squash).filter(Boolean);
-  return by
-    .split(BY_END)[0]
-    .split(BY_SPLIT)
+  const names = performerPhrases(description)
+    .flatMap((phrase) => phrase.split(BY_SPLIT))
     .map((name) =>
       name
         .replace(ACT_WORD, "")
@@ -199,6 +300,7 @@ export function otherArtists(description: string | null, artists: readonly strin
       const s = squash(name);
       return s && !own.some((o) => o.includes(s) || s.includes(o));
     });
+  return [...new Set(names)];
 }
 
 export interface Candidate {
