@@ -76,9 +76,7 @@ function ArtistSearch() {
       </div>
       <div id={`${id}-status`} role="status" className="search-status">
         {!typed ? (
-          <span className="sub">
-            Searches artists from Wikidata. A QID or Wikidata URL also works.
-          </span>
+          <span className="sub">A QID or Wikidata URL also works.</span>
         ) : searching ? (
           <span className="search-state">
             <span className="spinner" aria-hidden="true" />
