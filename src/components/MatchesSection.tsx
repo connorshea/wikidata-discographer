@@ -21,7 +21,7 @@ import {
 } from "../lib/matches.ts";
 import type { Disc, SingleState } from "../lib/plan.ts";
 import type { TrackMatch } from "../lib/api-types.ts";
-import { WikiLink } from "./common.tsx";
+import { InfoTip, WikiLink } from "./common.tsx";
 import type { Matches, MatchStatus } from "./use-matches.ts";
 import type { SectionProps } from "./types.ts";
 
@@ -249,9 +249,18 @@ export default function MatchesSection({
           </span>
         )}
         {!folded && fillable > 0 && (
-          <button type="button" className="ghost" onClick={fill}>
-            Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
-          </button>
+          <span className="f-head">
+            <button type="button" className="ghost" onClick={fill}>
+              Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
+            </button>
+            <InfoTip id="match-fill" label="About unambiguous matches" end>
+              A match is unambiguous when it's the only item for a field with the track's title that
+              also shares a performer, composer or lyricist, or is already on this album. This fills
+              each empty track and composition field that has one, and the single field of tracks
+              ticked as singles. Matches on a similar title, or on the title alone, are never filled
+              in and are left for you to review.
+            </InfoTip>
+          </span>
         )}
         {allReviewed && (
           <button
