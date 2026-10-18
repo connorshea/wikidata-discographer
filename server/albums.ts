@@ -9,11 +9,13 @@
 import { Hono } from "hono";
 import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { musicItems, submissions, users, wikidataEdits } from "../db/schema.ts";
+import { musicItems, musicLinks, submissions, users, wikidataEdits } from "../db/schema.ts";
 import type { AuthEnv } from "./auth/session.ts";
-import { toQid } from "./ids.ts";
+import { propertyNumber, toQid } from "./ids.ts";
 import { editGroupUrl } from "./submissions.ts";
 import type { AlbumListEntry, AlbumListResponse, SubmissionStatus } from "../src/lib/api-types.ts";
+
+const P175 = propertyNumber("P175");
 
 /** Albums per page. */
 export const ALBUM_PAGE_SIZE = 50;
@@ -40,12 +42,14 @@ export interface RunEdits {
 /**
  * One entry per album, in the order of `albumQids`, with its runs newest
  * first. The label is the mirror's, else the title of the album's latest run.
+ * The artists are the album's performers (P175) in the mirror, by label.
  */
 export function groupAlbums(
   albumQids: number[],
   runs: RunRow[],
   edits: Map<number, RunEdits>,
   labels: Map<number, string>,
+  artists: Map<number, string[]>,
   userId: number | null,
 ): AlbumListEntry[] {
   const byAlbum = new Map<number, RunRow[]>(albumQids.map((q) => [q, []]));
@@ -71,6 +75,7 @@ export function groupAlbums(
       {
         qid: toQid(qid),
         label: labels.get(qid) || albumRuns[0].title,
+        artists: artists.get(qid) ?? [],
         created: entryRuns.some((r) => r.createdAlbum),
         runs: entryRuns,
       },
@@ -136,7 +141,7 @@ albumRoutes.get("/", async (c) => {
       ).map((r) => ({ ...r, albumQid: r.albumQid! }))
     : [];
   const runIds = runs.map((r) => r.id);
-  const [edits, labels] = await Promise.all([
+  const [edits, labels, performers] = await Promise.all([
     runIds.length
       ? db
           .select({
@@ -154,7 +159,17 @@ albumRoutes.get("/", async (c) => {
           .from(musicItems)
           .where(inArray(musicItems.qid, albumQids))
       : [],
+    albumQids.length
+      ? db
+          .select({ qid: musicLinks.qid, label: musicItems.label })
+          .from(musicLinks)
+          .innerJoin(musicItems, eq(musicItems.qid, musicLinks.target))
+          .where(and(inArray(musicLinks.qid, albumQids), eq(musicLinks.property, P175)))
+      : [],
   ]);
+  const artists = new Map<number, string[]>();
+  for (const p of performers)
+    if (p.label) artists.set(p.qid, [...(artists.get(p.qid) ?? []), p.label]);
 
   c.header("Cache-Control", "no-store");
   return c.json({
@@ -168,6 +183,7 @@ albumRoutes.get("/", async (c) => {
         ]),
       ),
       new Map(labels.flatMap((l) => (l.label ? [[l.qid, l.label]] : []))),
+      artists,
       user?.id ?? null,
     ),
     next: more ? Number(page[ALBUM_PAGE_SIZE - 1].latest) : null,

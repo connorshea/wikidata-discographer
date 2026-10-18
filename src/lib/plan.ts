@@ -495,7 +495,8 @@ function checkTemplate(tpl: string, date: ParsedDate, vars = ["year", "artists"]
 }
 const blocking = (err: string) => !!err && err !== EMPTY_TEMPLATE;
 
-const joinNames = (a: string[]) =>
+/** Names joined as a list in a sentence: "a, b and c". */
+export const joinNames = (a: string[]) =>
   a.length < 2 ? (a[0] ?? "") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`;
 
 function fillDesc(tpl: string, year: string, artists: string[], type = ""): string {
