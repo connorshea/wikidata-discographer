@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { entityToRow } from "./mirror.ts";
+import { dateText, entityToRow } from "./mirror.ts";
 import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
 
 const item = (id: string, rank: WikibaseStatement["rank"] = "normal"): WikibaseStatement =>
@@ -39,6 +39,8 @@ describe("entityToRow", () => {
       label: "Day and Night",
       description: "2026 album",
       instanceOf: ["Q482994"],
+      released: null,
+      parts: null,
       // In ID_PROPERTIES order, duplicates and deprecated values dropped.
       ids: [
         { property: "P436", value: "mbid" },
@@ -64,6 +66,50 @@ describe("entityToRow", () => {
       { property: "P175", target: "Q52583" },
       { property: "P2550", target: "Q20" },
     ]);
+  });
+
+  it("keeps the earliest release date and the number of parts", () => {
+    const time = (t: string, precision: number, rank: WikibaseStatement["rank"] = "normal") =>
+      ({
+        rank,
+        mainsnak: {
+          snaktype: "value",
+          property: "P577",
+          datavalue: { type: "time", value: { time: t, precision } },
+        },
+      }) as WikibaseStatement;
+    const entity = {
+      id: "Q1",
+      claims: {
+        P31: [item("Q482994")],
+        P577: [
+          time("+2009-07-14T00:00:00Z", 11),
+          time("+2009-00-00T00:00:00Z", 9),
+          time("+2001-01-01T00:00:00Z", 11, "deprecated"),
+        ],
+        P2635: [
+          {
+            rank: "normal",
+            mainsnak: {
+              snaktype: "value",
+              property: "P2635",
+              datavalue: { type: "quantity", value: { amount: "+12", unit: "1" } },
+            },
+          } as WikibaseStatement,
+        ],
+      },
+    } as Entity;
+    expect(entityToRow(entity)).toMatchObject({ released: "2009", parts: 12 });
+  });
+
+  it("formats a date by its precision", () => {
+    expect(dateText({ time: "+2009-07-14T00:00:00Z", precision: 11 })).toBe("2009-07-14");
+    expect(dateText({ time: "+2009-07-14T00:00:00Z", precision: 10 })).toBe("2009-07");
+    expect(dateText({ time: "+2009-07-00T00:00:00Z", precision: 11 })).toBe("2009-07");
+    expect(dateText({ time: "+2009-00-00T00:00:00Z", precision: 9 })).toBe("2009");
+    expect(dateText({ time: "+2000-00-00T00:00:00Z", precision: 8 })).toBeNull();
+    expect(dateText({ time: "-0500-00-00T00:00:00Z", precision: 9 })).toBeNull();
+    expect(dateText("2009")).toBeNull();
   });
 
   it("uses only the preferred P31 when there is one", () => {

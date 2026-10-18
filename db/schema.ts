@@ -51,6 +51,11 @@ export const musicItems = mysqlTable(
     labelSearch: varchar("label_search", { length: 191 }),
     description: varchar("description", { length: 400 }),
     instanceOf: json<number[]>("instance_of").notNull(), // Q-numbers
+    // The earliest publication date (P577), as "YYYY", "YYYY-MM" or
+    // "YYYY-MM-DD" by its precision, so it sorts as text.
+    released: varchar("released", { length: 10 }),
+    // Its number of parts (P2635): an album's tracks, as Wikidata states them.
+    parts: int("parts", { unsigned: true }),
     // The revision the row was built from: the dump import skips an item whose
     // dump revision is no newer. Null if unknown (always re-read).
     revid: bigint("revid", { mode: "number" }),

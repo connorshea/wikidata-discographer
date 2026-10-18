@@ -16,7 +16,7 @@ import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
  * contents change (a new column, a class added or removed): rows from an
  * older version are then re-read from the next dump.
  */
-export const MIRROR_VERSION = 4; // 2: music_links, and curly quotes in label_search. 3: folded label_search. 4: P13602 links
+export const MIRROR_VERSION = 5; // 2: music_links, and curly quotes in label_search. 3: folded label_search. 4: P13602 links. 5: released and parts
 
 export interface MirrorRow {
   qid: string;
@@ -26,6 +26,10 @@ export interface MirrorRow {
   label: string | null;
   description: string | null;
   instanceOf: string[];
+  /** The earliest publication date (P577): "YYYY", "YYYY-MM" or "YYYY-MM-DD", by its precision. */
+  released: string | null;
+  /** Its number of parts (P2635), if a whole number. */
+  parts: number | null;
   ids: { property: string; value: string }[];
   /** Item-valued statements (LINK_PROPERTIES); none for artists. */
   links: { property: string; target: string }[];
@@ -42,6 +46,35 @@ function pickText(texts: Entity["labels"]): string | undefined {
 function bestRank(statements: WikibaseStatement[] = []): WikibaseStatement[] {
   const preferred = statements.filter((s) => s.rank === "preferred");
   return preferred.length ? preferred : statements.filter((s) => s.rank !== "deprecated");
+}
+
+/** A time value as "YYYY", "YYYY-MM" or "YYYY-MM-DD", by its precision. Null below year precision, or BCE. */
+export function dateText(value: unknown): string | null {
+  const v = value as { time?: unknown; precision?: unknown } | undefined;
+  if (typeof v?.time !== "string" || typeof v.precision !== "number" || v.precision < 9)
+    return null;
+  const m = /^\+(\d{4})-(\d{2})-(\d{2})T/.exec(v.time);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  if (v.precision === 9 || mo === "00") return y;
+  if (v.precision === 10 || d === "00") return `${y}-${mo}`;
+  return `${y}-${mo}-${d}`;
+}
+
+/** The earliest of an entity's publication dates (P577). */
+function releasedOf(statements: WikibaseStatement[] | undefined): string | null {
+  const dates = bestRank(statements)
+    .map((s) => dateText(s.mainsnak.datavalue?.value))
+    .filter((d): d is string => d !== null);
+  // A year sorts before the dates in it, so a vaguer date of the same year wins.
+  return dates.length ? dates.sort()[0] : null;
+}
+
+/** Its number of parts (P2635), when that's a whole number that fits the column. */
+function partsOf(statements: WikibaseStatement[] | undefined): number | null {
+  const [s] = bestRank(statements);
+  const amount = Number((s?.mainsnak.datavalue?.value as { amount?: unknown } | undefined)?.amount);
+  return Number.isInteger(amount) && amount > 0 && amount < 2 ** 31 ? amount : null;
 }
 
 /** The mirror row for an entity, or null when it isn't a music item we track. */
@@ -85,6 +118,8 @@ export function entityToRow(entity: Entity): MirrorRow | null {
     label: clip(label, 400),
     description: clip(pickText(entity.descriptions), 400),
     instanceOf,
+    released: kind === "artist" ? null : releasedOf(claims.P577),
+    parts: kind === "artist" ? null : partsOf(claims.P2635),
     ids,
     links,
   };
@@ -134,6 +169,8 @@ async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "a
     labelSearch: labelSearchKey(r.label),
     description: r.description,
     instanceOf: r.instanceOf.map(qidNumber),
+    released: r.released,
+    parts: r.parts,
     revid: r.revid,
     rowVersion: MIRROR_VERSION,
     source,
@@ -164,6 +201,8 @@ async function writeRows(tx: Tx, rows: readonly MirrorRow[], source: "dump" | "a
         labelSearch: sql`values(label_search)`,
         description: sql`values(description)`,
         instanceOf: sql`values(instance_of)`,
+        released: sql`values(released)`,
+        parts: sql`values(parts)`,
         revid: sql`values(revid)`,
         rowVersion: sql`values(row_version)`,
         updatedAt: sql`CURRENT_TIMESTAMP`,

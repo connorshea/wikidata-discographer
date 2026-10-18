@@ -125,11 +125,10 @@ async function albumFacts(qids: number[]): Promise<AlbumFactLookup> {
   };
 }
 
-items.get("/search", async (c) => {
-  const q = c.req.query("q")?.trim() ?? "";
+/** Items labelled `q`, then up to 10 whose labels start with it, of some kinds (none is any). */
+export async function searchLabels(q: string, kinds: MusicKind[]): Promise<Selected[]> {
   const key = labelSearchKey(q);
-  const kinds = searchKinds(c.req.query("kind"));
-  if (!key) return c.json({ items: [] } satisfies SearchResponse);
+  if (!key) return [];
   // A short query keeps its punctuation, but the longer titles it starts are
   // keyed folded, so match their start folded too ("#1" finds "#1 Crush").
   const start = foldTitle(q) || key;
@@ -148,7 +147,14 @@ items.get("/search", async (c) => {
           .limit(10)
       : [];
   const seen = new Set<number>();
-  const result = [...exact, ...prefix].filter((r) => !seen.has(r.qid) && seen.add(r.qid));
+  return [...exact, ...prefix].filter((r) => !seen.has(r.qid) && seen.add(r.qid));
+}
+
+items.get("/search", async (c) => {
+  const result = await searchLabels(
+    c.req.query("q")?.trim() ?? "",
+    searchKinds(c.req.query("kind")),
+  );
   const facts = await albumFacts(
     result.filter((r) => r.kind === "album" || r.kind === "ep").map((r) => r.qid),
   );

@@ -7,6 +7,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { albumRoutes } from "./albums.ts";
+import { artistRoutes } from "./artists.ts";
 import { authRoutes } from "./auth/oauth.ts";
 import { sameOriginOnly } from "./auth/same-origin.ts";
 import { type AuthEnv, requireUser, sessionMiddleware } from "./auth/session.ts";
@@ -51,6 +52,7 @@ export const isPublicApi = (path: string) =>
   path.startsWith("/api/auth/") || path === "/api/albums";
 app.use("/api/*", (c, next) => (isPublicApi(c.req.path) ? next() : requireUser(c, next)));
 app.route("/api/albums", albumRoutes);
+app.route("/api/artists", artistRoutes);
 app.route("/api/auth", authRoutes); // /api/auth/{login,callback,logout,me}
 app.route("/api/items", items);
 app.route("/api/musicbrainz", musicbrainzRoutes);

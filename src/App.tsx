@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, Route, Switch, useRoute } from "wouter";
+import { Link, Route, Switch, useLocation, useRoute, useSearch } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { loginHref, useAuth, useLoggedOut } from "./lib/auth-context.ts";
-import { buildPlan, type State } from "./lib/plan.ts";
+import { buildPlan, QID, type State } from "./lib/plan.ts";
+import { artistStart, existingAlbum } from "./lib/artist-start.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
 import AlbumSection from "./components/AlbumSection.tsx";
@@ -21,6 +22,7 @@ import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
 import { albumProblem, singleProblems, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
+import ArtistPage from "./components/ArtistPage.tsx";
 import { Lock } from "./components/common.tsx";
 import { LockedContext } from "./lib/lock-context.ts";
 
@@ -60,9 +62,10 @@ const FORM_ID_KEY = "discographer:formId";
 // Not crypto.randomUUID, which only exists on HTTPS and localhost.
 const newFormId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
-/** The form's id, and a function that gives it a new one. */
-function useFormId(): [string, () => void] {
+/** The form's id, a new one if `fresh`, and a function that gives it a new one. */
+function useFormId(fresh: boolean): [string, () => void] {
   const [id, setId] = useState(() => {
+    if (fresh) return newFormId();
     try {
       const saved = localStorage.getItem(FORM_ID_KEY);
       if (saved) return saved;
@@ -108,9 +111,9 @@ function LockedSteps() {
   );
 }
 
-/** A header link, marked as the current page while it's open. */
-function NavLink({ href, children }: { href: string; children: string }) {
-  const [active] = useRoute(href);
+/** A header link, marked as the current page while it's open, or any page `match` matches. */
+function NavLink({ href, match, children }: { href: string; match?: string; children: string }) {
+  const [active] = useRoute(match ?? href);
   return (
     <Link href={href} aria-current={active ? "page" : undefined}>
       {children}
@@ -153,6 +156,9 @@ function Header() {
         <nav className="top-nav" aria-label="Pages">
           <NavLink href="/">New album</NavLink>
           <NavLink href="/albums">Albums</NavLink>
+          <NavLink href="/artists" match="/artists/*?">
+            Artists
+          </NavLink>
           <a
             href={RECENT_CHANGES_URL}
             target="_blank"
@@ -241,6 +247,9 @@ export default function App() {
           <Footer />
         </main>
       </Route>
+      <Route path="/artists/:qid?">
+        {(params) => <ArtistRoute qid={params.qid?.toUpperCase() ?? null} />}
+      </Route>
       <Route>
         <Header />
         <main className="page">
@@ -258,6 +267,23 @@ export default function App() {
   );
 }
 
+/** The artist page. Like the form, it needs a login, so it's dimmed until then. */
+function ArtistRoute({ qid }: { qid: string | null }) {
+  const loggedOut = useLoggedOut();
+  return (
+    <>
+      <Header />
+      <main className="page narrow">
+        <LoginBanner />
+        <div className={loggedOut ? "logged-out" : undefined} inert={loggedOut}>
+          <ArtistPage qid={qid && QID.test(qid) ? qid : null} />
+        </div>
+        <Footer />
+      </main>
+    </>
+  );
+}
+
 /** The form for an album's tracklist, and the run that puts it on Wikidata. */
 function Form() {
   const loggedOut = useLoggedOut();
@@ -265,8 +291,26 @@ function Form() {
   // would ask the API about it. The saved form is left as it is for after the
   // login. One whose session ends while it's open keeps what it has.
   const [preview] = useState(loggedOut);
-  const [state, setState] = useState<State>(() => (preview ? structuredClone(EMPTY) : loadState()));
-  const [formId, renewFormId] = useFormId();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const [fromArtist] = useState(() => (preview ? null : artistStart(search)));
+  // A plain album replaces the form, as a MusicBrainz load does. A release
+  // group goes through the MusicBrainz picker, which replaces it once a
+  // release is loaded.
+  const [state, setState] = useState<State>(() =>
+    preview
+      ? structuredClone(EMPTY)
+      : fromArtist && !fromArtist.rg
+        ? existingAlbum(fromArtist.album)
+        : loadState(),
+  );
+  const [formId, renewFormId] = useFormId(!!fromArtist && !fromArtist.rg);
+  useEffect(() => {
+    if (!new URLSearchParams(search).has("album")) return;
+    navigate("/", { replace: true });
+    // The link may come from far down the artist page: start at the top.
+    window.scrollTo({ top: 0 });
+  }, [search, navigate]);
   // Clear also starts the import afresh, without the last load's summary.
   const [clears, setClears] = useState(0);
   // Clear and a MusicBrainz import start a new form.
@@ -329,6 +373,12 @@ function Form() {
     state.settings.lang,
   );
   const startRef = useRef<StartHandle>(null);
+  const loadedRg = useRef(false);
+  useEffect(() => {
+    if (!fromArtist?.rg || loadedRg.current) return;
+    loadedRg.current = true;
+    startRef.current?.loadReleaseGroup(fromArtist.rg, fromArtist.album);
+  }, [fromArtist]);
   const matchesRef = useRef<MatchesHandle>(null);
   const { matches, status } = useMatches(state, plan);
   // Candidates dismissed in the Possible matches card, by candidateId.
