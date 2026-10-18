@@ -3027,7 +3027,7 @@ button.link.start-change {
   margin: 0;
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
-  gap: 8px 12px;
+  gap: 14px 12px;
   align-items: baseline;
 }
 .mb-ids dt {
