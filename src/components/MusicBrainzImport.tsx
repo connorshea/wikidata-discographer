@@ -331,6 +331,15 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
   const kinds = new Set(misplaced.map((m) => m.kind));
   const holders = kinds.size === 1 ? `${[...kinds][0]}s` : "items";
   const oneHolder = misplaced.length === 1;
+  // Said once here rather than on every row, so the rows stay on one line.
+  const toNew = new Set(misplaced.filter((m) => m.newComp).map((m) => m.title));
+  const newComps = !toNew.size
+    ? ""
+    : misplaced.some((m) => !m.newComp)
+      ? " Where no composition has the work ID yet, the new one gets it instead."
+      : toNew.size === 1
+        ? " The new composition gets the work ID instead."
+        : " The new compositions get the work IDs instead.";
 
   const foundParts: ReactNode[] = [
     found.album && (
@@ -356,7 +365,7 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
           <p>
             {oneHolder ? `This ${misplaced[0].kind} has` : `These ${holders} have`} a composition's
             work ID. Consider removing {oneHolder ? "it" : "them"} on Wikidata, as only a
-            composition should have one.
+            composition should have one.{newComps}
           </p>
           <ul className="mb-fix">
             {misplaced.map((m) => (
@@ -367,7 +376,6 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
                 <span>{m.kind}</span>
                 <span className="muted">has the work ID for</span>
                 <b>“{m.title}”</b>
-                {m.newComp && <span className="muted">The new composition gets it instead.</span>}
                 <a
                   className="mb-fix-open"
                   href={`${wikiBaseUrl}/wiki/${m.qid}`}
