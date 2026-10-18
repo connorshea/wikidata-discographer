@@ -21,9 +21,7 @@
     <circle cx="14" cy="14" r="1.4" fill="#f3f4f8" />
   </g>
   <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
-    <text x="420" y="300" font-size="96" font-weight="bold" letter-spacing="-1" fill="#181a26">Discographer</text>
-    <text x="424" y="364" font-size="44" fill="#5a5f74">for Wikidata</text>
-    <text x="424" y="446" font-size="28" fill="#5a5f74">Albums, tracks, compositions and singles</text>
-    <text x="424" y="484" font-size="28" fill="#5a5f74">from a tracklist.</text>
+    <text x="420" y="316" font-size="96" font-weight="bold" letter-spacing="-1" fill="#181a26">Discographer</text>
+    <text x="424" y="380" font-size="44" fill="#5a5f74">for Wikidata</text>
   </g>
 </svg>
