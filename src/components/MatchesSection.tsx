@@ -274,8 +274,8 @@ export default function MatchesSection({
       {!folded && (
         <div id="match-body">
           <p className="hint">
-            Items already on Wikidata with a track's title, or one that differs only in punctuation,
-            accents or “&” and “and”. Use one to reuse it, or dismiss it.
+            Items already on Wikidata that the system has auto-matched. You can reuse it, or dismiss
+            it. This helps prevent the creation of duplicates.
           </p>
           {queue.length > 0 && <div className="match-groups">{queue.map((r) => group(r))}</div>}
           {done.length > 0 && (
