@@ -171,6 +171,31 @@ describe("buildPlan", () => {
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
     });
 
+    describe("of one work on two tracks", () => {
+      const shared = () => {
+        const state = withIds();
+        state.discs[0].tracks[4].mb = { ...ids, recording: "" };
+        return state;
+      };
+
+      it("block the run", () => {
+        const plan = buildPlan(shared());
+        expect(plan.ready).toBe(false);
+        expect(plan.ops).toEqual([]);
+        expect(plan.messages).toContainEqual([
+          "err",
+          "Tracks 1.2 and 1.5 are performances of the same MusicBrainz work. " +
+            "Discographer can't create this album for now.",
+        ]);
+      });
+
+      it("don't block it when one of them reuses a composition", () => {
+        const state = shared();
+        state.discs[0].comp[5] = "Q42";
+        expect(buildPlan(state).ready).toBe(true);
+      });
+    });
+
     it("give the new track's duration a MusicBrainz reference", () => {
       const durationOf = (state: typeof EXAMPLE) => {
         const op = buildPlan(state).ops.find((o) => o.op === "create" && o.key === "track:0:2");

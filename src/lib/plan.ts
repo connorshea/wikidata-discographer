@@ -807,6 +807,15 @@ export function buildPlan(state: State): Plan {
     seen.add(k);
   }
 
+  // Tracks of one MusicBrainz work would each get a new composition with the same P435.
+  const byWork = new Map<string, string[]>();
+  for (const it of items) {
+    const work = it.r.mb?.work;
+    if (!work || it.existComp) continue;
+    byWork.set(work, [...(byWork.get(work) ?? []), `${it.di + 1}.${it.r.n}`]);
+  }
+  const sharedWorks = [...byWork.values()].filter((at) => at.length > 1);
+
   if (!items.length) err("Add the album's tracks, or load them from MusicBrainz.", "tracks");
   tracks.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
@@ -825,6 +834,12 @@ export function buildPlan(state: State): Plan {
     );
   if (albumErr) err("Fix the album details at the top of the page.", "album");
   if (dupes.size) err(`Track numbers repeat within a disc: ${[...dupes].join(", ")}.`, "tracks");
+  for (const at of sharedWorks)
+    err(
+      `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are performances of the same MusicBrainz work. ` +
+        "Discographer can't create this album for now.",
+      "tracks",
+    );
   if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`, "performers");
   if (unmapped.size) err(`No performer QID for: ${[...unmapped].join(", ")}.`, "performers");
   if (invalid.length) err(`Not a QID: ${invalid.join(", ")}.`, "tracks");
