@@ -201,6 +201,42 @@ export interface AlbumListResponse {
   next: number | null;
 }
 
+/** An artist found by GET /api/artists/search. */
+export interface ArtistResult extends MirrorItem {
+  /** How many albums and EPs in the mirror have it as performer (P175). */
+  albums: number;
+}
+
+export interface ArtistSearchResponse {
+  artists: ArtistResult[];
+}
+
+/** One of an artist's albums or EPs, as of the mirror. */
+export interface ArtistAlbum {
+  qid: string;
+  label: string | null;
+  /** "Album", "EP", "Live album" and so on (albumType, src/lib/music.ts). */
+  type: string;
+  /** The earliest publication date: "YYYY", "YYYY-MM" or "YYYY-MM-DD". */
+  released: string | null;
+  /** How many tracks its tracklist (P658) lists. */
+  tracks: number;
+  /** How many tracks its number of parts (P2635) says it has. */
+  parts: number | null;
+  /** Its MusicBrainz release group IDs (P436). */
+  releaseGroups: string[];
+  /** The latest Discographer run on it. */
+  run: Pick<AlbumRun, "id" | "status" | "mine" | "createdAt" | "editGroupUrl"> | null;
+}
+
+/** GET /api/artists/:qid: the artist and its albums and EPs, oldest first. */
+export interface ArtistResponse {
+  artist: { qid: string; label: string | null; description: string | null };
+  albums: ArtistAlbum[];
+  /** Whether there were more albums than the server sends. */
+  truncated: boolean;
+}
+
 /** Body of POST /api/items/matches: the tracklist rows to find existing items for. */
 export interface MatchesRequest {
   /** The existing album being added to, or "" when creating one. */

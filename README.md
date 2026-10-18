@@ -93,7 +93,8 @@ Test Wikidata while developing.
 `music_items` and `music_external_ids` hold every Wikidata item that is an
 album, EP, single, song, musical work, track or music group, or that has an
 artist identifier (MusicBrainz, Discogs, Spotify, Apple Music, …). For each one
-they store its `instance of`, label, description and music identifiers.
+they store its `instance of`, label, description, earliest publication date
+(P577), number of parts (P2635) and music identifiers.
 `music_links` holds the item-valued statements that tie them together:
 performer, composer and lyricist (P175, P86, P676), recording or performance of
 (P2550), published in and part of (P1433, P361), and tracklist (P658), for
@@ -103,6 +104,11 @@ everything but artists: about a million rows. The lists are in
 - block creating an album whose Spotify, MusicBrainz or Apple Music ID is
   already on Wikidata, and warn about albums with the same title
 - suggest QIDs for the performers
+- list an artist's albums and EPs on the Artists page (`/artists/<qid>`):
+  the items with the artist as performer (P175), oldest first, with whether
+  each has a tracklist yet and the latest Discographer run on it. "Add
+  tracklist" starts the form from the album (`/?album=<qid>`), or from its
+  MusicBrainz release group when it has exactly one (`&rg=<mbid>`)
 - suggest existing compositions, tracks and singles for each tracklist row
   (`server/matches.ts`): items with the row's title that share one of its
   performers, or that are on the existing album. Titles that differ only in

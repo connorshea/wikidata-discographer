@@ -251,8 +251,8 @@ export default function MatchesSection({
         {!folded && fillable > 0 && (
           <span className="f-head">
             <InfoTip id="match-fill" label="About unambiguous matches" end>
-              Fills each empty field that has exactly one match with the track's title and the same
-              artist. Anything less certain is left for you to review.
+              Fills any matches that have the exact same title and artist. Anything less certain is
+              left for you to review.
             </InfoTip>
             <button type="button" className="link match-fill" onClick={fill}>
               Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
@@ -274,8 +274,8 @@ export default function MatchesSection({
       {!folded && (
         <div id="match-body">
           <p className="hint">
-            Items already on Wikidata with a track's title, or one that differs only in punctuation,
-            accents or “&” and “and”. Use one to reuse it, or dismiss it.
+            Items already on Wikidata that the system has auto-matched. You can reuse it, or dismiss
+            it. This helps prevent the creation of duplicates.
           </p>
           {queue.length > 0 && <div className="match-groups">{queue.map((r) => group(r))}</div>}
           {done.length > 0 && (

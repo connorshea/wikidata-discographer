@@ -84,6 +84,22 @@ export const LINK_PROPERTIES: Readonly<Record<string, string>> = {
   P13602: "single taken from",
 };
 
+/** What an album's more specific class makes it, for the artist page's Type column. */
+const ALBUM_TYPES: Readonly<Record<string, string>> = {
+  Q208569: "Studio album",
+  Q209939: "Live album",
+  Q222910: "Compilation",
+  Q4176708: "Soundtrack",
+  Q963099: "Remix album",
+};
+
+/** An album or EP's type, by its P31 values: "EP", "Live album", or plain "Album". */
+export function albumType(kind: MusicKind, instanceOf: readonly string[]): string {
+  if (kind === "ep") return "EP";
+  for (const qid of instanceOf) if (qid in ALBUM_TYPES) return ALBUM_TYPES[qid];
+  return "Album";
+}
+
 /** Pick the kind for an item from its P31 values and the properties it has. */
 export function kindOf(
   instanceOf: readonly string[],

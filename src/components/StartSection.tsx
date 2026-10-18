@@ -204,6 +204,16 @@ export default function StartSection({
                 )}
               </span>
             </div>
+            {state.start === "mb" && state.album.mb?.release && (
+              <a
+                className="start-link"
+                href={`https://musicbrainz.org/release/${encodeURIComponent(state.album.mb.release)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on MusicBrainz ↗
+              </a>
+            )}
             {counts && !counts.attention && (
               <button
                 type="button"
