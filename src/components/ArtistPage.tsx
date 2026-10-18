@@ -311,6 +311,9 @@ function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: 
           EditGroups ↗
         </a>
       )}
+      <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
+        Open on Wikidata ↗
+      </a>
     </>
   );
   return (
@@ -359,7 +362,7 @@ function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: 
           runLink
         ) : a.tracks > 0 ? (
           <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
-            View on Wikidata ↗
+            Open on Wikidata ↗
           </a>
         ) : (
           <Link
