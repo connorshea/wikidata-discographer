@@ -75,7 +75,8 @@ export function rankArtists(
 /**
  * The artist's label and description: the mirror's, else Wikidata's. Artists
  * without an artist identifier aren't in the mirror, though albums can still
- * name them as performer. Null if it isn't an artist, or doesn't exist.
+ * name them as performer, so one of those counts if something in the mirror
+ * does. Null if it isn't an artist, or doesn't exist.
  */
 async function findArtist(qid: string): Promise<ArtistResponse["artist"] | null> {
   const [row] = await db
@@ -84,6 +85,13 @@ async function findArtist(qid: string): Promise<ArtistResponse["artist"] | null>
     .where(eq(musicItems.qid, qidNumber(qid)));
   if (row)
     return row.kind === "artist" ? { qid, label: row.label, description: row.description } : null;
+  // One that nothing names as performer, like "human" (Q5), isn't an artist.
+  const [performs] = await db
+    .select({ qid: musicLinks.qid })
+    .from(musicLinks)
+    .where(and(eq(musicLinks.target, qidNumber(qid)), eq(musicLinks.property, P175)))
+    .limit(1);
+  if (!performs) return null;
   // The user is waiting on this: retry a transient failure once.
   const found = (await describeItems([qid], "en", { retries: 1 })).get(qid);
   return found?.status === "ok"
