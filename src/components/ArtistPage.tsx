@@ -22,9 +22,11 @@ export default function ArtistPage({ qid }: { qid: string | null }) {
   const { user } = useAuth();
   return (
     <>
-      <ArtistSearch key={qid} />
+      {/* Siblings, so the keys must differ, or React keeps the old search
+          beside the new one when the artist changes. */}
+      <ArtistSearch key={`search:${qid}`} />
       {/* Every artist endpoint needs a login. */}
-      {qid && user && <ArtistAlbums key={qid} qid={qid} />}
+      {qid && user && <ArtistAlbums key={`albums:${qid}`} qid={qid} />}
     </>
   );
 }
