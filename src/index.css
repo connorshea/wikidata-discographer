@@ -12,10 +12,10 @@
   --disc-edge: #9da2b6;
   --trk-edge: #4553c4;
   --cmp-edge: #2e8150;
-  --rg-edge: #c99a1c;
+  --rg-edge: #b0397a;
   /* A done single's pill. */
-  --rg-tint: #fbf1d3;
-  --rg-ink: #5e4708;
+  --rg-tint: #fbe6f1;
+  --rg-ink: #7a1f52;
   /* Neutral fills: pills, the current page in the nav, a pending step. */
   --tint: #eef0f5;
   --hover: #e9ebf2;
@@ -78,9 +78,9 @@
     --disc-edge: #8a8fae;
     --trk-edge: #8c98f2;
     --cmp-edge: #6cc48f;
-    --rg-edge: #d9b23e;
-    --rg-tint: #3a3115;
-    --rg-ink: #f0d58a;
+    --rg-edge: #f08cc4;
+    --rg-tint: #3a1a2d;
+    --rg-ink: #f5b8da;
     --tint: #23263f;
     --hover: #292c49;
     --warn-tint: #3a2f12;
