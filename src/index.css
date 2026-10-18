@@ -1755,7 +1755,7 @@ details summary {
   background: var(--tint);
   color: var(--ink);
 }
-.planned-filters button:hover:not(:disabled) {
+.planned-filters button:hover:not(:disabled, [aria-pressed="true"]) {
   background: var(--hover);
 }
 .planned-filters button[aria-pressed="true"] {
