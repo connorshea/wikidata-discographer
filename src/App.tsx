@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useRoute } from "wouter";
 import AuthBar from "./AuthBar.tsx";
-import { useAuth } from "./lib/auth-context.ts";
+import { loginHref, useAuth } from "./lib/auth-context.ts";
 import { buildPlan, type State } from "./lib/plan.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -171,18 +171,63 @@ function Footer() {
   );
 }
 
+/**
+ * The page, once logged in. Every API endpoint needs a login, so until then
+ * there's a prompt to log in in its place rather than a page of failing
+ * requests.
+ */
+function LoginGate({ children }: { children: ReactNode }) {
+  const { user, configured, loading, sessionEnded } = useAuth();
+  if (user) return children;
+  return (
+    <>
+      <Header />
+      {!loading && (
+        <main className="page">
+          <section className="block">
+            <h2>Log in to use Discographer</h2>
+            {sessionEnded && (
+              <p className="msg warn">
+                Your session has ended. Log in again to carry on. What you entered in the form is
+                kept.
+              </p>
+            )}
+            <p className="hint">
+              Discographer adds albums and their tracklists to Wikidata, with edits made from your
+              Wikimedia account. Log in to search for albums, import from MusicBrainz and build a
+              tracklist.
+            </p>
+            {configured ? (
+              <a className="btn" href={loginHref()}>
+                Log in with Wikimedia
+              </a>
+            ) : (
+              <p className="msg err">Login isn't configured on this server, so it can't be used.</p>
+            )}
+          </section>
+          <Footer />
+        </main>
+      )}
+    </>
+  );
+}
+
 export default function App() {
   return (
     <Switch>
       <Route path="/">
-        <Form />
+        <LoginGate>
+          <Form />
+        </LoginGate>
       </Route>
       <Route path="/albums">
-        <Header />
-        <main className="page">
-          <AlbumList />
-          <Footer />
-        </main>
+        <LoginGate>
+          <Header />
+          <main className="page">
+            <AlbumList />
+            <Footer />
+          </main>
+        </LoginGate>
       </Route>
       <Route>
         <Header />

@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { api } from "./lib/client.ts";
+import { api, setUnauthorizedHandler } from "./lib/client.ts";
 import { AuthContext, type AuthState } from "./lib/auth-context.ts";
 import type { AuthMeResponse } from "./lib/api-types.ts";
 
@@ -13,6 +13,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
     configured: false,
     loading: true,
+    sessionEnded: false,
     wikiBaseUrl: "https://www.wikidata.org",
   });
   const [refreshes, setRefreshes] = useState(0);
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: me.user,
           configured: me.configured,
           loading: false,
+          sessionEnded: false,
           wikiBaseUrl: me.wikiBaseUrl,
         });
       })
@@ -56,6 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => setRefreshes((n) => n + 1), wait);
     return () => clearTimeout(timer);
   }, [user, failures]);
+
+  // A 401 means the session is gone, so the page asks for a login again
+  // rather than showing the request as failed.
+  useEffect(() => {
+    setUnauthorizedHandler(() =>
+      setState((s) => (s.user ? { ...s, user: null, sessionEnded: true } : s)),
+    );
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const logout = useCallback(async () => {
     await api("/api/auth/logout", { method: "POST" });

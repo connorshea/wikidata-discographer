@@ -11,6 +11,16 @@ export class FetchError extends Error {
   }
 }
 
+let onUnauthorized: (() => void) | null = null;
+
+/**
+ * Called whenever the API answers 401: the session has ended (expired, or
+ * logged out in another tab), so the page goes back to asking for a login.
+ */
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn;
+}
+
 export async function api<T>(
   path: string,
   opts: { method?: string; body?: unknown; signal?: AbortSignal } = {},
@@ -33,6 +43,7 @@ export async function api<T>(
     } catch {
       // not JSON
     }
+    if (res.status === 401) onUnauthorized?.();
     throw new FetchError(res.status, message, body);
   }
   return (text ? JSON.parse(text) : undefined) as T;

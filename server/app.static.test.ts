@@ -60,7 +60,7 @@ describe("static SPA caching headers", () => {
   });
 
   it("keeps API 404s out of the SPA fallback", async () => {
-    const res = await app.request("/api/nope");
+    const res = await app.request("/api/auth/nope");
     expect(res.status).toBe(404);
     expect(res.headers.get("cache-control")).toBeNull();
   });

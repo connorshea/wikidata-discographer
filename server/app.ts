@@ -9,7 +9,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { albumRoutes } from "./albums.ts";
 import { authRoutes } from "./auth/oauth.ts";
 import { sameOriginOnly } from "./auth/same-origin.ts";
-import { type AuthEnv, sessionMiddleware } from "./auth/session.ts";
+import { type AuthEnv, requireUser, sessionMiddleware } from "./auth/session.ts";
 import { items } from "./items.ts";
 import { musicbrainzRoutes } from "./musicbrainz.ts";
 import { submissionRoutes } from "./submissions.ts";
@@ -41,6 +41,12 @@ app.use(
 
 app.use("/api/*", sameOriginOnly);
 app.use("/api/*", sessionMiddleware);
+// Every endpoint but the login flow needs a login: they query the database or
+// call Wikidata and MusicBrainz on the server's behalf, which shouldn't be open
+// to anyone. /api/auth/* (login, callback, logout, me) works logged out.
+app.use("/api/*", (c, next) =>
+  c.req.path.startsWith("/api/auth/") ? next() : requireUser(c, next),
+);
 app.route("/api/albums", albumRoutes);
 app.route("/api/auth", authRoutes); // /api/auth/{login,callback,logout,me}
 app.route("/api/items", items);
