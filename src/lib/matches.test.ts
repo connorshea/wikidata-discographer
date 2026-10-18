@@ -228,10 +228,50 @@ describe("otherArtists", () => {
       ]),
     ).toEqual(["Owl City"]);
     expect(otherArtists("song by The Beatles", ["Beatles"])).toEqual([]);
+    expect(otherArtists("song by Icona Pop featuring Charli XCX", ["Icona Pop"])).toEqual([
+      "Charli XCX",
+    ]);
     expect(otherArtists("song by Earth, Wind & Fire", ["Earth, Wind & Fire"])).toEqual([]);
   });
-  it("is empty without a “by”", () => {
+  it("names the artist a description starts with", () => {
+    expect(otherArtists("Portugal The Man song", ["Carly Rae Jepsen"])).toEqual([
+      "Portugal The Man",
+    ]);
+    expect(otherArtists("2011 Jay-Z and Kanye West single", ["Kanye West"])).toEqual(["Jay-Z"]);
+    expect(otherArtists("Owl City track", ["X"])).toEqual(["Owl City"]);
+    expect(otherArtists("Portugal The Man song", ["Portugal. The Man"])).toEqual([]);
+  });
+  it("doesn't take a description of the song for an artist", () => {
+    expect(otherArtists("English folk song", ["X"])).toEqual([]);
+    expect(otherArtists("Christmas song", ["X"])).toEqual([]);
+    expect(otherArtists("2015 song", ["X"])).toEqual([]);
+    expect(otherArtists("promotional single", ["X"])).toEqual([]);
+  });
+  it("leaves out who wrote it, but not who performed it", () => {
+    expect(
+      otherArtists("2008 original song written by Adam Young, and performed by Owl City", [
+        "Owl City",
+      ]),
+    ).toEqual([]);
+    expect(
+      otherArtists(
+        "original film song composed by Alan Menken, words by Howard Ashman; from the 1989 Disney animated film",
+        ["X"],
+      ),
+    ).toEqual([]);
+    expect(
+      otherArtists(
+        "original Christmas song written and composed by Irving Berlin for the 1942 musical film, sung by Bing Crosby",
+        ["X"],
+      ),
+    ).toEqual(["Bing Crosby"]);
+    expect(
+      otherArtists("original song co-written and performed by Carly Rae Jepsen", ["Owl City"]),
+    ).toEqual(["Carly Rae Jepsen"]);
+  });
+  it("is empty without a performer", () => {
     expect(otherArtists("hymn tune", ["X"])).toEqual([]);
+    expect(otherArtists("song written by Irving Berlin", ["X"])).toEqual([]);
     expect(otherArtists(null, ["X"])).toEqual([]);
   });
 });
