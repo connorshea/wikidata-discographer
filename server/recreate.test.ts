@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { recreatedItems } from "./recreate.ts";
+import { recreatedItems, recreatesFound } from "./recreate.ts";
 import { buildPlan, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
@@ -89,5 +89,38 @@ describe("recreatedItems", () => {
       created: [{ key: "comp:0:2", qid: "Q1" }],
     };
     expect(recreatedItems(opsOf(s), s, last)).toEqual([]);
+  });
+});
+
+describe("recreatesFound", () => {
+  const album = { key: "album", qid: "Q9" };
+  const last = { input: newAlbum(), albumQid: "Q9" };
+
+  it("holds up the same form, which would create the item again", () => {
+    const s = newAlbum();
+    expect(recreatesFound(opsOf(s), s, last, album)).toBe(true);
+  });
+
+  it("lets another album's form go on", () => {
+    const other = newAlbum();
+    other.album.title = "Emotion";
+    expect(recreatesFound(opsOf(other), other, last, album)).toBe(false);
+    // A track found for an existing album doesn't hold up another album either.
+    const elsewhere = copy(EXAMPLE);
+    elsewhere.album.qid = "Q123";
+    const track = { key: "track:0:2", qid: "Q2" };
+    const lastExisting = { input: EXAMPLE, albumQid: "Q140316456" };
+    expect(recreatesFound(opsOf(elsewhere), elsewhere, lastExisting, track)).toBe(false);
+    const same = copy(EXAMPLE);
+    expect(recreatesFound(opsOf(same), same, lastExisting, track)).toBe(true);
+  });
+
+  it("lets a form go on once it uses the item, or what it was merged into", () => {
+    const uses = copy(EXAMPLE);
+    uses.album.qid = "Q9";
+    expect(recreatesFound(opsOf(uses), uses, last, album)).toBe(false);
+    const merged = copy(EXAMPLE);
+    merged.album.qid = "Q10";
+    expect(recreatesFound(opsOf(merged), merged, last, album)).toBe(false);
   });
 });

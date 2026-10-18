@@ -52,7 +52,7 @@ import type {
   RecreateConflict,
   UnknownRunConflict,
 } from "../src/lib/api-types.ts";
-import { recreatedItems } from "./recreate.ts";
+import { recreatedItems, recreatesFound } from "./recreate.ts";
 
 /** Appended to every edit summary so the edits are traceable to this tool. */
 const TOOL_CREDIT = "Wikidata Discographer";
@@ -120,12 +120,11 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
   }
 
   // The last run may have created an item it couldn't confirm. Go on only
-  // once the form uses it, or the user says it wasn't created.
-  const unknownRun = await checkUnknownRun(user);
+  // once the form wouldn't create it again, or the user says it wasn't
+  // created (or, if it was found but has since gone, to create it again).
+  const unknownRun = await checkUnknownRun(user, plan.ops, state);
   if (unknownRun) {
-    const used = unknownRun.qid !== null && JSON.stringify(state).includes(`"${unknownRun.qid}"`);
-    const confirmed = unknownRun.qid === null && body?.confirmUnknown === unknownRun.id;
-    if (!used && !confirmed)
+    if (body?.confirmUnknown !== unknownRun.id)
       return c.json(
         {
           error: unknownRun.qid
@@ -398,9 +397,14 @@ async function createItem(
 
 /**
  * The user's last run, if it ended "unknown", with the item it may have
- * created looked for again (the replicas have caught up by now).
+ * created looked for again (the replicas have caught up by now). Once the
+ * item is found, it only holds up `ops` that would create it again.
  */
-async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unknownRun"] | null> {
+async function checkUnknownRun(
+  user: AuthUser,
+  ops: readonly Op[],
+  state: State,
+): Promise<UnknownRunConflict["unknownRun"] | null> {
   const [last] = await db
     .select()
     .from(submissions)
@@ -450,6 +454,12 @@ async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unkn
       // Wikidata is still struggling; the user can check by hand.
       console.warn(`submission ${last.id}: looking for ${pending.what} failed`, err);
     }
+  }
+  if (qid) {
+    const albumQid =
+      pending.key === "album" ? qid : last.albumQid == null ? null : toQid(last.albumQid);
+    const found = { key: pending.key ?? "", qid };
+    if (!recreatesFound(ops, state, { input: last.input, albumQid }, found)) return null;
   }
   return {
     id: last.id,

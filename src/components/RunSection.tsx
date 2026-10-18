@@ -710,7 +710,7 @@ function UnknownRunGuard({
         <p>
           Your last run created {run.what} after all, as{" "}
           <WikiLink base={wikiBaseUrl} qid={run.qid} />. Use it in the form so it isn't created
-          twice, then start the run again.
+          twice, then start the run again. If it has been merged, use the item it was merged into.
         </p>
         <div className="row">
           {run.key && (
@@ -718,6 +718,9 @@ function UnknownRunGuard({
               Use {run.qid} in the form
             </button>
           )}
+          <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
+            It was deleted. Create it again anyway
+          </button>
         </div>
       </div>
     );
