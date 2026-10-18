@@ -15,6 +15,7 @@ import {
   normalizeQid,
   PARTS,
   parseDate,
+  partLabel,
   QID,
   type Disc,
   type Plan,
@@ -36,7 +37,7 @@ import {
   rowPerformers,
   type Renumbered,
 } from "../lib/tracks.ts";
-import { InfoTip, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
+import { FieldErr, InfoTip, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import { type ItemLookup, singleProblem, singleProblems } from "./use-item-summaries.ts";
@@ -51,15 +52,9 @@ const newKey = () => ++lastKey;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** A disc's part as its tab shows it: "CD1", or the QID of one the app doesn't know. */
-function partLabel(d: Disc): string {
-  const q = d.part.trim();
-  for (const [, opts] of PARTS) for (const [p, label] of opts) if (p === q) return label;
-  return q;
-}
-
-/** Whether a disc has a problem to fix in one of its rows or singles. */
+/** Whether a disc has a problem to fix in its part, or in one of its rows or singles. */
 const discHasErrors = (plan: Plan, badSingles: Record<string, string>, di: number) =>
+  !!plan.fieldErrs[`part-${di}`] ||
   [...Object.keys(plan.rowErrs), ...Object.keys(plan.singleErrs), ...Object.keys(badSingles)].some(
     (k) => k.startsWith(`${di}:`),
   );
@@ -206,6 +201,7 @@ function DiscBlock({
   const cols = manual ? 7 : 6;
   const setDisc = (fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
   const ids = useId();
+  const partErr = plan.fieldErrs[`part-${di}`];
   const known = [...Object.keys(state.artists), ...albumArtists(state)];
   // The artists listed once above the table: the album's, as entered or imported, or else
   // those on every row. Rows list only who differs from them.
@@ -353,6 +349,8 @@ function DiscBlock({
           <Pids>Part (P518 on the tracklist)</Pids>
           <select
             value={custom ? "other" : d.part}
+            aria-invalid={!custom && !!partErr}
+            aria-describedby={`${ids}-part-err`}
             onChange={(e) =>
               setDisc((disc) => {
                 disc.partCustom = e.target.value === "other";
@@ -376,10 +374,13 @@ function DiscBlock({
               spellCheck={false}
               placeholder="Q…"
               aria-label={`Disc ${di + 1} part QID`}
+              aria-invalid={!!partErr}
+              aria-describedby={`${ids}-part-err`}
               value={d.part}
               onChange={(e) => setDisc((disc) => void (disc.part = normalizeQid(e.target.value)))}
             />
           )}
+          <FieldErr id={`${ids}-part`} msg={partErr} />
         </label>
         <span className="sub">Leave as None for a single-disc album.</span>
         {state.discs.length > 1 && (
