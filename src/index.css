@@ -651,6 +651,13 @@ input[aria-invalid="true"] {
 .settings-head .hint {
   margin-bottom: 0;
 }
+/* Show or hide the settings: no outline, so it doesn't compete with the form's actions. */
+.settings-head button.ghost {
+  border-color: transparent;
+}
+.settings-head button.ghost:hover {
+  background: var(--use-hover);
+}
 .settings-body {
   display: flex;
   flex-direction: column;
@@ -2913,6 +2920,18 @@ button.link.start-change {
   font-weight: 600;
   text-decoration: none;
   min-height: 44px;
+}
+/* The release a MusicBrainz load came from. */
+a.start-link {
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+a.start-link:hover {
+  text-decoration: underline;
 }
 /* What a MusicBrainz load found, under the start bar: a section for each kind of thing. */
 .mb-report {
