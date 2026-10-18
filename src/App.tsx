@@ -21,6 +21,7 @@ import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
 import { albumProblem, singleProblems, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
+import Guide from "./components/Guide.tsx";
 import { Lock } from "./components/common.tsx";
 import { LockedContext } from "./lib/lock-context.ts";
 
@@ -144,6 +145,7 @@ function Header() {
         <nav className="top-nav" aria-label="Pages">
           <NavLink href="/">New album</NavLink>
           <NavLink href="/albums">Albums</NavLink>
+          <NavLink href="/guide">Guide</NavLink>
           <a
             href={RECENT_CHANGES_URL}
             target="_blank"
@@ -181,6 +183,13 @@ export default function App() {
         <Header />
         <main className="page">
           <AlbumList />
+          <Footer />
+        </main>
+      </Route>
+      <Route path="/guide">
+        <Header />
+        <main className="page">
+          <Guide />
           <Footer />
         </main>
       </Route>
