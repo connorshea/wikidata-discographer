@@ -32,3 +32,9 @@ export function useAuth(): AuthState {
 /** The link that starts a login and comes back to this page. */
 export const loginHref = () =>
   `/api/auth/login?returnTo=${encodeURIComponent(window.location.pathname)}`;
+
+/** Whether it's known that nobody is logged in: every API endpoint needs a login. */
+export function useLoggedOut(): boolean {
+  const { user, loading } = useAuth();
+  return !loading && !user;
+}

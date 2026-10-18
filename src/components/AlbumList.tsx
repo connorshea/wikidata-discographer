@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import type { AlbumListEntry, AlbumListResponse, AlbumRun } from "../lib/api-types.ts";
-import { useAuth } from "../lib/auth-context.ts";
+import { useAuth, useLoggedOut } from "../lib/auth-context.ts";
 import { api } from "../lib/client.ts";
 
 const STATUS: Record<AlbumRun["status"], { label: string; tone: string }> = {
@@ -26,6 +26,7 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : "Couldn't lo
 
 export default function AlbumList() {
   const { user, loading } = useAuth();
+  const loggedOut = useLoggedOut();
   const [mine, setMine] = useState(false);
   const [albums, setAlbums] = useState<AlbumListEntry[]>([]);
   const [next, setNext] = useState<number | null>(null);
@@ -34,7 +35,9 @@ export default function AlbumList() {
 
   // The first page, again whenever the filter changes.
   useEffect(() => {
-    if (loading) return;
+    // Logged out, there's nothing to ask for. A list loaded before the
+    // session ended stays.
+    if (loading || loggedOut) return;
     const ctl = new AbortController();
     fetchAlbums(null, mine, ctl.signal)
       .then((r) => {
@@ -48,7 +51,7 @@ export default function AlbumList() {
         setBusy(false);
       });
     return () => ctl.abort();
-  }, [mine, loading]);
+  }, [mine, loading, loggedOut]);
 
   const showMore = () => {
     setBusy(true);
@@ -63,7 +66,7 @@ export default function AlbumList() {
   };
 
   return (
-    <section className="block">
+    <section className={loggedOut ? "block logged-out" : "block"} inert={loggedOut}>
       <h2>Albums</h2>
       <p className="hint">All recent albums created with Discographer.</p>
       {user && (
@@ -80,7 +83,9 @@ export default function AlbumList() {
           Only albums I've worked on
         </label>
       )}
-      {error && <p className="msg err">{error}</p>}
+      {/* Logged out, the banner above says why. */}
+      {error && !loggedOut && <p className="msg err">{error}</p>}
+      {loggedOut && !albums.length && <p className="hint">Log in to see the albums.</p>}
       {!busy && !error && !albums.length && (
         <p className="hint">{mine ? "You haven't run any albums yet." : "No albums yet."}</p>
       )}
