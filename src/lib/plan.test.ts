@@ -386,6 +386,21 @@ describe("buildPlan", () => {
     });
   });
 
+  it("gives a single one track, an existing one only if it has no count", () => {
+    const P2635 = {
+      property: "P2635",
+      value: { type: "quantity", amount: 1, unit: "Q7302866" },
+    };
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].single["2"] = { date: "2026-05-01", qid: "", discogs: "" };
+    state.discs[0].single["3"] = { date: "", qid: "Q30", discogs: "" };
+    const { ops } = buildPlan(state);
+    const made = find(ops, "single:0:2");
+    expect(made?.op === "create" && made.claims).toContainEqual(P2635);
+    const reused = ops.find((o) => o.op === "addClaims" && o.what.startsWith("single"));
+    expect(reused?.claims).toContainEqual({ ...P2635, ifMissing: true });
+  });
+
   describe("a single's Discogs master ID", () => {
     const P1954 = { property: "P1954", value: { type: "string", value: "4348311" } };
     const withSingle = (sg: { date?: string; qid?: string; discogs?: string }) => {
