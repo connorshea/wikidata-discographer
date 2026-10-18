@@ -250,13 +250,13 @@ export default function MatchesSection({
         )}
         {!folded && fillable > 0 && (
           <span className="f-head">
-            <button type="button" className="ghost" onClick={fill}>
-              Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
-            </button>
             <InfoTip id="match-fill" label="About unambiguous matches" end>
               Fills each empty field that has exactly one match with the track's title and the same
               artist. Anything less certain is left for you to review.
             </InfoTip>
+            <button type="button" className="link match-fill" onClick={fill}>
+              Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
+            </button>
           </span>
         )}
         {allReviewed && (
@@ -483,12 +483,23 @@ function CandidateItem({
   );
 }
 
-/** How many of a disc's tracks have possible matches to review, linked to the first one's group. */
-export function UnreviewedNotice({ count, href = "#matches" }: { count: number; href?: string }) {
+/**
+ * How many of a disc's tracks have possible matches to review, linked to the
+ * first one's group. `up` when the matches are above it on the page.
+ */
+export function UnreviewedNotice({
+  count,
+  href = "#matches",
+  up = false,
+}: {
+  count: number;
+  href?: string;
+  up?: boolean;
+}) {
   return (
     <p className="match-notice">
       <span>{plural(count, "track")} may already be on Wikidata.</span>
-      <a href={href}>Review possible matches ↓</a>
+      <a href={href}>Review possible matches {up ? "↑" : "↓"}</a>
     </p>
   );
 }

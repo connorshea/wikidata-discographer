@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import {
   applyMbForm,
+  reportCounts,
   type MbArtistCredit,
   type MbLookups,
   type MbRelease,
@@ -187,16 +188,24 @@ describe("releaseToForm", () => {
       { n: 2, title: "Habits of Creatures", artists: ["Carly Rae Jepsen"], seconds: 177 },
       { n: 3, title: "Versailles", artists: ["Carly Rae Jepsen"], seconds: 194 },
     ]);
-    expect(form.notes).toEqual([]);
-    expect(form.summary).toMatch(
-      /^Loaded 2 discs and 6 tracks\. The new album gets the Deezer album ID and Discogs master ID MusicBrainz links to\. Found nothing else/,
-    );
-    expect(form.summary).toContain(
-      "New tracks get 6 recording IDs, 6 ISRCs and 1 Spotify track ID, and 6 new compositions get their work ID",
-    );
-    expect(form.summary).toMatch(
-      /The imported publication date, album IDs, durations, ISRCs and track IDs get a MusicBrainz reference\.$/,
-    );
+    expect(form.report).toEqual({
+      misplaced: [],
+      severalLinks: [],
+      newTracks: 6,
+      severalAlbumLinks: [],
+      found: { album: null, artists: 0, compositions: 0, tracks: 0 },
+      added: {
+        album: ["Deezer album ID", "Discogs master ID"],
+        tracks: [
+          { label: "recording IDs", n: 6 },
+          { label: "ISRCs", n: 6 },
+          { label: "Spotify", n: 1 },
+        ],
+        compositions: [{ label: "work IDs", n: 6 }],
+      },
+      references: ["publication date", "album IDs", "durations", "ISRCs", "track IDs"],
+      notes: [],
+    });
   });
 
   it("keeps each track's identifiers on it", () => {
@@ -253,10 +262,14 @@ describe("releaseToForm", () => {
     expect(releaseIds(many).spotifyTracks).toEqual([]);
     const form = releaseToForm(many, NONE);
     expect(form.discs[0].tracks[0].mb!.spotify).toEqual([]);
-    expect(form.notes).toEqual([
-      "1 track links more than one Spotify track on MusicBrainz, so it gets no Spotify track ID.",
+    expect(form.report.notes).toEqual([]);
+    expect(form.report.severalLinks).toEqual([
+      { service: "Spotify", titles: [RELEASE.media[0].tracks![0].title] },
     ]);
-    expect(form.summary).toContain("New tracks get 6 recording IDs and 6 ISRCs, and");
+    expect(form.report.added.tracks).toEqual([
+      { label: "recording IDs", n: 6 },
+      { label: "ISRCs", n: 6 },
+    ]);
   });
 
   describe("Apple Music track IDs", () => {
@@ -277,10 +290,13 @@ describe("releaseToForm", () => {
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.appleMusic).toEqual(["1065973702"]);
       expect(form.discs[0].tracks[1].mb!.appleMusic).toEqual([]);
-      expect(form.notes).toEqual([]);
-      expect(form.summary).toContain(
-        "New tracks get 6 recording IDs, 6 ISRCs, 1 Spotify track ID and 1 Apple Music track ID, and",
-      );
+      expect(form.report.notes).toEqual([]);
+      expect(form.report.added.tracks).toEqual([
+        { label: "recording IDs", n: 6 },
+        { label: "ISRCs", n: 6 },
+        { label: "Apple Music", n: 1 },
+        { label: "Spotify", n: 1 },
+      ]);
     });
 
     it("adds none when a recording links more than one", () => {
@@ -288,8 +304,8 @@ describe("releaseToForm", () => {
       expect(releaseIds(r).appleMusicTracks).toEqual([]);
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.appleMusic).toEqual([]);
-      expect(form.notes).toEqual([
-        "1 track links more than one Apple Music song on MusicBrainz, so it gets no Apple Music track ID.",
+      expect(form.report.severalLinks).toEqual([
+        { service: "Apple Music", titles: [RELEASE.media[0].tracks![0].title] },
       ]);
     });
 
@@ -318,15 +334,18 @@ describe("releaseToForm", () => {
     };
     const work = RELEASE.media[0].tracks![0].recording.relations!.find((x) => x.work)!.work!.id;
 
-    it("adds the one the composition has, and counts it in the summary", () => {
+    it("adds the one the composition has, and counts it in the report", () => {
       const r = withIswcs("T-345.246.800-1", "not an ISWC");
       expect(releaseIds(r).iswcs).toEqual(["T-345.246.800-1"]);
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.800-1"]);
       expect(form.discs[0].tracks[1].mb!.iswcs).toEqual([]);
-      expect(form.notes).toEqual([]);
-      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWC\./);
-      expect(form.summary).toContain("ISRCs, ISWCs and track IDs get a MusicBrainz reference");
+      expect(form.report.notes).toEqual([]);
+      expect(form.report.added.compositions).toEqual([
+        { label: "work IDs", n: 6 },
+        { label: "ISWC", n: 1 },
+      ]);
+      expect(form.report.references).toEqual(expect.arrayContaining(["ISRCs", "ISWCs"]));
     });
 
     it("adds all of them when the composition has more than one", () => {
@@ -334,8 +353,8 @@ describe("releaseToForm", () => {
       expect(releaseIds(r).iswcs).toEqual(["T-345.246.800-1", "T-345.246.801-2"]);
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.800-1", "T-345.246.801-2"]);
-      expect(form.notes).toEqual([]);
-      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWCs\./);
+      expect(form.report.notes).toEqual([]);
+      expect(form.report.added.compositions).toContainEqual({ label: "ISWCs", n: 2 });
     });
 
     it("leaves out one an item already has", () => {
@@ -379,7 +398,7 @@ describe("releaseToForm", () => {
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.deezer).toEqual(["69018826"]);
       expect(form.discs[0].tracks[1].mb!.deezer).toEqual([]);
-      expect(form.summary).toContain("1 Deezer track ID");
+      expect(form.report.added.tracks).toContainEqual({ label: "Deezer", n: 1 });
     });
 
     it("reads a link with a language in it", () => {
@@ -394,8 +413,8 @@ describe("releaseToForm", () => {
       );
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.deezer).toEqual([]);
-      expect(form.notes).toEqual([
-        "1 track links more than one Deezer track on MusicBrainz, so it gets no Deezer track ID.",
+      expect(form.report.severalLinks).toEqual([
+        { service: "Deezer", titles: [RELEASE.media[0].tracks![0].title] },
       ]);
     });
 
@@ -414,7 +433,10 @@ describe("releaseToForm", () => {
   it("doesn't count identifiers for rows that reuse an existing track", () => {
     const rec = RELEASE.media[0].tracks![0].recording.id;
     const form = releaseToForm(RELEASE, { ...NONE, recordings: { [rec]: "Q10" }, taken: [rec] });
-    expect(form.summary).toContain("New tracks get 5 recording IDs and 5 ISRCs, and");
+    expect(form.report.added.tracks).toEqual([
+      { label: "recording IDs", n: 5 },
+      { label: "ISRCs", n: 5 },
+    ]);
   });
 
   it("fills in what the mirror already has", () => {
@@ -431,8 +453,14 @@ describe("releaseToForm", () => {
     expect(form.artists).toEqual({ "Carly Rae Jepsen": "Q52583" });
     expect(form.discs[0].track).toEqual({ "2": "Q10" });
     expect(form.discs[1].comp).toEqual({ "1": "Q20" });
-    expect(form.summary).toContain("already on Wikidata as Q140316456");
-    expect(form.summary).toContain("Found 1 artist, 1 composition and 1 track");
+    expect(form.report.found).toEqual({
+      album: "Q140316456",
+      artists: 1,
+      compositions: 1,
+      tracks: 1,
+    });
+    expect(form.report.added.album).toEqual([]);
+    expect(reportCounts(form.report)).toEqual({ found: 4, added: 16, attention: false });
   });
 
   describe("a work ID on an item that isn't a composition", () => {
@@ -446,8 +474,8 @@ describe("releaseToForm", () => {
       });
       expect(form.discs[0].comp).toEqual({});
       expect(form.discs[0].tracks[0].mb!.work).toBe(work);
-      expect(form.notes).toEqual([
-        `Q2081516, a single, has the work ID for “${t.title}”. Only a composition should have one. Remove it from the single. The new composition gets it instead.`,
+      expect(form.report.misplaced).toEqual([
+        { qid: "Q2081516", kind: "single", title: t.title, newComp: true },
       ]);
     });
 
@@ -465,8 +493,9 @@ describe("releaseToForm", () => {
       });
       expect(form.discs[0].comp).toEqual({ "1": "Q20" });
       expect(form.discs[0].tracks[0].mb!.work).toBe("");
-      expect(form.notes).toEqual([
-        `Q1, a single, and Q2, an EP, have the work ID for “${t.title}”. Only a composition should have one. Remove it from them.`,
+      expect(form.report.misplaced).toEqual([
+        { qid: "Q1", kind: "single", title: t.title, newComp: false },
+        { qid: "Q2", kind: "EP", title: t.title, newComp: false },
       ]);
     });
   });
@@ -539,7 +568,7 @@ describe("releaseToForm", () => {
     expect(releaseIds(r).tidalTracks).toEqual(["454960380"]);
     const form = releaseToForm(r, NONE);
     expect(form.discs[0].tracks[0].mb!.tidal).toEqual(["454960380"]);
-    expect(form.summary).toContain("1 Tidal track ID");
+    expect(form.report.added.tracks).toContainEqual({ label: "Tidal", n: 1 });
   });
 
   it("gives an EP with no secondary type no form, not studio album", () => {
@@ -566,13 +595,13 @@ describe("releaseToForm", () => {
     r["release-group"]["first-release-date"] = "2026-02-30";
     const form = releaseToForm(r, NONE);
     expect(form.album.mb?.date).toBeNull();
-    expect(form.summary).toMatch(/The imported album IDs, durations, ISRCs and track IDs get/);
+    expect(form.report.references).toEqual(["album IDs", "durations", "ISRCs", "track IDs"]);
   });
 
   it("doesn't mention album references for an album already on Wikidata", () => {
     const form = releaseToForm(RELEASE, { ...NONE, albumQid: "Q140316456" });
-    expect(form.summary).toMatch(/The imported durations, ISRCs and track IDs get/);
-    // So switching to a new album can't add the references the summary left out.
+    expect(form.report.references).toEqual(["durations", "ISRCs", "track IDs"]);
+    // So switching to a new album can't add the references the report left out.
     expect(form.album.mb).toBeNull();
   });
 
@@ -593,8 +622,8 @@ describe("releaseToForm", () => {
     ];
     const form = releaseToForm(r, NONE);
     expect(form.album.ids.discogs).toBe("");
-    expect(form.summary).not.toContain("The new album gets");
-    expect(form.notes).toEqual([]);
+    expect(form.report.added.album).not.toContain("Discogs master ID");
+    expect(form.report.severalAlbumLinks).toEqual([]);
   });
 
   it("fills in no Discogs master when the release group links several", () => {
@@ -607,9 +636,13 @@ describe("releaseToForm", () => {
     r["release-group"].relations = masters;
     const form = releaseToForm(r, NONE);
     expect(form.album.ids.discogs).toBe("");
-    expect(form.notes).toEqual([expect.stringContaining("links 2 Discogs masters")]);
+    expect(form.report.severalAlbumLinks).toEqual([
+      { from: "release group", n: 2, what: "Discogs masters" },
+    ]);
     // An existing album gets no IDs, so there's nothing to note.
-    expect(releaseToForm(r, { ...NONE, albumQid: "Q140316456" }).notes).toEqual([]);
+    expect(releaseToForm(r, { ...NONE, albumQid: "Q140316456" }).report.severalAlbumLinks).toEqual(
+      [],
+    );
   });
 
   it("fills in no Spotify album when the release links several", () => {
@@ -622,8 +655,8 @@ describe("releaseToForm", () => {
     const form = releaseToForm(r, NONE);
     expect(form.album.ids.spotify).toBe("");
     expect(form.album.mb?.ids.spotify).toBeUndefined();
-    expect(form.notes).toEqual([
-      expect.stringContaining("The release links 2 Spotify albums, so none was filled in."),
+    expect(form.report.severalAlbumLinks).toEqual([
+      { from: "release", n: 2, what: "Spotify albums" },
     ]);
   });
 
@@ -638,7 +671,7 @@ describe("releaseToForm", () => {
     expect(form.album.form).toBe("");
     expect(form.p407).toBe("");
     expect(form.discs[0].tracks[0].seconds).toBeNull();
-    expect(form.notes).toEqual([
+    expect(form.report.notes).toEqual([
       "1 track has no length on MusicBrainz, so it gets no duration.",
       expect.stringContaining("a Single, not an album or EP"),
       expect.stringContaining("language (fin)"),
@@ -665,7 +698,7 @@ describe("releaseToForm", () => {
     const form = releaseToForm(r, NONE);
     expect(form.discs[1].tracks[0].artists).toEqual(["Simon & Garfunkel"]);
     expect(form.album.artists).toEqual(["Simon & Garfunkel", "Carly Rae Jepsen"]);
-    expect(form.notes).toEqual([]);
+    expect(form.report.notes).toEqual([]);
   });
 
   it("uses vinyl parts for vinyl, and none for one disc", () => {
@@ -681,7 +714,7 @@ describe("releaseToForm", () => {
     r.media.push({ position: 3, format: "DVD-Video", tracks: [] });
     const form = releaseToForm(r, NONE);
     expect(form.discs).toHaveLength(2);
-    expect(form.notes[0]).toBe("1 medium has no tracks on MusicBrainz and was left out.");
+    expect(form.report.notes[0]).toBe("1 medium has no tracks on MusicBrainz and was left out.");
   });
 });
 
