@@ -4,12 +4,13 @@
 // In dev the SPA is served by Vite, which proxies /api here (vite.config.ts).
 import { existsSync, readFileSync } from "node:fs";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { albumRoutes } from "./albums.ts";
 import { authRoutes } from "./auth/oauth.ts";
 import { sameOriginOnly } from "./auth/same-origin.ts";
 import { type AuthEnv, requireUser, sessionMiddleware } from "./auth/session.ts";
+import { baseUrl } from "./auth/config.ts";
 import { items } from "./items.ts";
 import { musicbrainzRoutes } from "./musicbrainz.ts";
 import { submissionRoutes } from "./submissions.ts";
@@ -82,10 +83,17 @@ app.use("/*", async (c, next) => {
   }
 });
 
-app.use("/*", serveStatic({ root: CLIENT_DIR }));
-const indexHtml = existsSync(INDEX_HTML) ? readFileSync(INDEX_HTML, "utf8") : null;
-app.notFound((c) =>
+// The link preview tags in index.html need absolute URLs, so the shell is
+// served from here with BASE_URL filled in, at / and /index.html too (where
+// serveStatic would otherwise send the file as it is).
+const indexHtml = existsSync(INDEX_HTML)
+  ? readFileSync(INDEX_HTML, "utf8").replaceAll("__BASE_URL__", baseUrl())
+  : null;
+const serveShell = (c: Context) =>
   indexHtml
     ? c.html(indexHtml)
-    : c.text("Client build not found. Run `pnpm build` (or set CLIENT_DIR).", 500),
-);
+    : c.text("Client build not found. Run `pnpm build` (or set CLIENT_DIR).", 500);
+app.get("/", serveShell);
+app.get("/index.html", serveShell);
+app.use("/*", serveStatic({ root: CLIENT_DIR }));
+app.notFound(serveShell);

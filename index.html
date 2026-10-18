@@ -9,6 +9,24 @@
       content="Create Wikidata items for an album, its tracks, compositions and singles from a tracklist."
     />
     <title>Wikidata Discographer</title>
+    <!-- The link preview in Discord, Slack, Mastodon and the like. Crawlers don't
+         run JavaScript, so these have to be in the served HTML. They need absolute
+         URLs, and the server fills in the origin from BASE_URL (server/app.ts). -->
+    <meta name="theme-color" content="#2f43c9" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Wikidata Discographer" />
+    <meta property="og:title" content="Wikidata Discographer" />
+    <meta
+      property="og:description"
+      content="Create Wikidata items for an album, its tracks, compositions and singles from a tracklist."
+    />
+    <meta property="og:url" content="__BASE_URL__/" />
+    <meta property="og:image" content="__BASE_URL__/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A record beside the words Discographer for Wikidata." />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>
