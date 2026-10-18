@@ -171,22 +171,12 @@ describe("buildPlan", () => {
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
     });
 
-    it("are left off when the setting is off", () => {
-      const off = withIds();
-      off.settings.mbIds = false;
-      expect(claimsOf(off, "track:0:2")).toEqual([]);
-    });
-
     it("give the new track's duration a MusicBrainz reference", () => {
       const durationOf = (state: typeof EXAMPLE) => {
         const op = buildPlan(state).ops.find((o) => o.op === "create" && o.key === "track:0:2");
         return op?.op === "create" ? op.claims.find((c) => c.property === "P2047") : undefined;
       };
       expect(durationOf(withIds())?.references).toEqual(MB_REF);
-      // Even with identifiers off.
-      const noIds = withIds();
-      noIds.settings.mbIds = false;
-      expect(durationOf(noIds)?.references).toHaveLength(1);
       // A length typed by hand is stated without one.
       const typed = withIds();
       typed.discs[0].tracks[1].length = "3:30";

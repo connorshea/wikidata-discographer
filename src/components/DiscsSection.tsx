@@ -19,7 +19,6 @@ import {
   type Disc,
   type Plan,
   type RowErrs,
-  type Settings,
   type SingleState,
   type Track,
 } from "../lib/plan.ts";
@@ -220,7 +219,7 @@ function DiscBlock({
   });
   const linkedTo = (k: "comp" | "track", n: number) => QID.test((d[k][n] ?? "").trim());
   const mbOf = (i: number) =>
-    mbFacts(d.tracks[i], state.settings, linkedTo("comp", rows[i].n), linkedTo("track", rows[i].n));
+    mbFacts(d.tracks[i], linkedTo("comp", rows[i].n), linkedTo("track", rows[i].n));
   const anyMb = rows.some((_, i) => mbOf(i));
 
   // A key for each row that follows it when rows move, so React moves the row's
@@ -1387,31 +1386,23 @@ interface MbFacts {
  * or null when the import gave it none. `raw` is the row as stored, with the
  * length as imported.
  */
-function mbFacts(
-  raw: Track,
-  S: Settings,
-  linkedComp: boolean,
-  linkedTrack: boolean,
-): MbFacts | null {
+function mbFacts(raw: Track, linkedComp: boolean, linkedTrack: boolean): MbFacts | null {
   const ids = raw.mb;
   if (!ids) return null;
   const many = (label: string, vs: string[]) => vs.map((v): [string, string] => [label, v]);
   const track: [string, string][] = [
-    ...(S.mbIds && ids.recording ? [["Recording ID", ids.recording] as [string, string]] : []),
-    ...(S.mbIds ? many("ISRC", ids.isrcs) : []),
+    ...(ids.recording ? [["Recording ID", ids.recording] as [string, string]] : []),
+    ...many("ISRC", ids.isrcs),
     ...(raw.seconds !== null ? [["Duration", durationNote(raw)] as [string, string]] : []),
-    ...(S.mbIds
-      ? [
-          ...many("Spotify", ids.spotify),
-          ...many("Apple Music", ids.appleMusic),
-          ...many("Deezer", ids.deezer),
-          ...many("Tidal", ids.tidal),
-        ]
-      : []),
+    ...many("Spotify", ids.spotify),
+    ...many("Apple Music", ids.appleMusic),
+    ...many("Deezer", ids.deezer),
+    ...many("Tidal", ids.tidal),
   ];
-  const comp: [string, string][] = S.mbIds
-    ? [...(ids.work ? [["Work ID", ids.work] as [string, string]] : []), ...many("ISWC", ids.iswcs)]
-    : [];
+  const comp: [string, string][] = [
+    ...(ids.work ? [["Work ID", ids.work] as [string, string]] : []),
+    ...many("ISWC", ids.iswcs),
+  ];
   if (!track.length && !comp.length) return null;
   return {
     track,

@@ -325,7 +325,7 @@ describe("releaseToForm", () => {
       expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.800-1"]);
       expect(form.discs[0].tracks[1].mb!.iswcs).toEqual([]);
       expect(form.notes).toEqual([]);
-      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWC,/);
+      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWC\./);
       expect(form.summary).toContain("ISRCs, ISWCs and track IDs get a MusicBrainz reference");
     });
 
@@ -335,7 +335,7 @@ describe("releaseToForm", () => {
       const form = releaseToForm(r, NONE);
       expect(form.discs[0].tracks[0].mb!.iswcs).toEqual(["T-345.246.800-1", "T-345.246.801-2"]);
       expect(form.notes).toEqual([]);
-      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWCs,/);
+      expect(form.summary).toMatch(/new compositions get their work ID and 1 gets its ISWCs\./);
     });
 
     it("leaves out one an item already has", () => {
@@ -447,7 +447,7 @@ describe("releaseToForm", () => {
       expect(form.discs[0].comp).toEqual({});
       expect(form.discs[0].tracks[0].mb!.work).toBe(work);
       expect(form.notes).toEqual([
-        `Q2081516, a single, has the work ID for “${t.title}”. Only a composition should have one. Remove it from the single. The new composition gets it instead, if adding identifiers is on in Item settings.`,
+        `Q2081516, a single, has the work ID for “${t.title}”. Only a composition should have one. Remove it from the single. The new composition gets it instead.`,
       ]);
     });
 

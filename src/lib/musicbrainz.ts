@@ -510,9 +510,7 @@ export function releaseToForm(
     const holders = lookups.misplacedWorks![work];
     const which = holders.map((h) => `${h.qid}, ${aKind(h.kind)},`).join(" and ");
     const one = holders.length === 1;
-    const instead = lookups.works[work]
-      ? ""
-      : " The new composition gets it instead, if adding identifiers is on in Item settings.";
+    const instead = lookups.works[work] ? "" : " The new composition gets it instead.";
     notes.push(
       `${which} ${one ? "has" : "have"} the work ID for “${title}”. Only a composition should have one. Remove it from ${one ? `the ${KIND_NOUNS[holders[0].kind]}` : "them"}.${instead}`,
     );
@@ -700,7 +698,7 @@ function idsSummary(n: {
     .filter(Boolean)
     .join(" and ");
   if (!tracks && !works) return "";
-  return ` ${[tracks, works].filter(Boolean).join(", and ")}, if adding identifiers is on in Item settings.`;
+  return ` ${[tracks, works].filter(Boolean).join(", and ")}.`;
 }
 
 const joinList = (xs: string[]) =>

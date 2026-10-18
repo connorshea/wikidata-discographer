@@ -35,7 +35,6 @@ const DEFAULT_SETTINGS: Settings = {
   compPerformer: true,
   straight: true,
   extendExisting: true,
-  mbIds: true,
 };
 
 export const emptyDisc = (): Disc => ({
@@ -290,7 +289,6 @@ export function coerceState(raw: unknown): State {
     compPerformer: bool(s.compPerformer, d.compPerformer),
     straight: bool(s.straight, d.straight),
     extendExisting: bool(s.extendExisting, d.extendExisting),
-    mbIds: bool(s.mbIds, d.mbIds),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};
