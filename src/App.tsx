@@ -122,6 +122,15 @@ function NavLink({ href, children }: { href: string; children: string }) {
 function RecordIcon() {
   return (
     <svg className="record-icon" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+      {/* Light catching the grooves. The stop colors are set per theme in the CSS. */}
+      <defs>
+        <linearGradient id="record-sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop className="sheen-hi" offset="0" />
+          <stop className="sheen-mid" offset="0.45" />
+          <stop className="sheen-mid" offset="0.55" />
+          <stop className="sheen-lo" offset="1" />
+        </linearGradient>
+      </defs>
       <circle className="vinyl" cx="14" cy="14" r="13" />
       <circle className="groove" cx="14" cy="14" r="8.5" />
       <circle className="label" cx="14" cy="14" r="4.5" />
