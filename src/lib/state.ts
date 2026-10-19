@@ -93,6 +93,8 @@ function coerceMbIds(ids: Obj): MbRowIds {
   return {
     recording: matching(ids.recording, MBID_PATTERN),
     work: matching(ids.work, MBID_PATTERN),
+    recordingName: str(ids.recordingName),
+    workName: str(ids.workName),
     iswcs: strList(ids.iswcs, ISWC_PATTERN),
     isrcs: strList(ids.isrcs, ISRC_PATTERN),
     spotify: strList(ids.spotify, SPOTIFY_TRACK_PATTERN),
@@ -252,7 +254,14 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
     const cited = isObj(v.ids) ? coerceCited(v.ids[f.key]) : null;
     if (cited) ids[f.key] = cited;
   }
-  return { releaseGroup, release, retrieved, date: coerceCited(v.date), ids };
+  return {
+    releaseGroup,
+    release,
+    releaseGroupName: str(v.releaseGroupName),
+    retrieved,
+    date: coerceCited(v.date),
+    ids,
+  };
 }
 
 const STARTS: readonly StartingPoint[] = ["mb", "existing", "search", "new"];

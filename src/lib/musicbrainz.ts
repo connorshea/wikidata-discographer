@@ -154,7 +154,7 @@ export interface MbTrack {
   title: string;
   length: number | null;
   "artist-credit": MbArtistCredit[];
-  recording: { id: string; isrcs?: string[]; relations?: MbRelation[] };
+  recording: { id: string; title: string; isrcs?: string[]; relations?: MbRelation[] };
 }
 
 export interface MbMedium {
@@ -171,6 +171,7 @@ export interface MbRelease {
   "artist-credit": MbArtistCredit[];
   "release-group": {
     id: string;
+    title: string;
     "primary-type": string | null;
     "secondary-types"?: string[];
     "first-release-date"?: string;
@@ -375,18 +376,19 @@ const LP_PARTS = partOptions("Vinyl disc");
 
 /** A track's composition: the work its recording is a performance of, when there's just one. */
 function workOf(t: MbTrack): string | undefined {
+  return theWork(t)?.id;
+}
+
+function theWork(t: MbTrack) {
   const works = (t.recording.relations ?? []).filter(
     (r) => r["target-type"] === "work" && r.type === "performance" && r.work,
   );
-  return works.length === 1 ? works[0].work!.id : undefined;
+  return works.length === 1 ? works[0].work! : undefined;
 }
 
 /** The ISWCs MusicBrainz has for a track's composition, as `workOf` picks it. */
 function iswcsOf(t: MbTrack): string[] {
-  const work = (t.recording.relations ?? []).find(
-    (r) => r["target-type"] === "work" && r.type === "performance" && r.work?.id === workOf(t),
-  )?.work;
-  return [...new Set((work?.iswcs ?? []).filter((v) => ISWC_PATTERN.test(v)))];
+  return [...new Set((theWork(t)?.iswcs ?? []).filter((v) => ISWC_PATTERN.test(v)))];
 }
 
 /** The names an artist credit lists, each once. */
@@ -499,6 +501,8 @@ export function releaseToForm(
       const ids: MbRowIds = {
         recording: taken.has(t.recording.id) ? "" : t.recording.id,
         work: work && !taken.has(work) ? work : "",
+        recordingName: t.recording.title ?? "",
+        workName: theWork(t)?.title ?? "",
         iswcs: iswcs.filter((v) => !taken.has(v)),
         isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
         spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
@@ -606,6 +610,7 @@ export function releaseToForm(
   const albumMb: AlbumMb = {
     releaseGroup: rg.id,
     release: release.id,
+    releaseGroupName: rg.title ?? "",
     retrieved,
     date: citesDate
       ? { value: date, from: rg["first-release-date"] ? "releaseGroup" : "release" }

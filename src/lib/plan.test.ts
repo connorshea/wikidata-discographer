@@ -58,6 +58,8 @@ describe("loadedReleaseGroup", () => {
       state.discs[0].tracks[0].mb = {
         recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c",
         work: "",
+        recordingName: "Get Busy Living",
+        workName: "",
         iswcs: [],
         isrcs: [],
         spotify: [],
@@ -120,6 +122,8 @@ describe("buildPlan", () => {
     const ids = {
       recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
       work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+      recordingName: "You’re My Woman (original stereo mix)",
+      workName: "You’re My Woman",
       iswcs: ["T-345.246.800-1"],
       isrcs: ["USUM72604367"],
       spotify: ["6RSxVKsgvNIIN6IwYA8GsQ"],
@@ -170,6 +174,36 @@ describe("buildPlan", () => {
         ["P1827", "T-345.246.800-1"],
       ]);
       expect(claimsOf(withIds(), "track:0:3")).toEqual([]);
+    });
+
+    describe("name the recording and work IDs as MusicBrainz does", () => {
+      const idClaim = (state: typeof EXAMPLE, key: string, property: string) => {
+        const op = find(buildPlan(state).ops, key);
+        return op?.op === "create" ? op.claims.find((c) => c.property === property) : undefined;
+      };
+      const namedAs = (value: string) => [{ property: "P1810", value: { type: "string", value } }];
+
+      it("with the recording's and the work's names, not the track's title", () => {
+        expect(idClaim(withIds(), "track:0:2", "P4404")?.qualifiers).toEqual(
+          namedAs("You’re My Woman (original stereo mix)"),
+        );
+        expect(idClaim(withIds(), "comp:0:2", "P435")?.qualifiers).toEqual(
+          namedAs("You’re My Woman"),
+        );
+      });
+
+      it("keeping MusicBrainz's typographic quotes when titles are straightened", () => {
+        const state = withIds();
+        state.settings.straight = true;
+        expect(idClaim(state, "comp:0:2", "P435")?.qualifiers).toEqual(namedAs("You’re My Woman"));
+      });
+
+      it("and leave the qualifier out without a name", () => {
+        const state = withIds();
+        state.discs[0].tracks[1].mb = { ...ids, recordingName: "", workName: "" };
+        expect(idClaim(state, "track:0:2", "P4404")).not.toHaveProperty("qualifiers");
+        expect(idClaim(state, "comp:0:2", "P435")).not.toHaveProperty("qualifiers");
+      });
     });
 
     describe("of one work on two tracks", () => {
@@ -294,6 +328,7 @@ describe("buildPlan", () => {
         mb: {
           releaseGroup: RG,
           release: REL,
+          releaseGroupName: "Day and Night",
           retrieved: "2026-10-04",
           date: { value: "2026-09-18", from: "releaseGroup" },
           ids: {
@@ -328,6 +363,19 @@ describe("buildPlan", () => {
       edited.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTz";
       expect(refsOf(edited)).toMatchObject({ P577: undefined, P2205: undefined });
       expect(refsOf(edited).P1954).toEqual(refTo("P436", RG));
+    });
+
+    it("name the release group ID as the release group is on MusicBrainz", () => {
+      const p436 = (state: typeof EXAMPLE) => {
+        const op = find(buildPlan(state).ops, "album");
+        return op?.op === "create" ? op.claims.find((c) => c.property === "P436") : undefined;
+      };
+      expect(p436(imported())?.qualifiers).toEqual([
+        { property: "P1810", value: { type: "string", value: "Day and Night" } },
+      ]);
+      const changed = imported();
+      changed.album.ids.musicbrainz = "f5093c06-23e3-404f-aeaa-40f72885ee3a";
+      expect(p436(changed)).not.toHaveProperty("qualifiers");
     });
 
     it("lose the reference once the album's release group is changed", () => {

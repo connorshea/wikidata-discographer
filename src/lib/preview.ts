@@ -41,6 +41,7 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   P1243: "ISRC",
   P248: "stated in",
   P813: "retrieved",
+  P1810: "subject named as",
 };
 
 const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map([

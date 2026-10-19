@@ -69,6 +69,8 @@ export interface AlbumMb {
   releaseGroup: string;
   /** P5813 MusicBrainz release ID. */
   release: string;
+  /** The release group's title on MusicBrainz, for the named-as qualifier on P436. */
+  releaseGroupName: string;
   /** The day of the import, YYYY-MM-DD. */
   retrieved: string;
   /** The publication date imported. Null when MusicBrainz has none. */
@@ -90,6 +92,12 @@ export interface MbRowIds {
   recording: string;
   /** P435 MusicBrainz work ID, for the composition. Empty if an item already has it. */
   work: string;
+  /**
+   * The recording's and the work's names on MusicBrainz, for the named-as
+   * qualifier on their IDs. They can differ from the track's title. Empty when unknown.
+   */
+  recordingName: string;
+  workName: string;
   /** P1827 ISWC, for the composition. Empty if an item already has it. */
   iswcs: string[];
   /** P1243 ISRCs, for the track. */
@@ -565,6 +573,17 @@ const ref = (key: string): Value => ({ type: "item", ref: key });
 const claim = (property: string, value: Value, qualifiers?: Snak[]): Claim =>
   qualifiers?.length ? { property, value, qualifiers } : { property, value };
 
+/**
+ * A MusicBrainz ID, named as (P1810) the entity is on MusicBrainz. The name is
+ * kept exactly as MusicBrainz has it, typographic quotes included.
+ */
+const mbId = (property: string, id: string, name: string): Claim =>
+  claim(
+    property,
+    { type: "string", value: id },
+    name ? [{ property: "P1810", value: { type: "string", value: name } }] : [],
+  );
+
 /** Stated in MusicBrainz, with the MusicBrainz ID it was read from and the day of the import. */
 const statedInMb = (
   property: string,
@@ -744,6 +763,9 @@ export function buildPlan(state: State): Plan {
       if (!v) continue;
       if (!f.pattern.test(v))
         fieldErrs[`albumId-${f.key}`] = `That doesn't look like a ${f.label}.`;
+      else if (f.key === "musicbrainz")
+        // Named as the release group the import read, while it's still that one.
+        albumIds.push(mbId(f.property, v, v === A.mb?.releaseGroup ? A.mb.releaseGroupName : ""));
       else
         albumIds.push({
           ...claim(f.property, { type: "string", value: v }),
@@ -940,7 +962,7 @@ export function buildPlan(state: State): Plan {
     if (!mb) return [];
     const cited = (property: string, value: string) => ({ ...str(property, value), ...mbRef(mb) });
     return [
-      ...(mb.recording ? [str("P4404", mb.recording)] : []),
+      ...(mb.recording ? [mbId("P4404", mb.recording, mb.recordingName)] : []),
       ...mb.isrcs.map((v) => cited("P1243", v)),
       ...mb.spotify.map((v) => cited("P2207", v)),
       ...mb.appleMusic.map((v) => cited("P10110", v)),
@@ -1015,7 +1037,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...(it.r.mb?.work ? [str("P435", it.r.mb.work)] : []),
+        ...(it.r.mb?.work ? [mbId("P435", it.r.mb.work, it.r.mb.workName)] : []),
         ...(it.r.mb?.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) })) ?? []),
       ],
     });

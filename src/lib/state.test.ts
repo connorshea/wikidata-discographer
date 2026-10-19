@@ -76,6 +76,7 @@ describe("coerceState", () => {
     const mb = {
       releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
       release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+      releaseGroupName: "Day and Night",
       retrieved: "2026-10-04",
       date: { value: "2026-09-18", from: "releaseGroup" },
       ids: {
@@ -94,6 +95,9 @@ describe("coerceState", () => {
     expect(coerceState({ album: { mb: { ...mb, date: { value: "" } } } }).album.mb?.date).toBe(
       null,
     );
+    // A form saved before release group names has none.
+    const { releaseGroupName: _, ...unnamed } = mb;
+    expect(coerceState({ album: { mb: unnamed } }).album.mb?.releaseGroupName).toBe("");
     for (const bad of [{ release: "x" }, { releaseGroup: 5 }, { retrieved: "2026-02-30" }])
       expect(coerceState({ album: { mb: { ...mb, ...bad } } }).album.mb).toBeNull();
     expect(coerceState({ album: {} }).album.mb).toBeNull();
@@ -130,6 +134,8 @@ describe("coerceState", () => {
               mb: {
                 recording: "not an mbid",
                 work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+                recordingName: 5,
+                workName: "Song",
                 iswcs: [],
                 isrcs: ["USUM72604367", "bad", 5, "USUM72604367"],
                 spotify: "6RSxVKsgvNIIN6IwYA8GsQ",
@@ -158,6 +164,8 @@ describe("coerceState", () => {
         mb: {
           recording: "",
           work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+          recordingName: "",
+          workName: "Song",
           iswcs: [],
           isrcs: ["USUM72604367"],
           spotify: [],
@@ -190,6 +198,8 @@ describe("coerceState", () => {
     const mb = {
       recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
       work: "",
+      recordingName: "",
+      workName: "",
       iswcs: [],
       isrcs: ["USUM72604367"],
       spotify: [],
