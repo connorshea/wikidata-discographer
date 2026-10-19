@@ -1087,6 +1087,8 @@ export function buildPlan(state: State): Plan {
     const tracklist = claim("P658", trackOf(it), [
       { property: "P1545", value: { type: "string", value: "1" } },
     ]);
+    // One track, so one part. An existing single may already count more, such as a B-side.
+    const oneTrack = claim("P2635", { type: "quantity", amount: 1, unit: TRACK_UNIT });
     const takenFrom = claim("P13602", albumValue);
     const discogs = sg.discogs ? claim("P1954", { type: "string", value: sg.discogs }) : null;
     if (sg.qid) {
@@ -1100,6 +1102,7 @@ export function buildPlan(state: State): Plan {
           // A tracklist needs a title, which an older single may not have.
           { ...title(it.r.title), ifMissing: true },
           tracklist,
+          { ...oneTrack, ifMissing: true },
           takenFrom,
           ...(S.extendExisting ? it.perf.map((p) => claim("P175", item(p))) : []),
           // Not a second Discogs ID on a single that already has one.
@@ -1121,6 +1124,7 @@ export function buildPlan(state: State): Plan {
           ...it.perf.map((p) => claim("P175", item(p))),
           ...(sd?.val ? [claim("P577", { type: "time", ...sd.val })] : []),
           tracklist,
+          oneTrack,
           takenFrom,
           ...(discogs ? [discogs] : []),
         ],
