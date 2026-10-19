@@ -123,6 +123,30 @@ describe("previewPlan", () => {
         }
   });
 
+  it("shows a MusicBrainz ID with the name it's named as", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].tracks[1].mb = {
+      recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+      work: "",
+      recordingName: "You’re My Woman (original stereo mix)",
+      workName: "",
+      iswcs: [],
+      isrcs: [],
+      spotify: [],
+      appleMusic: [],
+      deezer: [],
+      tidal: [],
+      source: null,
+    };
+    const id = previewPlan(buildPlan(state), state)
+      .flatMap((g) => g.edits)
+      .flatMap((e) => e.statements)
+      .find((s) => s.property.id === "P4404")!;
+    expect(id.qualifiers.map((q) => [q.property.label, q.value.text])).toEqual([
+      ["subject named as", "You’re My Woman (original stereo mix)"],
+    ]);
+  });
+
   it("calls an existing album “this album”", () => {
     const plan = buildPlan(EXAMPLE);
     const [album] = previewPlan(plan, EXAMPLE);

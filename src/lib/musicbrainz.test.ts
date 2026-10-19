@@ -172,6 +172,7 @@ describe("releaseToForm", () => {
       mb: {
         releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
         release: RELEASE.id,
+        releaseGroupName: "Day and Night",
         retrieved: "2026-10-04",
         date: { value: "2026-09-18", from: "releaseGroup" },
         ids: {
@@ -214,6 +215,8 @@ describe("releaseToForm", () => {
     expect(first.tracks[0].mb!).toEqual({
       recording: "263340e1-2f03-4b31-b404-a06a8acda193",
       work: "2bf1a377-686f-426a-ab5a-309466d201e9",
+      recordingName: "After All",
+      workName: "After All",
       iswcs: [],
       isrcs: ["USUM72604366"],
       spotify: ["6HSinPEEP7FeS2k1y7BD7j"],
@@ -223,6 +226,18 @@ describe("releaseToForm", () => {
       source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
     });
     expect(first.tracks.every((t) => t.mb)).toBe(true);
+  });
+
+  it("keeps the recording's and work's own names, not the track's title", () => {
+    const renamed = release();
+    const t = renamed.media[0].tracks![0];
+    t.title = "After All (Remix)";
+    t.recording.title = "After All (remix)";
+    t.recording.relations!.find((r) => r.work)!.work!.title = "After All’s Work";
+    expect(releaseToForm(renamed, NONE).discs[0].tracks[0]).toMatchObject({
+      title: "After All (Remix)",
+      mb: { recordingName: "After All (remix)", workName: "After All’s Work" },
+    });
   });
 
   it("keeps the source even when an item already has the recording ID", () => {

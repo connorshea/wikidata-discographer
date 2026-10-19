@@ -18,6 +18,7 @@
   ],
   "release-group": {
     "id": "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+    "title": "Day and Night",
     "primary-type": "Album",
     "secondary-types": [],
     "first-release-date": "2026-09-18",
@@ -82,6 +83,7 @@
           ],
           "recording": {
             "id": "263340e1-2f03-4b31-b404-a06a8acda193",
+            "title": "After All",
             "relations": [
               {
                 "type": "performance",
@@ -118,6 +120,7 @@
           ],
           "recording": {
             "id": "519d8f15-518b-479c-af8d-664fb3ae455a",
+            "title": "Habits of Creatures",
             "relations": [
               {
                 "type": "performance",
@@ -147,6 +150,7 @@
           ],
           "recording": {
             "id": "9fc1ea52-6832-464a-80cc-7550183da252",
+            "title": "Versailles",
             "relations": [
               {
                 "type": "performance",
@@ -182,6 +186,7 @@
           ],
           "recording": {
             "id": "8f5c970d-9bc8-426e-baa6-7ffa842b21b1",
+            "title": "Never Let a Good Thing Die",
             "relations": [
               {
                 "type": "performance",
@@ -211,6 +216,7 @@
           ],
           "recording": {
             "id": "34785ff4-5ae7-4323-8a69-2b16597d5b33",
+            "title": "Amalfi Coast",
             "relations": [
               {
                 "type": "performance",
@@ -240,6 +246,7 @@
           ],
           "recording": {
             "id": "41368e86-b6bc-465e-804b-739afa222423",
+            "title": "Patience Power Passion",
             "relations": [
               {
                 "type": "performance",
