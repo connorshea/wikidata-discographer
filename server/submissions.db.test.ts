@@ -1,6 +1,8 @@
 // The unknown-run guard in POST /api/submissions, against a real MariaDB. Only
 // runs with DB_TESTS=1, as it writes to the DB the DB_* variables point at
-// (and only rows of its own made-up user). CI runs it in the db job.
+// (and only rows of its own made-up user). That DB's name has to end in _test,
+// so a .env pointing at a dev or ToolsDB DB can't be written to by mistake.
+// CI runs it in the db job.
 import { afterAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -10,6 +12,11 @@ import { submissionRoutes } from "./submissions.ts";
 import type { State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
+
+if (process.env.DB_TESTS && !process.env.DB_NAME?.endsWith("_test"))
+  throw new Error(
+    `DB_TESTS writes to the DB, so DB_NAME has to end in _test (it's ${process.env.DB_NAME ?? "unset, so discographer"}).`,
+  );
 
 const USER = vi.hoisted(() => ({
   id: 990000165,
