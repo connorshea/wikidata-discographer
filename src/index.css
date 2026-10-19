@@ -3186,12 +3186,20 @@ section.block.locked-step {
   border-radius: 5px;
   background: var(--tint);
 }
+.album-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+}
 .album-card-link {
   font-size: 14px;
   font-weight: 600;
   min-height: 44px;
   display: flex;
   align-items: center;
+}
+button.album-card-link {
+  font-size: 14px;
 }
 .pill.ok {
   background: var(--ok-tint);

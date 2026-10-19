@@ -37,13 +37,22 @@ const UNKNOWN: ExistingAlbum = {
  * asked of Wikidata once its QID settles. Both null while unknown, or if it
  * couldn't be asked: the server checks the tracklist again before a run starts.
  */
-export function useAlbumTracklist(state: State): ExistingAlbum {
+export function useAlbumTracklist(state: State): ExistingAlbum & {
+  /** Ask Wikidata again, for an album fixed on Wikidata since. */
+  reload: () => void;
+} {
   const typed = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const qid = useDebounced(QID.test(typed) ? typed : "");
   // Tagged with the QID they answer, so a stale answer is never used. Null if asking failed.
   const [result, setResult] = useState<{ qid: string; answer: TracklistResponse | null } | null>(
     null,
   );
+  // Bumped to ask again about the same QID.
+  const [asked, setAsked] = useState(0);
+  const reload = () => {
+    setResult(null);
+    setAsked((n) => n + 1);
+  };
   useEffect(() => {
     if (!qid) return;
     let cancelled = false;
@@ -53,7 +62,15 @@ export function useAlbumTracklist(state: State): ExistingAlbum {
     return () => {
       cancelled = true;
     };
-  }, [qid]);
+  }, [qid, asked]);
+  return { ...existingAlbum(typed, qid, result), reload };
+}
+
+function existingAlbum(
+  typed: string,
+  qid: string,
+  result: { qid: string; answer: TracklistResponse | null } | null,
+): ExistingAlbum {
   if (!QID.test(typed)) return UNKNOWN;
   if (qid !== typed || result?.qid !== qid) return { ...UNKNOWN, pending: true };
   const r = result.answer;

@@ -364,6 +364,7 @@ function Form() {
     releaseGroup,
     checked,
     pending: tracklistPending,
+    reload: reloadTracklist,
   } = useAlbumTracklist(state);
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
@@ -474,6 +475,11 @@ function Form() {
                       albumTracklist={albumTracklist}
                       checked={checked}
                       releaseGroup={releaseGroup}
+                      reloading={albumFound?.status === "loading" || tracklistPending}
+                      onReload={() => {
+                        lookupAlbum.reload(existingQid);
+                        reloadTracklist();
+                      }}
                       onLoadReleaseGroup={(mbid, album) =>
                         startRef.current?.loadReleaseGroup(mbid, album)
                       }

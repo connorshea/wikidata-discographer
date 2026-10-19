@@ -33,6 +33,8 @@ export default function AlbumSection({
   albumTracklist,
   checked,
   releaseGroup,
+  reloading,
+  onReload,
   onLoadReleaseGroup,
   onPickAnother,
 }: SectionProps & {
@@ -43,6 +45,10 @@ export default function AlbumSection({
   checked: boolean;
   /** The existing album's MusicBrainz release group, to suggest loading it. */
   releaseGroup: string | null;
+  /** Whether the existing album is being looked up on Wikidata. */
+  reloading: boolean;
+  /** Look the existing album up on Wikidata again, after it's been fixed there. */
+  onReload: () => void;
   onLoadReleaseGroup: (mbid: string, album: string) => void;
   /** Back to the starting-point picker, to pick another album. */
   onPickAnother: () => void;
@@ -86,14 +92,24 @@ export default function AlbumSection({
               )}
             </div>
             {QID.test(qid) && (
-              <a
-                className="album-card-link"
-                href={`${wikiBaseUrl}/wiki/${qid}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open on Wikidata ↗
-              </a>
+              <div className="album-card-actions">
+                <button
+                  type="button"
+                  className="link album-card-link"
+                  disabled={reloading}
+                  onClick={onReload}
+                >
+                  {reloading ? "Reloading…" : "Reload from Wikidata"}
+                </button>
+                <a
+                  className="album-card-link"
+                  href={`${wikiBaseUrl}/wiki/${qid}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open on Wikidata ↗
+                </a>
+              </div>
             )}
           </div>
           {(problem || albumTracklist) && (
