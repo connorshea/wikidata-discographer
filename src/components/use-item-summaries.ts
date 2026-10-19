@@ -7,18 +7,21 @@ import { useDebounced } from "./use-debounced.ts";
 /** An item's summary, or where its lookup has got to. */
 export type ItemLookup = ItemSummary | { status: "loading" } | { status: "failed" };
 
+/** Looks up a QID's summary, and can forget it so it's asked for again. */
+export type ItemSummaries = ((qid: string) => ItemLookup | undefined) & {
+  /** Ask Wikidata about `qid` again, for an item fixed on Wikidata since. */
+  reload: (qid: string) => void;
+};
+
 const keyOf = (lang: string, qid: string) => `${lang}:${qid}`;
 
 /**
  * Labels, descriptions and classes for `qids`, asked of Wikidata in one
  * request once the list settles. Answers are kept, so only QIDs not seen
  * before (in this language) are asked for. A failed lookup is asked again
- * once its QID has been taken out and entered again.
+ * once its QID has been taken out and entered again, or reloaded.
  */
-export function useItemSummaries(
-  qids: readonly string[],
-  lang: string,
-): (qid: string) => ItemLookup | undefined {
+export function useItemSummaries(qids: readonly string[], lang: string): ItemSummaries {
   const wanted = [...new Set(qids.filter((q) => QID.test(q)))].sort().join("|");
   const settled = useDebounced(wanted);
   // Both keyed by `keyOf`.
@@ -55,11 +58,22 @@ export function useItemSummaries(
       setFailed(new Set([...failed].filter((k) => present.has(k))));
   }
 
-  return (qid) => {
+  const lookup = (qid: string): ItemLookup | undefined => {
     if (!QID.test(qid)) return undefined;
     const k = keyOf(lang, qid);
     return known[k] ?? (failed.has(k) ? { status: "failed" } : { status: "loading" });
   };
+  // Forgetting the answer is enough: the effect asks for any QID it doesn't know.
+  const reload = (qid: string) => {
+    const k = keyOf(lang, qid);
+    setKnown((known) => {
+      const rest = { ...known };
+      delete rest[k];
+      return rest;
+    });
+    setFailed((f) => new Set([...f].filter((x) => x !== k)));
+  };
+  return Object.assign(lookup, { reload });
 }
 
 /**
