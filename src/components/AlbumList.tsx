@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import type { AlbumListEntry, AlbumListResponse, AlbumRun } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { api } from "../lib/client.ts";
+import { joinNames } from "../lib/plan.ts";
 
 const STATUS: Record<AlbumRun["status"], { label: string; tone: string }> = {
   running: { label: "Running", tone: "" },
@@ -127,6 +128,7 @@ function AlbumRow({ album }: { album: AlbumListEntry }) {
         <a href={`${wikiBaseUrl}/wiki/${album.qid}`} target="_blank" rel="noreferrer">
           {album.label}
         </a>{" "}
+        {album.artists.length > 0 && <>by {joinNames(album.artists)} </>}
         <span className="muted">{album.qid}</span>
       </td>
       <td>

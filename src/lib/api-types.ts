@@ -189,6 +189,8 @@ export interface AlbumListEntry {
   qid: string;
   /** The label in the mirror, else the title the latest run was given. */
   label: string;
+  /** Its performers' labels, as of the mirror. */
+  artists: string[];
   /** Whether the tool created the album, not just added to an existing one. */
   created: boolean;
   runs: AlbumRun[];
