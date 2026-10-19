@@ -1570,6 +1570,10 @@ button.link.match-toggle {
   border-radius: 4px;
   background: var(--tint);
 }
+.match-tag.tie {
+  color: var(--ok);
+  background: var(--ok-tint);
+}
 .match-note {
   font-size: 13px;
   color: var(--muted);
