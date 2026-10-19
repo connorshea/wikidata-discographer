@@ -303,6 +303,11 @@ export interface MbReport {
   found: { album: string | null; artists: number; compositions: number; tracks: number };
   /** The identifiers each kind of new item gets. */
   added: { album: string[]; tracks: MbIdCount[]; compositions: MbIdCount[] };
+  /**
+   * The MusicBrainz IDs the tracks and compositions found on Wikidata get, with Link
+   * reused items on, unless they have one already. Those found by the ID have it.
+   */
+  extended: { tracks: MbIdCount[]; compositions: MbIdCount[] };
   /** What gets a MusicBrainz reference: "durations", "ISRCs". */
   references: string[];
   /** Things the user should check in the form, in plain sentences. */
@@ -475,6 +480,7 @@ export function releaseToForm(
     tidal: 0,
     durationRefs: 0,
   };
+  const toExtend = { recordings: 0, works: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
     if (media.length > 1) {
@@ -511,6 +517,8 @@ export function releaseToForm(
         tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
         source: { recording: t.recording.id, retrieved },
       };
+      if (disc.track[t.position]) toExtend.recordings += ids.recording ? 1 : 0;
+      if (disc.comp[t.position]) toExtend.works += ids.work ? 1 : 0;
       if (!disc.track[t.position]) {
         toAdd.recordings += ids.recording ? 1 : 0;
         toAdd.isrcs += ids.isrcs.length;
@@ -657,6 +665,10 @@ export function releaseToForm(
         ["ISWC", toAdd.iswcs],
       ]),
     },
+    extended: {
+      tracks: idCounts([["recording ID", toExtend.recordings]]),
+      compositions: idCounts([["work ID", toExtend.works]]),
+    },
     references: references({
       ...toAdd,
       // Only a new album gets the date and identifiers.
@@ -720,10 +732,15 @@ export const joinList = (xs: string[]) =>
 
 /** How much a report counts, for the start bar. */
 export function reportCounts(r: MbReport) {
-  const { found, added } = r;
+  const { found, added, extended } = r;
   return {
     found: (found.album ? 1 : 0) + found.artists + found.compositions + found.tracks,
-    added: [...added.tracks, ...added.compositions].reduce((n, c) => n + c.n, added.album.length),
+    added: [
+      ...added.tracks,
+      ...added.compositions,
+      ...extended.tracks,
+      ...extended.compositions,
+    ].reduce((n, c) => n + c.n, added.album.length),
     // Something to fix on Wikidata or check in the form, so the report stays open.
     attention: r.misplaced.length + r.notes.length + r.severalAlbumLinks.length > 0,
   };

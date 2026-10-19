@@ -88,9 +88,15 @@ export interface SingleState {
 
 /** A track's identifiers from a MusicBrainz import. */
 export interface MbRowIds {
-  /** P4404 MusicBrainz recording ID, for the track. Empty if an item already has it. */
+  /**
+   * P4404 MusicBrainz recording ID, for the track, new or reused. Empty if an item
+   * already has it.
+   */
   recording: string;
-  /** P435 MusicBrainz work ID, for the composition. Empty if an item already has it. */
+  /**
+   * P435 MusicBrainz work ID, for the composition, new or reused. Empty if an item
+   * already has it.
+   */
   work: string;
   /**
    * The recording's and the work's names on MusicBrainz, for the named-as
@@ -1015,14 +1021,18 @@ export function buildPlan(state: State): Plan {
   // 2. Compositions.
   for (const it of items) {
     const perf = S.compPerformer ? it.perf.map((p) => claim("P175", item(p))) : [];
+    const work = it.r.mb?.work ? [mbId("P435", it.r.mb.work, it.r.mb.workName)] : [];
     if (it.existComp) {
-      if (S.extendExisting && perf.length)
+      // Not a second work ID: a composition with another may be a different work, or one
+      // MusicBrainz merged, and a second would hide that.
+      const extend = [...perf, ...work.map((c): Claim => ({ ...c, ifMissing: true }))];
+      if (S.extendExisting && extend.length)
         ops.push({
           op: "addClaims",
           target: { id: it.existComp },
           what: `composition for ${where(it)}`,
           row: rowOf("comp", it),
-          claims: perf,
+          claims: extend,
         });
       continue;
     }
@@ -1037,7 +1047,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...workLang,
-        ...(it.r.mb?.work ? [mbId("P435", it.r.mb.work, it.r.mb.workName)] : []),
+        ...work,
         ...(it.r.mb?.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) })) ?? []),
       ],
     });
@@ -1054,7 +1064,19 @@ export function buildPlan(state: State): Plan {
           target: { id: it.existTrack },
           what: where(it),
           row: rowOf("track", it),
-          claims: [claim("P2550", compOf(it)), ...perf],
+          claims: [
+            claim("P2550", compOf(it)),
+            ...perf,
+            // Not a second recording ID, as with a composition's work ID.
+            ...(it.r.mb?.recording
+              ? [
+                  {
+                    ...mbId("P4404", it.r.mb.recording, it.r.mb.recordingName),
+                    ifMissing: true as const,
+                  },
+                ]
+              : []),
+          ],
         });
       continue;
     }

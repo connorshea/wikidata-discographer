@@ -215,7 +215,12 @@ function DiscBlock({
   });
   const linkedTo = (k: "comp" | "track", n: number) => QID.test((d[k][n] ?? "").trim());
   const mbOf = (i: number) =>
-    mbFacts(d.tracks[i], linkedTo("comp", rows[i].n), linkedTo("track", rows[i].n));
+    mbFacts(
+      d.tracks[i],
+      linkedTo("comp", rows[i].n),
+      linkedTo("track", rows[i].n),
+      state.settings.extendExisting,
+    );
   const anyMb = rows.some((_, i) => mbOf(i));
 
   // A key for each row that follows it when rows move, so React moves the row's
@@ -1375,8 +1380,10 @@ function SinglePanel({
 interface MbFacts {
   track: [string, string][];
   comp: [string, string][];
-  /** Why a section adds nothing: the row links an existing item. */
+  /** Why a section adds less: the row links an existing item. */
   linked: { track: boolean; comp: boolean };
+  /** What a linked item still gets: its MusicBrainz ID, with Link reused items on. */
+  extend: { track: [string, string][]; comp: [string, string][] };
   /** Whether the values get a MusicBrainz reference. */
   cited: boolean;
   recording: string;
@@ -1387,12 +1394,19 @@ interface MbFacts {
  * or null when the import gave it none. `raw` is the row as stored, with the
  * length as imported.
  */
-function mbFacts(raw: Track, linkedComp: boolean, linkedTrack: boolean): MbFacts | null {
+function mbFacts(
+  raw: Track,
+  linkedComp: boolean,
+  linkedTrack: boolean,
+  extendExisting: boolean,
+): MbFacts | null {
   const ids = raw.mb;
   if (!ids) return null;
   const many = (label: string, vs: string[]) => vs.map((v): [string, string] => [label, v]);
+  const recording = many("Recording ID", ids.recording ? [ids.recording] : []);
+  const work = many("Work ID", ids.work ? [ids.work] : []);
   const track: [string, string][] = [
-    ...(ids.recording ? [["Recording ID", ids.recording] as [string, string]] : []),
+    ...recording,
     ...many("ISRC", ids.isrcs),
     ...(raw.seconds !== null ? [["Duration", durationNote(raw)] as [string, string]] : []),
     ...many("Spotify", ids.spotify),
@@ -1400,15 +1414,13 @@ function mbFacts(raw: Track, linkedComp: boolean, linkedTrack: boolean): MbFacts
     ...many("Deezer", ids.deezer),
     ...many("Tidal", ids.tidal),
   ];
-  const comp: [string, string][] = [
-    ...(ids.work ? [["Work ID", ids.work] as [string, string]] : []),
-    ...many("ISWC", ids.iswcs),
-  ];
+  const comp: [string, string][] = [...work, ...many("ISWC", ids.iswcs)];
   if (!track.length && !comp.length) return null;
   return {
     track,
     comp,
     linked: { track: linkedTrack, comp: linkedComp },
+    extend: extendExisting ? { track: recording, comp: work } : { track: [], comp: [] },
     cited: !!ids.source,
     recording: ids.recording || ids.source?.recording || "",
   };
@@ -1490,18 +1502,21 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
     name: string,
     rows: [string, string][],
     linkedNote: string,
-  ) =>
-    rows.length > 0 && (
+    extendNote: string,
+  ) => {
+    if (!rows.length) return false;
+    const linked = facts.linked[kind];
+    const shown = linked ? facts.extend[kind] : rows;
+    return (
       <div className="mb-pop-section">
         <h4>
           <span className={`sw ${kind}`} aria-hidden="true" />
           {name}
         </h4>
-        {facts.linked[kind] ? (
-          <p className="muted">{linkedNote}</p>
-        ) : (
+        {linked && <p className="muted">{shown.length ? extendNote : linkedNote}</p>}
+        {shown.length > 0 && (
           <dl className="kv">
-            {rows.map(([k, v], i) => (
+            {shown.map(([k, v], i) => (
               <Fragment key={i}>
                 <dt>{k}</dt>
                 <dd className={k === "Duration" ? undefined : "mono"}>{v}</dd>
@@ -1511,6 +1526,7 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
         )}
       </div>
     );
+  };
   return (
     <>
       <button
@@ -1543,7 +1559,7 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
                 From MusicBrainz
                 <span className="visually-hidden">, {title || `track ${n}`}</span>
               </b>
-              <span className="muted">Added only if this row creates the item</span>
+              <span className="muted">Added in full only if this row creates the item</span>
             </div>
             <button type="button" className="rm" aria-label="Close" onClick={() => close(true)}>
               ×
@@ -1554,12 +1570,14 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
             "Track",
             facts.track,
             "This row links an existing track, so these aren't added.",
+            "This row links an existing track. It only gets the recording ID, unless it already has one.",
           )}
           {section(
             "comp",
             "Composition",
             facts.comp,
             "This row links an existing composition, so these aren't added.",
+            "This row links an existing composition. It only gets the work ID, unless it already has one.",
           )}
           <div className="mb-pop-foot">
             <span className="muted">

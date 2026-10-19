@@ -206,6 +206,69 @@ describe("buildPlan", () => {
       });
     });
 
+    describe("on a reused track and composition", () => {
+      const reused = () => {
+        const state = withIds();
+        state.discs[0].track[2] = "Q101";
+        state.discs[0].comp[2] = "Q102";
+        return state;
+      };
+      const added = (state: typeof EXAMPLE, id: string) => {
+        const op = buildPlan(state).ops.find(
+          (o) => o.op === "addClaims" && "id" in o.target && o.target.id === id,
+        );
+        return op?.op === "addClaims" ? op.claims : undefined;
+      };
+      const named = (value: string) => [{ property: "P1810", value: { type: "string", value } }];
+
+      it("add the recording ID to the track, unless it has one", () => {
+        expect(added(reused(), "Q101")).toContainEqual({
+          property: "P4404",
+          value: { type: "string", value: ids.recording },
+          qualifiers: named("You’re My Woman (original stereo mix)"),
+          ifMissing: true,
+        });
+      });
+
+      it("add the work ID to the composition, unless it has one", () => {
+        expect(added(reused(), "Q102")).toContainEqual({
+          property: "P435",
+          value: { type: "string", value: ids.work },
+          qualifiers: named("You’re My Woman"),
+          ifMissing: true,
+        });
+      });
+
+      it("only the MusicBrainz IDs, not the other identifiers", () => {
+        const props = (id: string) => added(reused(), id)!.map((c) => c.property);
+        expect(props("Q101")).not.toEqual(
+          expect.arrayContaining([expect.stringMatching(/^P(1243|2207|10110|2724|4578)$/)]),
+        );
+        expect(props("Q102")).not.toContain("P1827");
+      });
+
+      it("add the work ID even without a performer to add", () => {
+        const state = reused();
+        state.settings.compPerformer = false;
+        expect(added(state, "Q102")?.map((c) => c.property)).toEqual(["P435"]);
+      });
+
+      it("add neither when an item already has the ID it was found by", () => {
+        const state = reused();
+        state.discs[0].tracks[1].mb = { ...ids, recording: "", work: "" };
+        state.settings.compPerformer = false;
+        expect(added(state, "Q101")?.map((c) => c.property)).not.toContain("P4404");
+        expect(added(state, "Q102")).toBeUndefined();
+      });
+
+      it("add neither with Link reused items off", () => {
+        const state = reused();
+        state.settings.extendExisting = false;
+        expect(added(state, "Q101")).toBeUndefined();
+        expect(added(state, "Q102")).toBeUndefined();
+      });
+    });
+
     describe("of one work on two tracks", () => {
       const shared = () => {
         const state = withIds();
