@@ -189,6 +189,7 @@ describe("releaseToForm", () => {
       { n: 3, title: "Versailles", artists: ["Carly Rae Jepsen"], seconds: 194 },
     ]);
     expect(form.report).toEqual({
+      release: RELEASE.id,
       misplaced: [],
       severalLinks: [],
       newTracks: 6,
@@ -603,6 +604,8 @@ describe("releaseToForm", () => {
     expect(form.report.references).toEqual(["durations", "ISRCs", "track IDs"]);
     // So switching to a new album can't add the references the report left out.
     expect(form.album.mb).toBeNull();
+    // The report still has the release, for the start bar's link to it.
+    expect(form.report.release).toBe(RELEASE.id);
   });
 
   it("reads the Discogs master ID from the release group, not the release", () => {
