@@ -324,7 +324,8 @@ function ReportSection({
 /** What the last MusicBrainz load found and filled in, a section for each kind of thing. */
 export function ImportReport({ id, report }: { id?: string; report: MbReport }) {
   const { wikiBaseUrl } = useAuth();
-  const { misplaced, severalLinks, severalAlbumLinks, found, added, references, notes } = report;
+  const { misplaced, severalLinks, severalAlbumLinks, found, added, extended, references, notes } =
+    report;
   const counts = reportCounts(report);
   const leftOff = severalLinks.reduce((n, l) => n + l.titles.length, severalAlbumLinks.length);
 
@@ -356,7 +357,10 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
     ["New album", added.album],
     ["New tracks", added.tracks],
     ["New compositions", added.compositions],
+    ["Found tracks", extended.tracks],
+    ["Found compositions", extended.compositions],
   ];
+  const extending = extended.tracks.length + extended.compositions.length > 0;
 
   return (
     <div className="mb-report" id={id}>
@@ -464,6 +468,11 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
                 ),
             )}
           </dl>
+          {extending && (
+            <p className="mb-report-aside">
+              Found items get the ID with Link reused items on, unless they already have one.
+            </p>
+          )}
           {references.length > 0 && (
             <p className="mb-refs">
               <span className="mb-badge" aria-hidden="true">

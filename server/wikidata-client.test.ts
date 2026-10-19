@@ -345,6 +345,22 @@ describe("freshStatements", () => {
     ]);
   });
 
+  it("skips a reused track's recording ID when the track has a different one", () => {
+    const recording = (value: string) => ({
+      mainsnak: { snaktype: "value", property: "P4404", datavalue: { type: "string", value } },
+    });
+    const claim = {
+      property: "P4404",
+      value: { type: "string" as const, value: "519d8f15-518b-479c-af8d-664fb3ae455a" },
+      qualifiers: [{ property: "P1810", value: { type: "string" as const, value: "Versailles" } }],
+      ifMissing: true as const,
+    };
+    expect(freshStatements({ P4404: [recording("another-recording")] }, [claim], resolve)).toEqual(
+      [],
+    );
+    expect(freshStatements({}, [claim], resolve)).toHaveLength(1);
+  });
+
   it("skips a plain claim only when the item has that same value", () => {
     const claim = { property: "P2635", value: { type: "quantity" as const, amount: 3 } };
     expect(freshStatements({ P2635: [count(3)] }, [claim], resolve)).toEqual([]);

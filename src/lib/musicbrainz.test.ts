@@ -205,6 +205,7 @@ describe("releaseToForm", () => {
         ],
         compositions: [{ label: "work IDs", n: 6 }],
       },
+      extended: { tracks: [], compositions: [] },
       references: ["publication date", "album IDs", "durations", "ISRCs", "track IDs"],
       notes: [],
     });
@@ -389,6 +390,17 @@ describe("releaseToForm", () => {
       expect(releaseToForm(r, both).discs[0].comp).toEqual({ "1": "Q20" });
     });
 
+    it("counts the work ID the composition found by it gets", () => {
+      const r = withIswcs("T-345.246.800-1");
+      const form = releaseToForm(r, { ...NONE, iswcs: { "T-345.246.800-1": "Q30" } });
+      expect(form.discs[0].tracks[0].mb!.work).toBe(work);
+      expect(form.report.extended).toEqual({
+        tracks: [],
+        compositions: [{ label: "work ID", n: 1 }],
+      });
+      expect(form.report.added.compositions).toContainEqual({ label: "work IDs", n: 5 });
+    });
+
     it("finds the composition by any of its ISWCs", () => {
       const r = withIswcs("T-345.246.800-1", "T-345.246.801-2");
       const byIswc = { ...NONE, iswcs: { "T-345.246.801-2": "Q30" } };
@@ -463,7 +475,8 @@ describe("releaseToForm", () => {
       artists: { [CRJ]: "Q52583" },
       recordings: { [rec]: "Q10" },
       works: { [work]: "Q20" },
-      taken: [],
+      // Items found by an ID have it.
+      taken: [rec, work],
     });
     expect(form.album).toMatchObject({ mode: "existing", qid: "Q140316456" });
     expect(form.artists).toEqual({ "Carly Rae Jepsen": "Q52583" });
