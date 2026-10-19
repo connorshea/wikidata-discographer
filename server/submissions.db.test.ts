@@ -25,6 +25,11 @@ const USER = vi.hoisted(() => ({
   registeredAt: "2020-01-01 00:00:00",
 }));
 
+/** What Wikidata says about the found item when the user says it was deleted. */
+const FOUND = vi.hoisted(() => ({
+  check: { status: "missing" } as { status: "ok" | "missing" } | { status: "redirect"; to: string },
+}));
+
 vi.mock("./auth/session.ts", () => ({
   requireUser: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
     c.set("user", USER);
@@ -44,6 +49,7 @@ vi.mock("./wikidata-client.ts", async (importOriginal) => ({
   getEntities: async () => {
     throw new Error("No Wikidata reads from tests");
   },
+  checkItems: async (qids: string[]) => new Map(qids.map((q) => [q, FOUND.check])),
 }));
 
 const app = new Hono().route("/api/submissions", submissionRoutes);
@@ -128,10 +134,27 @@ describe.skipIf(!process.env.DB_TESTS)("the unknown-run guard", () => {
       expect(res.error).toBe("Past the guards.");
     });
 
-    it("lets the same form go on once the user says the item was deleted", async () => {
+    it("lets the same form go on once the user says the item was deleted, and it was", async () => {
       const id = await unknownRun(123456);
+      FOUND.check = { status: "missing" };
       const res = await post({ state: newAlbum("Day and Night"), confirmUnknown: id });
       expect(res.error).toBe("Past the guards.");
+    });
+
+    it("still holds up the same form if the user says it was deleted, but it wasn't", async () => {
+      const id = await unknownRun(123456);
+      FOUND.check = { status: "ok" };
+      const res = await post({ state: newAlbum("Day and Night"), confirmUnknown: id });
+      expect(res.status).toBe(409);
+      expect(res.error).toMatch(/Q123456 hasn't been deleted/);
+    });
+
+    it("points at the item it was merged into, if it was", async () => {
+      const id = await unknownRun(123456);
+      FOUND.check = { status: "redirect", to: "Q654321" };
+      const res = await post({ state: newAlbum("Day and Night"), confirmUnknown: id });
+      expect(res.status).toBe(409);
+      expect(res.error).toMatch(/merged into Q654321/);
     });
   });
 

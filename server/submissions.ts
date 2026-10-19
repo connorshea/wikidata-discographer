@@ -31,12 +31,14 @@ import { checkPlanQids } from "./check-qids.ts";
 import { editPacer } from "./edit-pace.ts";
 import { findCreated, waitForCreated } from "./recover.ts";
 import {
+  checkItems,
   CREATE_TIMEOUT_MS,
   editRequest,
   type EditUser,
   type Entity,
   freshStatements,
   getEntities,
+  type ItemCheck,
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
@@ -134,6 +136,33 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
         } satisfies UnknownRunConflict,
         409,
       );
+    // The user says the found item was deleted. Check, so a click can't create it twice.
+    if (unknownRun.qid) {
+      const qid = unknownRun.qid;
+      let check: ItemCheck | undefined;
+      try {
+        check = (await checkItems([qid])).get(qid);
+      } catch (err) {
+        console.warn(`checking ${qid} failed`, err);
+        return c.json(
+          {
+            error: `Couldn't check ${qid} on Wikidata (${err instanceof Error ? err.message : String(err)}). Try again in a minute.`,
+          },
+          503,
+        );
+      }
+      if (check?.status !== "missing")
+        return c.json(
+          {
+            error:
+              check?.status === "redirect"
+                ? `${qid} was merged into ${check.to}. Use ${check.to} in the form so it isn't created twice.`
+                : `${qid} hasn't been deleted. Use it in the form so it isn't created twice.`,
+            unknownRun,
+          } satisfies UnknownRunConflict,
+          409,
+        );
+    }
   }
 
   // A form run again from another browser or device never got the last run's
