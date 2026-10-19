@@ -16,6 +16,7 @@ import {
   type RowMove,
   type Slot,
   summaryLine,
+  ties,
   type TrackReview,
   withoutDismissed,
 } from "../lib/matches.ts";
@@ -439,6 +440,11 @@ function CandidateItem({
             {m.label ?? "No label"}
             {m.description && <span className="match-desc"> · {m.description}</span>}
           </span>
+          {ties(m).map((t) => (
+            <span key={t} className="match-tag tie">
+              {t}
+            </span>
+          ))}
           {tag && (
             <span className="match-tag" title={`Matched by ${m.reasons.join(", ")}`}>
               {tag}

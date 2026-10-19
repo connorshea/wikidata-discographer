@@ -129,6 +129,10 @@ export default function StartSection({
   const shownReport = state.start === "mb" ? report : null;
   const counts = shownReport && reportCounts(shownReport);
   const reportShown = !!counts && (counts.attention || reportOpen);
+  // A new album keeps its release in its references, and one already on
+  // Wikidata only in the load's report.
+  const mbRelease =
+    state.start === "mb" ? (state.album.mb?.release ?? shownReport?.release ?? null) : null;
   return (
     <section className={`block start${picking ? "" : " started"}`} id="start" ref={sectionRef}>
       {picking ? (
@@ -204,10 +208,10 @@ export default function StartSection({
                 )}
               </span>
             </div>
-            {state.start === "mb" && state.album.mb?.release && (
+            {mbRelease && (
               <a
                 className="start-link"
-                href={`https://musicbrainz.org/release/${encodeURIComponent(state.album.mb.release)}`}
+                href={`https://musicbrainz.org/release/${encodeURIComponent(mbRelease)}`}
                 target="_blank"
                 rel="noreferrer"
               >

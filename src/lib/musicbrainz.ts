@@ -280,6 +280,8 @@ export interface MbIdCount {
 
 /** What a load found and filled in, for the report under the start bar. */
 export interface MbReport {
+  /** The MusicBrainz release it was loaded from. */
+  release: string;
   /** Items on Wikidata with a work ID only a composition should have. */
   misplaced: {
     qid: string;
@@ -622,6 +624,7 @@ export function releaseToForm(
 
   const songs = media.reduce((n, m) => n + m.tracks!.length, 0);
   const report: MbReport = {
+    release: release.id,
     misplaced: misplacedItems,
     severalLinks: (Object.entries(several) as [TrackLinkKey, string[]][])
       .filter(([, titles]) => titles.length)

@@ -164,6 +164,24 @@ export function slotValue(disc: Disc, n: number, slot: Slot): string {
  */
 export const isStrong = (m: Match) => m.reasons.some((r) => !isTitleReason(r) && r !== NO_ARTIST);
 
+// The order a match's ties beyond its title are shown in, strongest first.
+const TIE_ORDER = ["on this album", "same performer", "same composer or lyricist"];
+
+/**
+ * What ties a match to the form beyond its title, as chips, e.g. ["Same
+ * performer"] or ["On this album", "Recorded as Q42"].
+ */
+export function ties(m: Pick<Match, "reasons">): string[] {
+  const rank = (r: string) => {
+    const i = TIE_ORDER.indexOf(r);
+    return i === -1 ? TIE_ORDER.length : i;
+  };
+  return m.reasons
+    .filter((r) => !isTitleReason(r) && r !== NO_ARTIST)
+    .sort((a, b) => rank(a) - rank(b))
+    .map((r) => r[0].toUpperCase() + r.slice(1));
+}
+
 // Where a description's "by …" phrase ends, e.g. "song by X from the album Y".
 const BY_END =
   /\s+(?:from|on|off|for|in|at|released|recorded|written|composed|produced)\b|\s*[(;:[]/i;
