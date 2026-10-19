@@ -80,6 +80,12 @@ jobs:
       - name: Apply migrations from scratch
         run: node scripts/migrate.ts
 
+      # The tests that need a real DB skip themselves unless DB_TESTS is set.
+      - name: Run DB tests
+        run: pnpm exec vp test server/*.db.test.ts
+        env:
+          DB_TESTS: "1"
+
       # `drizzle-kit generate` is offline: it diffs db/schema.ts against the
       # snapshots in db/migrations/meta and writes a new migration only if they
       # differ. Any new file here means a schema change was committed without

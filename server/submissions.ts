@@ -31,12 +31,14 @@ import { checkPlanQids } from "./check-qids.ts";
 import { editPacer } from "./edit-pace.ts";
 import { findCreated, waitForCreated } from "./recover.ts";
 import {
+  checkItems,
   CREATE_TIMEOUT_MS,
   editRequest,
   type EditUser,
   type Entity,
   freshStatements,
   getEntities,
+  type ItemCheck,
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
@@ -52,7 +54,7 @@ import type {
   RecreateConflict,
   UnknownRunConflict,
 } from "../src/lib/api-types.ts";
-import { recreatedItems } from "./recreate.ts";
+import { recreatedItems, recreatesFound } from "./recreate.ts";
 
 /** Appended to every edit summary so the edits are traceable to this tool. */
 const TOOL_CREDIT = "Wikidata Discographer";
@@ -120,12 +122,11 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
   }
 
   // The last run may have created an item it couldn't confirm. Go on only
-  // once the form uses it, or the user says it wasn't created.
-  const unknownRun = await checkUnknownRun(user);
+  // once the form wouldn't create it again, or the user says it wasn't
+  // created (or, if it was found but has since gone, to create it again).
+  const unknownRun = await checkUnknownRun(user, plan.ops, state);
   if (unknownRun) {
-    const used = unknownRun.qid !== null && JSON.stringify(state).includes(`"${unknownRun.qid}"`);
-    const confirmed = unknownRun.qid === null && body?.confirmUnknown === unknownRun.id;
-    if (!used && !confirmed)
+    if (body?.confirmUnknown !== unknownRun.id)
       return c.json(
         {
           error: unknownRun.qid
@@ -135,6 +136,33 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
         } satisfies UnknownRunConflict,
         409,
       );
+    // The user says the found item was deleted. Check, so a click can't create it twice.
+    if (unknownRun.qid) {
+      const qid = unknownRun.qid;
+      let check: ItemCheck | undefined;
+      try {
+        check = (await checkItems([qid])).get(qid);
+      } catch (err) {
+        console.warn(`checking ${qid} failed`, err);
+        return c.json(
+          {
+            error: `Couldn't check ${qid} on Wikidata (${err instanceof Error ? err.message : String(err)}). Try again in a minute.`,
+          },
+          503,
+        );
+      }
+      if (check?.status !== "missing")
+        return c.json(
+          {
+            error:
+              check?.status === "redirect"
+                ? `${qid} was merged into ${check.to}. Use ${check.to} in the form so it isn't created twice.`
+                : `${qid} hasn't been deleted. Use it in the form so it isn't created twice.`,
+            unknownRun,
+          } satisfies UnknownRunConflict,
+          409,
+        );
+    }
   }
 
   // A form run again from another browser or device never got the last run's
@@ -398,9 +426,14 @@ async function createItem(
 
 /**
  * The user's last run, if it ended "unknown", with the item it may have
- * created looked for again (the replicas have caught up by now).
+ * created looked for again (the replicas have caught up by now). Once the
+ * item is found, it only holds up `ops` that would create it again.
  */
-async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unknownRun"] | null> {
+async function checkUnknownRun(
+  user: AuthUser,
+  ops: readonly Op[],
+  state: State,
+): Promise<UnknownRunConflict["unknownRun"] | null> {
   const [last] = await db
     .select()
     .from(submissions)
@@ -450,6 +483,12 @@ async function checkUnknownRun(user: AuthUser): Promise<UnknownRunConflict["unkn
       // Wikidata is still struggling; the user can check by hand.
       console.warn(`submission ${last.id}: looking for ${pending.what} failed`, err);
     }
+  }
+  if (qid) {
+    const albumQid =
+      pending.key === "album" ? qid : last.albumQid == null ? null : toQid(last.albumQid);
+    const found = { key: pending.key ?? "", qid };
+    if (!recreatesFound(ops, state, { input: last.input, albumQid }, found)) return null;
   }
   return {
     id: last.id,

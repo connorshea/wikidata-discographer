@@ -66,3 +66,17 @@ export function recreatedItems(ops: readonly Op[], state: State, last: LastRun):
       : [];
   });
 }
+
+/**
+ * Whether `ops` would create again the item that a run ended "unknown" over,
+ * once it has been found as `found`. A run of another album, or one that uses
+ * the item (or what it was merged into), doesn't.
+ */
+export function recreatesFound(
+  ops: readonly Op[],
+  state: State,
+  last: Omit<LastRun, "created">,
+  found: { key: string; qid: string },
+): boolean {
+  return recreatedItems(ops, state, { ...last, created: [found] }).length > 0;
+}

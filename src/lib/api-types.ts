@@ -124,7 +124,7 @@ export interface SubmissionInfo {
 /** Body of POST /api/submissions. */
 export interface SubmissionRequest {
   state: unknown;
-  /** The id of the user's "unknown" run, once they've checked its item wasn't created. */
+  /** The id of the user's "unknown" run, once they've checked its item wasn't created (or, if found, was deleted since). */
   confirmUnknown?: number;
   /** The id of the user's last run, once they've said to create its items again. */
   confirmRecreate?: number;
@@ -148,7 +148,9 @@ export interface RecreateConflict {
 
 /**
  * The 409 from POST /api/submissions while the user's last run ended
- * "unknown" and the form doesn't use the item it may have created.
+ * "unknown" and the form may create the item it made again: always while the
+ * item can't be found, and once it's found, only if the form would create it
+ * again (the same plan key, with the same labels, for the same album).
  */
 export interface UnknownRunConflict {
   error: string;
