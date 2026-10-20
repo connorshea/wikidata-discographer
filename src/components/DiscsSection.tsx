@@ -466,7 +466,8 @@ function DiscBlock({
                       />
                     </span>
                     <span className="trk-side">
-                      <button type="button" className="ghost small" onClick={() => closeCard(i)}>
+                      <MbBadge n={r.n} title={r.title} facts={mbOf(i)} />
+                      <button type="button" className="trk-done" onClick={() => closeCard(i)}>
                         Done
                       </button>
                     </span>
@@ -1621,7 +1622,8 @@ function durationNote(raw: Track): string {
 
 /**
  * A row's MB badge: a button that opens what the import adds to the row's
- * items. Escape, a click outside or moving focus out closes it.
+ * items. Escape, a click outside or moving focus out closes it. Escape closes only
+ * it, not the open card it's in.
  */
 function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts | null }) {
   const [open, setOpen] = useState(false);
@@ -1680,6 +1682,11 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
   }, [open]);
 
   if (!facts) return null;
+  const escape = (e: React.KeyboardEvent) => {
+    if (!open || e.key !== "Escape") return;
+    e.preventDefault();
+    close(true);
+  };
   const section = (
     kind: "track" | "comp",
     name: string,
@@ -1721,6 +1728,7 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
         aria-controls={open ? `${id}-pop` : undefined}
         aria-label={`MusicBrainz data for track ${n}`}
         onClick={() => setOpen(!open)}
+        onKeyDown={escape}
       >
         MB
       </button>
@@ -1732,6 +1740,7 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
           role="dialog"
           aria-labelledby={`${id}-head`}
           tabIndex={-1}
+          onKeyDown={escape}
         >
           <div className="mb-pop-head">
             <span className="mb-badge" aria-hidden="true">
