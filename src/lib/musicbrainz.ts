@@ -602,6 +602,36 @@ export function releaseToForm(
     tidal: [],
   };
   const taken = new Set(lookups.taken);
+  const isrcsOf = (t: MbTrack) => [
+    ...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v))),
+  ];
+  // An ISRC or track ID on more than one recording, or an ISWC on more than one work, would
+  // go on several new items. MusicBrainz can't say which is right, so none of them gets it.
+  const holders = new Map<
+    string,
+    { label: string; value: string; of: Set<string>; at: string[] }
+  >();
+  // Each track is named by its disc and row as well as its title, as two recordings that
+  // share an identifier often share a title too.
+  const hold = (label: string, value: string, of: string, at: string) => {
+    const h = holders.get(`${label}:${value}`) ?? { label, value, of: new Set(), at: [] };
+    h.of.add(of);
+    h.at.push(at);
+    holders.set(`${label}:${value}`, h);
+  };
+  media.forEach((m, di) => {
+    for (const t of m.tracks!) {
+      const at = `${di + 1}.${t.position} “${t.title.trim()}”`;
+      for (const v of isrcsOf(t)) hold("ISRC", v, t.recording.id, at);
+      for (const key of Object.keys(TRACK_LINKS) as TrackLinkKey[])
+        for (const v of trackLinkOf(t, key)) hold(TRACK_LINKS[key].label, v, t.recording.id, at);
+      const work = workOf(t);
+      if (work) for (const v of iswcsOf(t)) hold("ISWC", v, work, at);
+    }
+  });
+  const shared = [...holders.values()].filter((h) => h.of.size > 1);
+  const sharedKeys = new Set(shared.map((h) => `${h.label}:${h.value}`));
+  const keep = (label: string) => (v: string) => !taken.has(v) && !sharedKeys.has(`${label}:${v}`);
   const misplaced = new Map<string, string>();
   const toAdd = {
     recordings: 0,
@@ -649,12 +679,12 @@ export function releaseToForm(
         work: work && !taken.has(work) ? work : "",
         recordingName: t.recording.title ?? "",
         workName: theWork(t)?.title ?? "",
-        iswcs: iswcs.filter((v) => !taken.has(v)),
-        isrcs: [...new Set((t.recording.isrcs ?? []).filter((v) => ISRC_PATTERN.test(v)))],
-        spotify: trackLinkOf(t, "spotify").filter((v) => !taken.has(v)),
-        appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
-        deezer: trackLinkOf(t, "deezer").filter((v) => !taken.has(v)),
-        tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
+        iswcs: iswcs.filter(keep("ISWC")),
+        isrcs: isrcsOf(t).filter((v) => !sharedKeys.has(`ISRC:${v}`)),
+        spotify: trackLinkOf(t, "spotify").filter(keep(TRACK_LINKS.spotify.label)),
+        appleMusic: trackLinkOf(t, "appleMusic").filter(keep(TRACK_LINKS.appleMusic.label)),
+        deezer: trackLinkOf(t, "deezer").filter(keep(TRACK_LINKS.deezer.label)),
+        tidal: trackLinkOf(t, "tidal").filter(keep(TRACK_LINKS.tidal.label)),
         ...writers,
         ...(attributes.length ? { attributes } : {}),
         ...(languages.length ? { languages } : {}),
@@ -705,6 +735,10 @@ export function releaseToForm(
   if (unlinked.length)
     notes.push(
       `${plural(unlinked.length, "composer or lyricist has", "composers and lyricists have")} no Wikidata item with their MusicBrainz artist ID: ${joinList(unlinked)}. Link them under People, or the compositions won't name them.`,
+    );
+  if (shared.length)
+    notes.push(
+      `${plural(shared.length, "identifier is", "identifiers are")} on more than one recording or work on MusicBrainz, so no new item gets ${shared.length === 1 ? "it" : "them"}: ${joinList(shared.map((h) => `${h.label} ${h.value} (${joinList([...new Set(h.at)])})`))}.`,
     );
   if (missingLength)
     notes.push(
