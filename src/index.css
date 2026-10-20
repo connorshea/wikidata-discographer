@@ -102,6 +102,8 @@
     --soft-bg: #1d1f36;
     --use-edge: #4b5596;
     --use-hover: #232a52;
+    /* An open track card's inputs: a well a step darker than the card, not the page. */
+    --field: #13152a;
   }
 }
 *,
@@ -1045,7 +1047,7 @@ button.trk-done:hover {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--warn-edge);
+  background: var(--warn);
 }
 .f span.match-hint a {
   font-weight: 600;
@@ -3751,6 +3753,55 @@ button.mb-button[aria-expanded="true"] {
     border-color: var(--line);
     color: var(--locked-ink);
     opacity: 1;
+  }
+  /* An open track card: a dimmer accent edge with a soft glow, quieter labels and inputs,
+     a title that reads as text until it's hovered, and an outlined Done. */
+  .trk.open {
+    border-color: #5b66c9;
+    box-shadow: 0 0 0 3px rgb(140 155 255 / 0.14);
+  }
+  .trk-fields input[type="text"],
+  .trk-fields select {
+    background-color: var(--field);
+  }
+  .trk-fields input::placeholder {
+    color: #6d7192;
+  }
+  .trk-title-edit input.cell {
+    background-color: transparent;
+    border-color: transparent;
+  }
+  .trk-title-edit input.cell:hover {
+    border-color: var(--line);
+  }
+  .trk-title-edit input.cell[aria-invalid="true"] {
+    border-color: var(--err);
+  }
+  .trk-fields .f {
+    color: #c9cce0;
+  }
+  .trk-fields .f span.sub,
+  .trk-fields .link-head .muted {
+    color: #8f94b0;
+  }
+  .rt-chip {
+    background: transparent;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .rt-chip[aria-pressed="true"] {
+    font-weight: 600;
+  }
+  .trk.open .trk-side button.trk-done {
+    align-self: center;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0 14px;
+    background: transparent;
+    border-color: #3a3e66;
+  }
+  .trk.open .trk-side button.trk-done:hover {
+    background: var(--hover);
   }
 }
 
