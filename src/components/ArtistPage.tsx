@@ -1,14 +1,15 @@
 // The artist page: find an artist, then see their albums and EPs on Wikidata
 // (as of the mirror), oldest first, with which still need a tracklist. Each
 // one that does can start the form (/?album=<qid>, and &rg=<mbid> to load its
-// MusicBrainz release group).
-import { useEffect, useId, useState } from "react";
+// MusicBrainz release group). Their singles follow, in a block of their own.
+import { Fragment, useEffect, useId, useState } from "react";
 import { Link } from "wouter";
 import type {
   ArtistAlbum,
   ArtistResponse,
   ArtistResult,
   ArtistSearchResponse,
+  ArtistSingle,
 } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { api, FetchError } from "../lib/client.ts";
@@ -16,6 +17,8 @@ import { useDebounced } from "./use-debounced.ts";
 
 /** Albums shown at first, and added by each Show more. */
 const PAGE = 50;
+/** Singles shown until Show all. */
+const SINGLES_SHOWN = 10;
 
 /** The artist search, and the artist's albums once one is picked. */
 export default function ArtistPage({ qid }: { qid: string | null }) {
@@ -154,6 +157,12 @@ function ArtistAlbums({ qid }: { qid: string }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [shown, setShown] = useState(PAGE);
+  // The album a single's Taken from link last jumped to: a new object each
+  // time, so jumping to the same one again scrolls again.
+  const [jump, setJump] = useState<{ qid: string } | null>(null);
+  useEffect(() => {
+    if (jump) document.getElementById(albumRowId(jump.qid))?.scrollIntoView({ block: "center" });
+  }, [jump]);
   useEffect(() => {
     const ctl = new AbortController();
     api<ArtistResponse>(`/api/artists/${encodeURIComponent(qid)}`, { signal: ctl.signal })
@@ -188,103 +197,242 @@ function ArtistAlbums({ qid }: { qid: string }) {
   const { artist, albums } = data;
   const name = artist.label ?? artist.qid;
   const listed = albums.filter(FILTERS.find((f) => f.id === filter)!.keep);
+  /** Show the album's row, under All so a filter can't hide it, and scroll to it. */
+  const jumpTo = (qid: string) => {
+    setFilter("all");
+    setShown(Math.max(shown, albums.findIndex((a) => a.qid === qid) + 1));
+    setJump({ qid });
+  };
+  return (
+    <>
+      <section className="block artist">
+        <div className="artist-head">
+          <div className="artist-name">
+            <h2>
+              {name}{" "}
+              <a
+                className="mono artist-qid"
+                href={`${wikiBaseUrl}/wiki/${artist.qid}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {artist.qid}
+              </a>
+            </h2>
+            {artist.description && <span className="muted">{artist.description}</span>}
+          </div>
+          <a href={`${wikiBaseUrl}/wiki/${artist.qid}`} target="_blank" rel="noreferrer">
+            Open on Wikidata ↗
+          </a>
+        </div>
+        {albums.length === 0 ? (
+          <p className="search-state">
+            <span>
+              No albums or EPs on Wikidata list {name} as performer.{" "}
+              <Link href="/">Create a new album</Link> to add one.
+            </span>
+          </p>
+        ) : (
+          <>
+            <div className="artist-tools">
+              <div className="filters" role="group" aria-label="Show">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={filter === f.id}
+                    onClick={() => {
+                      setFilter(f.id);
+                      setShown(PAGE);
+                    }}
+                  >
+                    {f.label} <span className="filter-count">{albums.filter(f.keep).length}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="muted">Albums and EPs with {name} as performer</span>
+            </div>
+            {listed.length === 0 ? (
+              <p className="hint">
+                {filter === "todo"
+                  ? "Every album and EP here has a tracklist."
+                  : "None of these albums or EPs has a tracklist yet."}
+              </p>
+            ) : (
+              <div className="tablewrap">
+                <table className="artist-albums">
+                  <thead>
+                    <tr>
+                      <th>Year</th>
+                      <th>Title</th>
+                      <th>Type</th>
+                      <th>Tracklist</th>
+                      <th>
+                        <span className="visually-hidden">Action</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {listed.slice(0, shown).map((a) => (
+                      <AlbumRow key={a.qid} album={a} wikiBaseUrl={wikiBaseUrl} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {listed.length > shown && (
+              <div className="row">
+                <button type="button" className="ghost" onClick={() => setShown(shown + PAGE)}>
+                  Show {Math.min(PAGE, listed.length - shown)} more
+                </button>
+                <span className="muted">
+                  Showing {shown} of {listed.length}
+                </span>
+              </div>
+            )}
+            <p className="sub artist-note">
+              Add tracklist opens the New album form with that album picked. With{" "}
+              <span className="mb-badge">MB</span> it loads the album's MusicBrainz release group,
+              so the tracks fill in for you. The list is from a copy of Wikidata that's refreshed
+              weekly, so the latest changes may not show yet.
+              {data.truncated && ` Only the first ${albums.length} are listed.`}
+            </p>
+          </>
+        )}
+      </section>
+      {data.singles.length > 0 && (
+        <ArtistSingles
+          name={name}
+          singles={data.singles}
+          truncated={data.singlesTruncated}
+          albums={new Set(albums.map((a) => a.qid))}
+          onJump={jumpTo}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The artist's singles: no filters, as those are the albums', and no Add
+ * tracklist, as a single can't be picked to add one to yet.
+ */
+function ArtistSingles({
+  name,
+  singles,
+  truncated,
+  albums,
+  onJump,
+}: {
+  name: string;
+  singles: ArtistSingle[];
+  truncated: boolean;
+  /** The artist's listed albums, whose rows a Taken from link goes to. */
+  albums: ReadonlySet<string>;
+  onJump: (qid: string) => void;
+}) {
+  const { wikiBaseUrl } = useAuth();
+  const [all, setAll] = useState(false);
+  const listed = all ? singles : singles.slice(0, SINGLES_SHOWN);
   return (
     <section className="block artist">
-      <div className="artist-head">
-        <div className="artist-name">
-          <h2>
-            {name}{" "}
-            <a
-              className="mono artist-qid"
-              href={`${wikiBaseUrl}/wiki/${artist.qid}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {artist.qid}
-            </a>
-          </h2>
-          {artist.description && <span className="muted">{artist.description}</span>}
-        </div>
-        <a href={`${wikiBaseUrl}/wiki/${artist.qid}`} target="_blank" rel="noreferrer">
-          Open on Wikidata ↗
-        </a>
+      <div className="singles-head">
+        <h3>
+          <span className="sw" aria-hidden="true" />
+          Singles
+        </h3>
+        <span className="muted">Singles with {name} as performer</span>
       </div>
-      {albums.length === 0 ? (
-        <p className="search-state">
-          <span>
-            No albums or EPs on Wikidata list {name} as performer.{" "}
-            <Link href="/">Create a new album</Link> to add one.
-          </span>
-        </p>
-      ) : (
-        <>
-          <div className="artist-tools">
-            <div className="filters" role="group" aria-label="Show">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  aria-pressed={filter === f.id}
-                  onClick={() => {
-                    setFilter(f.id);
-                    setShown(PAGE);
-                  }}
-                >
-                  {f.label} <span className="filter-count">{albums.filter(f.keep).length}</span>
-                </button>
-              ))}
-            </div>
-            <span className="muted">Albums and EPs with {name} as performer</span>
-          </div>
-          {listed.length === 0 ? (
-            <p className="hint">
-              {filter === "todo"
-                ? "Every album and EP here has a tracklist."
-                : "None of these albums or EPs has a tracklist yet."}
-            </p>
-          ) : (
-            <div className="tablewrap">
-              <table className="artist-albums">
-                <thead>
-                  <tr>
-                    <th>Year</th>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Tracklist</th>
-                    <th>
-                      <span className="visually-hidden">Action</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {listed.slice(0, shown).map((a) => (
-                    <AlbumRow key={a.qid} album={a} wikiBaseUrl={wikiBaseUrl} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {listed.length > shown && (
-            <div className="row">
-              <button type="button" className="ghost" onClick={() => setShown(shown + PAGE)}>
-                Show {Math.min(PAGE, listed.length - shown)} more
-              </button>
-              <span className="muted">
-                Showing {shown} of {listed.length}
-              </span>
-            </div>
-          )}
-          <p className="sub artist-note">
-            Add tracklist opens the New album form with that album picked. With{" "}
-            <span className="mb-badge">MB</span> it loads the album's MusicBrainz release group, so
-            the tracks fill in for you. The list is from a copy of Wikidata that's refreshed weekly,
-            so the latest changes may not show yet.
-            {data.truncated && ` Only the first ${albums.length} are listed.`}
-          </p>
-        </>
+      <div className="tablewrap">
+        <table className="artist-albums">
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Title</th>
+              <th>Taken from</th>
+              <th>Tracklist</th>
+              <th>
+                <span className="visually-hidden">Action</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {listed.map((s) => (
+              <tr key={s.qid}>
+                <td className="year" title={s.released ?? "No release date on Wikidata"}>
+                  {s.released ? s.released.slice(0, 4) : "—"}
+                </td>
+                <td>
+                  <span className="title">{s.label ?? s.qid}</span>{" "}
+                  <a
+                    className="mono muted"
+                    href={`${wikiBaseUrl}/wiki/${s.qid}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {s.qid}
+                  </a>
+                </td>
+                <td>
+                  {s.takenFrom.length === 0 ? (
+                    <span className="muted">Not on an album</span>
+                  ) : (
+                    s.takenFrom.map((a, i) => (
+                      <Fragment key={a.qid}>
+                        {i > 0 && " · "}
+                        {albums.has(a.qid) ? (
+                          <a
+                            href={`#${albumRowId(a.qid)}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              onJump(a.qid);
+                            }}
+                          >
+                            {a.label ?? a.qid}
+                          </a>
+                        ) : (
+                          <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
+                            {a.label ?? a.qid}
+                          </a>
+                        )}
+                      </Fragment>
+                    ))
+                  )}
+                </td>
+                <td>
+                  {s.tracks > 0 ? (
+                    <span className="pill">
+                      {s.tracks === 1 ? "1 track" : `${s.tracks} tracks`}
+                    </span>
+                  ) : (
+                    <span className="pill ok">No tracklist yet</span>
+                  )}
+                </td>
+                <td className="act">
+                  <a href={`${wikiBaseUrl}/wiki/${s.qid}`} target="_blank" rel="noreferrer">
+                    Open on Wikidata ↗
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {listed.length < singles.length && (
+        <button type="button" className="show-all" onClick={() => setAll(true)}>
+          Show all {singles.length} singles
+        </button>
+      )}
+      {truncated && (
+        <p className="sub artist-note">Only the first {singles.length} singles are listed.</p>
       )}
     </section>
   );
+}
+
+/** The id of an album's row, for a single's Taken from link to go to. */
+function albumRowId(qid: string): string {
+  return `album-${qid}`;
 }
 
 function WarnIcon() {
@@ -317,7 +465,7 @@ function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: 
     </>
   );
   return (
-    <tr className={a.tracks > 0 || running ? "taken" : undefined}>
+    <tr id={albumRowId(a.qid)} className={a.tracks > 0 || running ? "taken" : undefined}>
       <td className="year" title={a.released ?? "No release date on Wikidata"}>
         {a.released ? a.released.slice(0, 4) : "—"}
       </td>
