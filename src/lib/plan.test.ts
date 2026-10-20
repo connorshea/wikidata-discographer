@@ -13,6 +13,7 @@ import {
   MAX_TRACKS_PER_DISC,
   normalizeDate,
   normalizeQid,
+  type Claim,
   type Op,
   PARTS,
 } from "./plan.ts";
@@ -118,6 +119,52 @@ describe("buildPlan", () => {
       (create(key) as { claims: { property: string }[] }).claims.map((c) => c.property);
     expect(props("track:0:2")).not.toContain("P2047");
     expect(props("track:0:3")).toContain("P2047");
+  });
+
+  describe("track types", () => {
+    const typeOf = (state: typeof EXAMPLE, key: string) => {
+      const op = find(buildPlan(state).ops, key) as { claims: Claim[] };
+      return op.claims.find((c) => c.property === "P31")?.value;
+    };
+    const instrumental = (state: typeof EXAMPLE) => {
+      state.discs[0].tracks[1].mb = {
+        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+        work: "",
+        recordingName: "",
+        workName: "",
+        iswcs: [],
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        deezer: [],
+        tidal: [],
+        composers: [],
+        lyricists: [],
+        attributes: ["instrumental"],
+        source: null,
+      };
+      return state;
+    };
+
+    it("gives a track its own type over the album's", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].type = "Q7302866";
+      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q7302866" });
+      expect(typeOf(state, "track:0:3")).toEqual({ type: "item", id: "Q55850593" });
+    });
+
+    it("makes a recording MusicBrainz says is instrumental a track without lyrics", () => {
+      const state = instrumental(structuredClone(EXAMPLE));
+      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850643" });
+      state.discs[0].tracks[1].type = "Q55850593";
+      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
+    });
+
+    it("leaves the album's type with the MusicBrainz details off", () => {
+      const state = instrumental(structuredClone(EXAMPLE));
+      state.settings.mbDetails = false;
+      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
+    });
   });
 
   describe("identifiers from a MusicBrainz import", () => {

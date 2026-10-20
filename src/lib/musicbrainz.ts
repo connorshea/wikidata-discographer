@@ -9,6 +9,8 @@ import {
   ALBUM_FORMS,
   ALBUM_TYPES,
   EP_CLASS,
+  MB_ATTRIBUTES,
+  type MbAttribute,
   NO_LINGUISTIC_CONTENT,
   PARTS,
   parseDate,
@@ -151,6 +153,8 @@ export interface MbRelation {
   url?: { resource: string };
   artist?: { id: string; name: string };
   work?: { id: string; title: string; iswcs?: string[]; relations?: MbRelation[] };
+  /** What the relation says about it, e.g. "live" or "cover" on a recording's performance of a work. */
+  attributes?: string[];
 }
 
 export interface MbTrack {
@@ -397,10 +401,21 @@ function workOf(t: MbTrack): string | undefined {
 }
 
 function theWork(t: MbTrack) {
+  return performance(t)?.work;
+}
+
+/** The recording's performance relation to its work, when it has just one. */
+function performance(t: MbTrack) {
   const works = (t.recording.relations ?? []).filter(
     (r) => r["target-type"] === "work" && r.type === "performance" && r.work,
   );
-  return works.length === 1 ? works[0].work! : undefined;
+  return works.length === 1 ? works[0] : undefined;
+}
+
+/** What a track's performance relation says about the recording, of the attributes the form reads. */
+function attributesOf(t: MbTrack): MbAttribute[] {
+  const attrs = performance(t)?.attributes ?? [];
+  return MB_ATTRIBUTES.filter((a) => attrs.includes(a));
 }
 
 /** The ISWCs MusicBrainz has for a track's composition, as `workOf` picks it. */
@@ -533,6 +548,7 @@ export function releaseToForm(
       addCredit(t["artist-credit"]);
       const work = workOf(t);
       const writers = writersOf(t);
+      const attributes = attributesOf(t);
       addWriters([...writers.composers, ...writers.lyricists]);
       if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
         misplaced.set(work, t.title.trim());
@@ -560,6 +576,7 @@ export function releaseToForm(
         deezer: trackLinkOf(t, "deezer").filter((v) => !taken.has(v)),
         tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
         ...writers,
+        ...(attributes.length ? { attributes } : {}),
         source: { recording: t.recording.id, ...(work ? { work } : {}), retrieved },
       };
       if (disc.track[t.position]) toExtend.recordings += ids.recording ? 1 : 0;

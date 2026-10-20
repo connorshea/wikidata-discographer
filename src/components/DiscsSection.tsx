@@ -17,9 +17,13 @@ import {
   parseDate,
   partLabel,
   QID,
+  TRACK_TYPES,
+  trackTypeOf,
+  WITHOUT_LYRICS,
   type Disc,
   type Plan,
   type RowErrs,
+  type Settings,
   type SingleState,
   type Track,
 } from "../lib/plan.ts";
@@ -535,6 +539,19 @@ function DiscBlock({
                           })
                         }
                       />
+                      <TrackType
+                        n={r.n}
+                        track={t}
+                        settings={state.settings}
+                        linkedTrack={linkedTo("track", r.n)}
+                        onChange={(type) =>
+                          setDisc((disc) => {
+                            const row = disc.tracks[i];
+                            if (type) row.type = type;
+                            else delete row.type;
+                          })
+                        }
+                      />
                       <LinkFields
                         di={di}
                         n={r.n}
@@ -615,6 +632,7 @@ function DiscBlock({
                               <WikiLink base={wikiBaseUrl} qid={d[k][r.n].trim()} />
                             </span>
                           )),
+                        typeTag(t, state.settings),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -826,6 +844,75 @@ function Writers({
       </dl>
       <span className="sub">{note}</span>
     </div>
+  );
+}
+
+/** A track type's name in a sentence, e.g. "music track without lyrics". */
+const typeName = (qid: string) => TRACK_TYPES.find(([q]) => q === qid)?.[1] ?? qid;
+const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * A track's P31, which it takes from the album unless it has its own, or MusicBrainz says
+ * the recording is instrumental. An existing track keeps the one it has.
+ */
+function TrackType({
+  n,
+  track,
+  settings,
+  linkedTrack,
+  onChange,
+}: {
+  n: number;
+  track: Track;
+  settings: Settings;
+  linkedTrack: boolean;
+  onChange: (type: string) => void;
+}) {
+  const id = useId();
+  const fallback = trackTypeOf(settings, { mb: track.mb });
+  const note = linkedTrack
+    ? "Not used, as the track is an existing one."
+    : !track.type && fallback.fromMb
+      ? "MusicBrainz says the recording is instrumental."
+      : "";
+  return (
+    <div className="f">
+      <label htmlFor={id}>Track type</label>
+      <select
+        id={id}
+        data-col="type"
+        aria-label={`Track ${n} type`}
+        value={track.type ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">
+          {`${capitalized(typeName(fallback.qid))} (${fallback.fromMb ? "from MusicBrainz" : "default for album"})`}
+        </option>
+        {TRACK_TYPES.map(([q, l]) => (
+          <option key={q} value={q}>
+            {capitalized(l)}
+          </option>
+        ))}
+      </select>
+      {note && (
+        <span className="sub with-badge">
+          {!linkedTrack && <span className="mb-badge">MB</span>}
+          {note}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A closed card's tag for a track whose type isn't the album's, or null. */
+function typeTag(track: Track, settings: Settings) {
+  const { qid, fromMb } = trackTypeOf(settings, track);
+  if (qid === settings.trackType) return null;
+  return (
+    <span key="type" className="fact-tag with-badge">
+      {qid === WITHOUT_LYRICS ? "Instrumental" : capitalized(typeName(qid))}
+      {fromMb && <span className="mb-badge">MB</span>}
+    </span>
   );
 }
 

@@ -45,6 +45,11 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
         "Composers and lyricists",
         "Add each work's composers and lyricists to new compositions",
       ],
+      [
+        "mbDetails",
+        "Instrumentals",
+        "Make recordings MusicBrainz marks instrumental music tracks without lyrics",
+      ],
     ],
   ],
 ];
@@ -264,6 +269,7 @@ export default function SettingsSection({
                 <option key={q} value={q}>{`${l} (${q})`}</option>
               ))}
             </select>
+            <span className="sub">The default for every track. Change it per track in Tracks</span>
           </label>
 
           <div className="option-groups">

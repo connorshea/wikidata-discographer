@@ -46,6 +46,23 @@ describe("coerceState", () => {
     expect(coerceState({ album: { qid: "Q1", mb } }).start).toBe("mb");
   });
 
+  it("keeps a track's type and MusicBrainz attributes only when the form knows them", () => {
+    const [kept, dropped] = coerceState({
+      discs: [
+        {
+          tracks: [
+            { n: 1, title: "A", type: "Q55850643", mb: { attributes: ["live", "nope", 3] } },
+            { n: 2, title: "B", type: "Q5", mb: { attributes: [] } },
+          ],
+        },
+      ],
+    }).discs[0].tracks;
+    expect(kept.type).toBe("Q55850643");
+    expect(kept.mb?.attributes).toEqual(["live"]);
+    expect(dropped).not.toHaveProperty("type");
+    expect(dropped.mb).not.toHaveProperty("attributes");
+  });
+
   it("drops mistyped values", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },

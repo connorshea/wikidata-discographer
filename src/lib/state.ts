@@ -1,16 +1,18 @@
 // The default form state, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
-import type {
-  AlbumMb,
-  Disc,
-  MbCited,
-  MbRowIds,
-  MbWriter,
-  Settings,
-  SingleState,
-  StartingPoint,
-  State,
-  Track,
+import {
+  MB_ATTRIBUTES,
+  TRACK_TYPES,
+  type AlbumMb,
+  type Disc,
+  type MbCited,
+  type MbRowIds,
+  type MbWriter,
+  type Settings,
+  type SingleState,
+  type StartingPoint,
+  type State,
+  type Track,
 } from "./plan.ts";
 import { sameTitle } from "./titles.ts";
 import {
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: Settings = {
   straight: true,
   extendExisting: true,
   mbWriters: true,
+  mbDetails: true,
 };
 
 export const emptyDisc = (): Disc => ({
@@ -102,8 +105,13 @@ function writers(v: unknown): MbWriter[] {
   return [...out.values()];
 }
 
+const isTrackType = (v: unknown): v is string => TRACK_TYPES.some(([q]) => q === v);
+
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
+  const attributes = MB_ATTRIBUTES.filter(
+    (a) => Array.isArray(ids.attributes) && ids.attributes.includes(a),
+  );
   return {
     recording: matching(ids.recording, MBID_PATTERN),
     work: matching(ids.work, MBID_PATTERN),
@@ -117,6 +125,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     tidal: strList(ids.tidal, TIDAL_TRACK_PATTERN),
     composers: writers(ids.composers),
     lyricists: writers(ids.lyricists),
+    ...(attributes.length ? { attributes } : {}),
     // Forms saved before identifiers had references kept the source with the length.
     source: coerceSource(ids.source ?? ids.length),
   };
@@ -139,6 +148,7 @@ function coerceTrack(t: Obj): Track | null {
     seconds: seconds(t.seconds),
     ...(typeof t.length === "string" ? { length: t.length } : {}),
     mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
+    ...(isTrackType(t.type) ? { type: t.type } : {}),
   };
 }
 
@@ -310,15 +320,14 @@ export function coerceState(raw: unknown): State {
     p407Custom: bool(s.p407Custom, false),
     compDesc: str(s.compDesc, d.compDesc),
     trackDesc: str(s.trackDesc, d.trackDesc),
-    trackType: ["Q55850593", "Q55850643", "Q7302866"].includes(str(s.trackType))
-      ? str(s.trackType)
-      : d.trackType,
+    trackType: isTrackType(s.trackType) ? s.trackType : d.trackType,
     singleDesc: str(s.singleDesc, d.singleDesc),
     albumDesc: str(s.albumDesc, d.albumDesc),
     compPerformer: bool(s.compPerformer, d.compPerformer),
     straight: bool(s.straight, d.straight),
     extendExisting: bool(s.extendExisting, d.extendExisting),
     mbWriters: bool(s.mbWriters, d.mbWriters),
+    mbDetails: bool(s.mbDetails, d.mbDetails),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};
