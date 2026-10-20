@@ -310,10 +310,10 @@ describe("releaseToForm", () => {
     const BERGER = "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5";
     const KAPARI = "0d32b53d-6d72-4eea-9009-eca2cf7c11a8";
     const NOONIE = "e292bc5a-ee7f-4160-97d5-d175983421ab";
-    const rel = (type: string, id: string, name: string) => ({
+    const rel = (type: string, id: string, name: string, disambiguation = "") => ({
       type,
       "target-type": "artist",
-      artist: { id, name },
+      artist: { id, name, disambiguation },
     });
     const withWriters = () => {
       const r = release();
@@ -359,10 +359,7 @@ describe("releaseToForm", () => {
       const sharing = (disambiguation?: string) => {
         const r = withWriters();
         r.media[0].tracks![0].recording.relations!.find((x) => x.work)!.work!.relations = [
-          {
-            ...rel("composer", OTHER, "Carly Rae Jepsen"),
-            artist: { id: OTHER, name: "Carly Rae Jepsen", disambiguation },
-          },
+          rel("composer", OTHER, "Carly Rae Jepsen", disambiguation),
         ];
         return r;
       };
@@ -378,7 +375,7 @@ describe("releaseToForm", () => {
         );
       });
 
-      it("are numbered without one", () => {
+      it("are numbered when theirs is empty", () => {
         const form = releaseToForm(sharing(), {
           ...NONE,
           artists: { [CRJ]: "Q52583", [OTHER]: "Q1" },
