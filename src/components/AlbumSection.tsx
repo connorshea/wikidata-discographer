@@ -494,7 +494,7 @@ export function ArtistChips({
         />
       </div>
       <span className="sub" id={`${id}-sub`}>
-        Press Enter to add each one. Linked to Wikidata in Performers.
+        Press Enter to add each one. Linked to Wikidata in People.
       </span>
       <FieldErr id="albumArtists" msg={error} />
     </div>

@@ -5,6 +5,7 @@ import type {
   Disc,
   MbCited,
   MbRowIds,
+  MbWriter,
   Settings,
   SingleState,
   StartingPoint,
@@ -35,6 +36,7 @@ const DEFAULT_SETTINGS: Settings = {
   compPerformer: true,
   straight: true,
   extendExisting: true,
+  mbWriters: true,
 };
 
 export const emptyDisc = (): Disc => ({
@@ -88,6 +90,18 @@ const strList = (v: unknown, pattern: RegExp): string[] =>
 const matching = (v: unknown, pattern: RegExp) =>
   typeof v === "string" && pattern.test(v) ? v : "";
 
+/** Imported composers or lyricists, each artist once, keeping only well-formed ones. */
+function writers(v: unknown): MbWriter[] {
+  if (!Array.isArray(v)) return [];
+  const out = new Map<string, MbWriter>();
+  for (const w of v.filter(isObj)) {
+    const id = matching(w.id, MBID_PATTERN);
+    const name = str(w.name).trim();
+    if (id && name && !out.has(id)) out.set(id, { id, name });
+  }
+  return [...out.values()];
+}
+
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
   return {
@@ -101,6 +115,8 @@ function coerceMbIds(ids: Obj): MbRowIds {
     appleMusic: strList(ids.appleMusic, APPLE_MUSIC_TRACK_PATTERN),
     deezer: strList(ids.deezer, DEEZER_TRACK_PATTERN),
     tidal: strList(ids.tidal, TIDAL_TRACK_PATTERN),
+    composers: writers(ids.composers),
+    lyricists: writers(ids.lyricists),
     // Forms saved before identifiers had references kept the source with the length.
     source: coerceSource(ids.source ?? ids.length),
   };
@@ -223,12 +239,16 @@ function day(v: unknown): string {
     : "";
 }
 
-/** The recording and day an import came from, or null unless both are well-formed. */
+/**
+ * The recording, work and day an import came from, or null unless the recording and
+ * day are well-formed.
+ */
 function coerceSource(v: unknown): MbRowIds["source"] {
   if (!isObj(v)) return null;
   const recording = matching(v.recording, MBID_PATTERN);
+  const work = matching(v.work, MBID_PATTERN);
   const retrieved = day(v.retrieved);
-  return recording && retrieved ? { recording, retrieved } : null;
+  return recording && retrieved ? { recording, ...(work ? { work } : {}), retrieved } : null;
 }
 
 function coerceCited(v: unknown): MbCited | null {
@@ -298,6 +318,7 @@ export function coerceState(raw: unknown): State {
     compPerformer: bool(s.compPerformer, d.compPerformer),
     straight: bool(s.straight, d.straight),
     extendExisting: bool(s.extendExisting, d.extendExisting),
+    mbWriters: bool(s.mbWriters, d.mbWriters),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};

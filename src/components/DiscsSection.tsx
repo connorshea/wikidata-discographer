@@ -220,6 +220,7 @@ function DiscBlock({
       linkedTo("comp", rows[i].n),
       linkedTo("track", rows[i].n),
       state.settings.extendExisting,
+      state.settings.mbWriters,
     );
   const anyMb = rows.some((_, i) => mbOf(i));
 
@@ -815,7 +816,7 @@ function goToPerformer(name: string): boolean {
   return true;
 }
 
-/** An artist, with a green dot once it's linked to a QID. It goes to the artist in Performers. */
+/** An artist, with a green dot once it's linked to a QID. It goes to the artist in People. */
 function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
   return (
     <a
@@ -1376,13 +1377,16 @@ function SinglePanel({
   );
 }
 
+/** The facts shown as text rather than as identifiers. */
+const PLAIN_FACTS = new Set(["Duration", "Composer", "Lyricist"]);
+
 /** What a row's MB badge lists: its imported values, for the track and for the composition. */
 interface MbFacts {
   track: [string, string][];
   comp: [string, string][];
   /** Why a section adds less: the row links an existing item. */
   linked: { track: boolean; comp: boolean };
-  /** What a linked item still gets: its MusicBrainz ID, with Link reused items on. */
+  /** What a linked item still gets: its MusicBrainz ID and writers, with Link reused items on. */
   extend: { track: [string, string][]; comp: [string, string][] };
   /** Whether the values get a MusicBrainz reference. */
   cited: boolean;
@@ -1399,6 +1403,8 @@ function mbFacts(
   linkedComp: boolean,
   linkedTrack: boolean,
   extendExisting: boolean,
+  /** The Composers and lyricists setting. */
+  withWriters: boolean,
 ): MbFacts | null {
   const ids = raw.mb;
   if (!ids) return null;
@@ -1414,13 +1420,27 @@ function mbFacts(
     ...many("Deezer", ids.deezer),
     ...many("Tidal", ids.tidal),
   ];
-  const comp: [string, string][] = [...work, ...many("ISWC", ids.iswcs)];
+  const writers: [string, string][] = withWriters
+    ? [
+        ...many(
+          "Composer",
+          ids.composers.map((w) => w.name),
+        ),
+        ...many(
+          "Lyricist",
+          ids.lyricists.map((w) => w.name),
+        ),
+      ]
+    : [];
+  const comp: [string, string][] = [...work, ...many("ISWC", ids.iswcs), ...writers];
   if (!track.length && !comp.length) return null;
   return {
     track,
     comp,
     linked: { track: linkedTrack, comp: linkedComp },
-    extend: extendExisting ? { track: recording, comp: work } : { track: [], comp: [] },
+    extend: extendExisting
+      ? { track: recording, comp: [...work, ...writers] }
+      : { track: [], comp: [] },
     cited: !!ids.source,
     recording: ids.recording || ids.source?.recording || "",
   };
@@ -1519,7 +1539,7 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
             {shown.map(([k, v], i) => (
               <Fragment key={i}>
                 <dt>{k}</dt>
-                <dd className={k === "Duration" ? undefined : "mono"}>{v}</dd>
+                <dd className={PLAIN_FACTS.has(k) ? undefined : "mono"}>{v}</dd>
               </Fragment>
             ))}
           </dl>
@@ -1577,7 +1597,9 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
             "Composition",
             facts.comp,
             "This row links an existing composition, so these aren't added.",
-            "This row links an existing composition. It only gets the work ID, unless it already has one.",
+            facts.extend.comp.some(([k]) => k !== "Work ID")
+              ? "This row links an existing composition. It only gets the work ID, unless it already has one, and the composers and lyricists it doesn't have yet."
+              : "This row links an existing composition. It only gets the work ID, unless it already has one.",
           )}
           <div className="mb-pop-foot">
             <span className="muted">

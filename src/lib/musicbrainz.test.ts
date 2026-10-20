@@ -224,9 +224,64 @@ describe("releaseToForm", () => {
       appleMusic: [],
       deezer: [],
       tidal: [],
-      source: { recording: "263340e1-2f03-4b31-b404-a06a8acda193", retrieved: "2026-10-04" },
+      composers: [],
+      lyricists: [],
+      source: {
+        recording: "263340e1-2f03-4b31-b404-a06a8acda193",
+        work: "2bf1a377-686f-426a-ab5a-309466d201e9",
+        retrieved: "2026-10-04",
+      },
     });
     expect(first.tracks.every((t) => t.mb)).toBe(true);
+  });
+
+  describe("composers and lyricists", () => {
+    const BERGER = "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5";
+    const KAPARI = "0d32b53d-6d72-4eea-9009-eca2cf7c11a8";
+    const NOONIE = "e292bc5a-ee7f-4160-97d5-d175983421ab";
+    const rel = (type: string, id: string, name: string) => ({
+      type,
+      "target-type": "artist",
+      artist: { id, name },
+    });
+    const withWriters = () => {
+      const r = release();
+      r.media[0].tracks![0].recording.relations!.find((x) => x.work)!.work!.relations = [
+        rel("composer", CRJ, "Carly Rae Jepsen"),
+        rel("lyricist", CRJ, "Carly Rae Jepsen"),
+        rel("composer", BERGER, "Patrik Berger"),
+        rel("composer", BERGER, "Patrik Berger"),
+        rel("writer", KAPARI, "KAPARI"),
+        rel("arranger", NOONIE, "Noonie Bao"),
+      ];
+      return r;
+    };
+
+    it("are read from the work, leaving out writers, arrangers and the like", () => {
+      const [track] = releaseToForm(withWriters(), NONE).discs[0].tracks;
+      expect(track.mb).toMatchObject({
+        composers: [
+          { id: CRJ, name: "Carly Rae Jepsen" },
+          { id: BERGER, name: "Patrik Berger" },
+        ],
+        lyricists: [{ id: CRJ, name: "Carly Rae Jepsen" }],
+      });
+      expect(releaseIds(withWriters()).artists).toEqual(expect.arrayContaining([CRJ, BERGER]));
+    });
+
+    it("are linked by their MusicBrainz artist ID, and the rest listed in a note", () => {
+      const form = releaseToForm(withWriters(), { ...NONE, artists: { [CRJ]: "Q52583" } });
+      expect(form.artists).toEqual({ "Carly Rae Jepsen": "Q52583" });
+      expect(form.report.notes).toContain(
+        "1 composer or lyricist has no Wikidata item with their MusicBrainz artist ID: Patrik Berger. Link them under People, or the compositions won't name them.",
+      );
+      const linked = releaseToForm(withWriters(), {
+        ...NONE,
+        artists: { [CRJ]: "Q52583", [BERGER]: "Q7146018" },
+      });
+      expect(linked.artists).toEqual({ "Carly Rae Jepsen": "Q52583", "Patrik Berger": "Q7146018" });
+      expect(linked.report.notes.join(" ")).not.toContain("composer");
+    });
   });
 
   it("keeps the recording's and work's own names, not the track's title", () => {

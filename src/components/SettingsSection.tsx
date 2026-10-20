@@ -32,11 +32,21 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
       [
         "extendExisting",
         "Link reused items",
-        "Add missing recording-of and performer links, and MusicBrainz IDs, to existing items you reuse",
+        "Add missing recording-of, performer, composer and lyricist links, and MusicBrainz IDs, to existing items you reuse",
       ],
     ],
   ],
   ["Text", [["straight", "Straight quotes", "Convert curly apostrophes and quotes"]]],
+  [
+    "MusicBrainz import",
+    [
+      [
+        "mbWriters",
+        "Composers and lyricists",
+        "Add each work's composers and lyricists to new compositions",
+      ],
+    ],
+  ],
 ];
 
 export default function SettingsSection({

@@ -39,6 +39,8 @@ export interface Settings {
   compPerformer: boolean;
   straight: boolean;
   extendExisting: boolean;
+  /** Add the composers and lyricists a MusicBrainz import found to the compositions. */
+  mbWriters: boolean;
 }
 
 export interface AlbumState {
@@ -86,6 +88,16 @@ export interface SingleState {
   discogs: string;
 }
 
+/**
+ * A composer or lyricist of a track's work on MusicBrainz. Linked to an item by
+ * name, in the same table as the performers.
+ */
+export interface MbWriter {
+  /** The MusicBrainz artist ID. */
+  id: string;
+  name: string;
+}
+
 /** A track's identifiers from a MusicBrainz import. */
 export interface MbRowIds {
   /**
@@ -116,11 +128,15 @@ export interface MbRowIds {
   deezer: string[];
   /** P4578 Tidal track IDs, for the track. */
   tidal: string[];
+  /** The work's P86 composers and P676 lyricists, for the composition. */
+  composers: MbWriter[];
+  lyricists: MbWriter[];
   /**
-   * The recording and day the import came from, for the references on the
-   * duration and identifiers. Kept even when an item already has the recording ID.
+   * The recording, work and day the import came from, for the references on the
+   * duration, identifiers and writers. Kept even when an item already has the recording
+   * or work ID. `work` is left out when the track has no work.
    */
-  source: { recording: string; retrieved: string } | null;
+  source: { recording: string; work?: string; retrieved: string } | null;
 }
 
 /** A row of a disc's tracklist, as a MusicBrainz import read it or as entered by hand. */
@@ -660,6 +676,8 @@ interface PlanItem {
   perf: string[];
   existComp: string | null;
   existTrack: string | null;
+  /** The QIDs of the composers and lyricists its composition gets. */
+  writers: { composers: string[]; lyricists: string[] };
   single: { date: ParsedDate; qid: string | null; discogs: string | null } | null;
 }
 
@@ -743,6 +761,18 @@ export function buildPlan(state: State): Plan {
     });
     return perf.filter((x) => QID.test(x));
   };
+  // Composers and lyricists are optional, so one with no QID is left off. One that isn't
+  // a QID is still an error, as a performer's is.
+  const badWriter = new Set<string>();
+  const writersFor = (ws: MbWriter[]) => {
+    const qids = new Set<string>();
+    for (const w of ws) {
+      const q = (state.artists[w.name] ?? "").trim();
+      if (QID.test(q)) qids.add(q);
+      else if (q) badWriter.add(w.name);
+    }
+    return [...qids];
+  };
 
   /* album */
   const A = state.album;
@@ -823,6 +853,8 @@ export function buildPlan(state: State): Plan {
         if (errs.length) singleErrs[`${di}:${r.n}`] = errs.join(" ");
         single = { date: sd, qid: QID.test(sq) ? sq : null, discogs: discogsOk ? discogs : null };
       }
+      // A reused composition only gets them with Link reused items on.
+      const getsWriters = S.mbWriters && !!r.mb && (!ec || S.extendExisting);
       items.push({
         r,
         di,
@@ -830,6 +862,10 @@ export function buildPlan(state: State): Plan {
         perf,
         existComp: QID.test(ec) ? ec : null,
         existTrack: QID.test(et) ? et : null,
+        writers: {
+          composers: getsWriters ? writersFor(r.mb!.composers) : [],
+          lyricists: getsWriters ? writersFor(r.mb!.lyricists) : [],
+        },
         single,
       });
     }
@@ -912,6 +948,9 @@ export function buildPlan(state: State): Plan {
       "tracks",
     );
   if (badPerf.size) err(`Performer QID isn't valid for: ${[...badPerf].join(", ")}.`, "performers");
+  for (const name of badPerf) badWriter.delete(name);
+  if (badWriter.size)
+    err(`Composer or lyricist QID isn't valid for: ${[...badWriter].join(", ")}.`, "performers");
   if (unmapped.size) err(`No performer QID for: ${[...unmapped].join(", ")}.`, "performers");
   if (invalid.length) err(`Not a QID: ${invalid.join(", ")}.`, "tracks");
   const settingsErr =
@@ -976,6 +1015,15 @@ export function buildPlan(state: State): Plan {
       ...mb.tidal.map((v) => cited("P4578", v)),
     ];
   };
+  // Cited to the work, which is what MusicBrainz states them on.
+  const writerClaims = (it: PlanItem): Claim[] => {
+    const src = it.r.mb?.source;
+    const cite = src?.work ? statedInMb("P435", src.work, src.retrieved) : {};
+    return [
+      ...it.writers.composers.map((q) => ({ ...claim("P86", item(q)), ...cite })),
+      ...it.writers.lyricists.map((q) => ({ ...claim("P676", item(q)), ...cite })),
+    ];
+  };
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
@@ -1025,7 +1073,11 @@ export function buildPlan(state: State): Plan {
     if (it.existComp) {
       // Not a second work ID: a composition with another may be a different work, or one
       // MusicBrainz merged, and a second would hide that.
-      const extend = [...perf, ...work.map((c): Claim => ({ ...c, ifMissing: true }))];
+      const extend = [
+        ...perf,
+        ...writerClaims(it),
+        ...work.map((c): Claim => ({ ...c, ifMissing: true })),
+      ];
       if (S.extendExisting && extend.length)
         ops.push({
           op: "addClaims",
@@ -1046,6 +1098,7 @@ export function buildPlan(state: State): Plan {
         claim("P7937", item(SONG_FORM)),
         title(it.r.title),
         ...perf,
+        ...writerClaims(it),
         ...workLang,
         ...work,
         ...(it.r.mb?.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) })) ?? []),

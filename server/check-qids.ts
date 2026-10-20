@@ -36,6 +36,7 @@ import { findByTerms } from "./mirror.ts";
 import { kindOf, type MusicKind } from "../src/lib/music.ts";
 import {
   ALBUM_CLASSES,
+  buildPlan,
   describeOp,
   KIND_NAMES,
   type Op,
@@ -45,6 +46,7 @@ import {
   type Value,
 } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
+import { performerRows } from "../src/lib/progress.ts";
 
 /** Every existing item the plan edits or links to, with what it's used for. */
 export function planQids(ops: readonly Op[]): Map<string, string> {
@@ -68,7 +70,7 @@ export function planQids(ops: readonly Op[]): Map<string, string> {
   return out;
 }
 
-/** Where in the form each QID was entered, e.g. `Performer “X”`. */
+/** Where in the form each QID was entered, e.g. `Performer “X”` or `Composer “X”`. */
 function formSources(state: State): Map<string, string[]> {
   const out = new Map<string, string[]>();
   const add = (qid: string | undefined, where: string) => {
@@ -86,7 +88,19 @@ function formSources(state: State): Map<string, string[]> {
   }
   add(state.settings.p407, "The language of work");
   add(state.settings.trackType, "The track type");
-  for (const [name, qid] of Object.entries(state.artists)) add(qid, `Performer “${name}”`);
+  const roles = new Map(performerRows(state, buildPlan(state)).map((r) => [r.name, r]));
+  for (const [name, qid] of Object.entries(state.artists)) {
+    const r = roles.get(name);
+    const role =
+      !r || r.performer
+        ? "Performer"
+        : r.composer && r.lyricist
+          ? "Composer and lyricist"
+          : r.composer
+            ? "Composer"
+            : "Lyricist";
+    add(qid, `${role} “${name}”`);
+  }
   state.discs.forEach((d, i) => {
     const disc = `Disc ${i + 1}`;
     add(d.part, `${disc} part`);

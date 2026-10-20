@@ -14,7 +14,7 @@ import {
   parseDate,
   STUDIO_ALBUM,
 } from "./plan.ts";
-import type { AlbumMb, AlbumState, Disc, MbRowIds, State, Track } from "./plan.ts";
+import type { AlbumMb, AlbumState, Disc, MbRowIds, MbWriter, State, Track } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
@@ -133,7 +133,10 @@ export function releaseChoices(releases: MbReleaseListing[]): ReleaseChoice[] {
 // ---------------------------------------------------------------------------
 // The parts of MusicBrainz's release JSON the import reads. The lookup is
 //   /ws/2/release/<mbid>?inc=recordings+artist-credits+release-groups+
-//     work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs
+//     work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+
+//     release-group-level-rels+isrcs
+// work-level-rels and artist-rels bring each work's own artist relations,
+// its composers and lyricists among them.
 // ---------------------------------------------------------------------------
 
 export interface MbArtistCredit {
@@ -146,7 +149,8 @@ export interface MbRelation {
   type: string;
   "target-type": string;
   url?: { resource: string };
-  work?: { id: string; title: string; iswcs?: string[] };
+  artist?: { id: string; name: string };
+  work?: { id: string; title: string; iswcs?: string[]; relations?: MbRelation[] };
 }
 
 export interface MbTrack {
@@ -187,7 +191,15 @@ export function releaseIds(release: MbRelease) {
   const credits = [release["artist-credit"], ...tracks.map((t) => t["artist-credit"])].flat();
   return {
     releaseGroup: release["release-group"].id,
-    artists: [...new Set(credits.map((c) => c.artist.id))],
+    artists: [
+      ...new Set([
+        ...credits.map((c) => c.artist.id),
+        ...tracks.flatMap((t) => {
+          const w = writersOf(t);
+          return [...w.composers, ...w.lyricists].map((a) => a.id);
+        }),
+      ]),
+    ],
     recordings: [...new Set(tracks.map((t) => t.recording.id))],
     works: [...new Set(tracks.flatMap((t) => workOf(t) ?? []))],
     iswcs: [...new Set(tracks.flatMap((t) => iswcsOf(t)))],
@@ -396,6 +408,27 @@ function iswcsOf(t: MbTrack): string[] {
   return [...new Set((theWork(t)?.iswcs ?? []).filter((v) => ISWC_PATTERN.test(v)))];
 }
 
+/**
+ * The work's relation types that say who wrote what. `writer` doesn't say whether
+ * they wrote the music, the words or both, so it's left out rather than guessed.
+ */
+const WRITER_ROLES: Record<string, "composers" | "lyricists"> = {
+  composer: "composers",
+  lyricist: "lyricists",
+};
+
+/** The composers and lyricists of a track's composition, as `workOf` picks it, each once. */
+function writersOf(t: MbTrack): { composers: MbWriter[]; lyricists: MbWriter[] } {
+  const out = { composers: new Map<string, MbWriter>(), lyricists: new Map<string, MbWriter>() };
+  for (const r of theWork(t)?.relations ?? []) {
+    const role = Object.hasOwn(WRITER_ROLES, r.type) ? WRITER_ROLES[r.type] : undefined;
+    const name = r.artist?.name.trim();
+    if (role && r["target-type"] === "artist" && r.artist && name)
+      out[role].set(r.artist.id, { id: r.artist.id, name });
+  }
+  return { composers: [...out.composers.values()], lyricists: [...out.lyricists.values()] };
+}
+
 /** The names an artist credit lists, each once. */
 const creditNames = (credit: MbArtistCredit[]) => [
   ...new Set(credit.map((c) => c.name.trim()).filter(Boolean)),
@@ -449,6 +482,15 @@ export function releaseToForm(
     }
   };
   addCredit(release["artist-credit"]);
+  // Composers and lyricists, keyed by their names on MusicBrainz, with those not found.
+  const unlinkedWriters = new Map<string, string>();
+  const addWriters = (ws: MbWriter[]) => {
+    for (const w of ws) {
+      const qid = lookups.artists[w.id];
+      if (qid && !(w.name in artists)) artists[w.name] = qid;
+      else if (!qid) unlinkedWriters.set(w.id, w.name);
+    }
+  };
 
   // Discs: one per medium with tracks.
   const media = release.media.filter((m) => m.tracks?.length);
@@ -490,6 +532,8 @@ export function releaseToForm(
     disc.tracks = m.tracks!.map((t): Track => {
       addCredit(t["artist-credit"]);
       const work = workOf(t);
+      const writers = writersOf(t);
+      addWriters([...writers.composers, ...writers.lyricists]);
       if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
         misplaced.set(work, t.title.trim());
       const iswcs = iswcsOf(t);
@@ -515,7 +559,8 @@ export function releaseToForm(
         appleMusic: trackLinkOf(t, "appleMusic").filter((v) => !taken.has(v)),
         deezer: trackLinkOf(t, "deezer").filter((v) => !taken.has(v)),
         tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
-        source: { recording: t.recording.id, retrieved },
+        ...writers,
+        source: { recording: t.recording.id, ...(work ? { work } : {}), retrieved },
       };
       if (disc.track[t.position]) toExtend.recordings += ids.recording ? 1 : 0;
       if (disc.comp[t.position]) toExtend.works += ids.work ? 1 : 0;
@@ -556,6 +601,12 @@ export function releaseToForm(
       newComp: !lookups.works[work],
     })),
   );
+  // One linked under the same name, as a performer say, is linked after all.
+  const unlinked = [...new Set(unlinkedWriters.values())].filter((name) => !(name in artists));
+  if (unlinked.length)
+    notes.push(
+      `${plural(unlinked.length, "composer or lyricist has", "composers and lyricists have")} no Wikidata item with their MusicBrainz artist ID: ${joinList(unlinked)}. Link them under People, or the compositions won't name them.`,
+    );
   if (missingLength)
     notes.push(
       `${plural(missingLength, "track has", "tracks have")} no length on MusicBrainz, so ${missingLength === 1 ? "it gets" : "they get"} no duration.`,

@@ -174,6 +174,30 @@ describe("checkPlanQids", () => {
     );
   });
 
+  it("names a composer or lyricist's QID by their role", async () => {
+    const state = structuredClone(EXAMPLE);
+    const berger = { id: "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5", name: "Patrik Berger" };
+    state.discs[0].tracks[0].mb = {
+      recording: "",
+      work: "",
+      recordingName: "",
+      workName: "",
+      iswcs: [],
+      isrcs: [],
+      spotify: [],
+      appleMusic: [],
+      deezer: [],
+      tidal: [],
+      composers: [berger],
+      lyricists: [],
+      source: null,
+    };
+    state.artists["Patrik Berger"] = "Q1001";
+    stubWiki({ missing: ["Q1001"] });
+    const problems = await checkPlanQids(buildPlan(state).ops, state);
+    expect(problems).toContain(`Composer “Patrik Berger”: Q1001 doesn't exist.`);
+  });
+
   it("fetches only the existing album's “instance of” and tracklist statements", async () => {
     const fetch = stubWiki({ instanceOf: ["Q208569"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([]);

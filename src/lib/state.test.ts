@@ -142,6 +142,14 @@ describe("coerceState", () => {
                 appleMusic: ["1820000002", "apple", "1820000002"],
                 deezer: ["69018826", "deezer"],
                 tidal: ["454960380", "tidal"],
+                composers: [
+                  { id: "09887aa7-226e-4ecc-9a0c-02d2ae5777e1", name: " Carly Rae Jepsen " },
+                  { id: "09887aa7-226e-4ecc-9a0c-02d2ae5777e1", name: "Carly Rae Jepsen" },
+                  { id: "not an mbid", name: "Someone" },
+                  { id: "4e56b69b-9146-413c-bd04-78a564073df9", name: "" },
+                  "x",
+                ],
+                lyricists: "Carly Rae Jepsen",
                 source: {
                   recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
                   retrieved: "2026-02-30",
@@ -172,6 +180,8 @@ describe("coerceState", () => {
           appleMusic: ["1820000002"],
           deezer: ["69018826"],
           tidal: ["454960380"],
+          composers: [{ id: "09887aa7-226e-4ecc-9a0c-02d2ae5777e1", name: "Carly Rae Jepsen" }],
+          lyricists: [],
           source: null,
         },
       },
@@ -206,6 +216,8 @@ describe("coerceState", () => {
       appleMusic: [],
       deezer: [],
       tidal: [],
+      composers: [],
+      lyricists: [],
       source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
     };
     expect(coerceState({ discs: [disc] }).discs[0].tracks).toEqual([
