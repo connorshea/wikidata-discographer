@@ -543,6 +543,14 @@ function DiscBlock({
                         review={review}
                         setDisc={setDisc}
                       />
+                      {state.settings.mbWriters && (
+                        <Writers
+                          track={t}
+                          linkedComp={linkedTo("comp", r.n)}
+                          extendExisting={state.settings.extendExisting}
+                          linked={linked}
+                        />
+                      )}
                       {/* Singles can't be added for now, but a form saved with one still has it. */}
                       {single && (
                         <div className="wide">
@@ -770,6 +778,57 @@ function ArtistsField({
   );
 }
 
+/**
+ * The composers and lyricists a MusicBrainz import found for a row's composition, as
+ * chips that go to the writer in People. Nothing for a row without any.
+ */
+function Writers({
+  track,
+  linkedComp,
+  extendExisting,
+  linked,
+}: {
+  track: Track;
+  linkedComp: boolean;
+  extendExisting: boolean;
+  linked: (name: string) => boolean;
+}) {
+  const groups = [
+    ["Composers", track.mb?.composers ?? []],
+    ["Lyricists", track.mb?.lyricists ?? []],
+  ] as const;
+  if (groups.every(([, ws]) => !ws.length)) return null;
+  // As the plan has it: a reused composition only gets them with Link reused items on.
+  const note = !linkedComp
+    ? "Added to the new composition. Writers that aren't linked in People are left off."
+    : extendExisting
+      ? "The linked composition only gets the ones it doesn't have yet."
+      : "Not added, as the composition is an existing one and Link reused items is off.";
+  return (
+    <div className="f wide">
+      <span className="with-badge">
+        Composers and lyricists <span className="mb-badge">MB</span>
+      </span>
+      <dl className="writers">
+        {groups.map(
+          ([label, ws]) =>
+            ws.length > 0 && (
+              <Fragment key={label}>
+                <dt>{label}</dt>
+                <dd>
+                  {ws.map((w) => (
+                    <PerformerChip key={w.id} name={w.name} linked={linked(w.name)} optional />
+                  ))}
+                </dd>
+              </Fragment>
+            ),
+        )}
+      </dl>
+      <span className="sub">{note}</span>
+    </div>
+  );
+}
+
 /** The existing composition and track a row reuses, by QID, and its matches to review. */
 function LinkFields({
   di,
@@ -931,11 +990,22 @@ function goToPerformer(name: string): boolean {
   return true;
 }
 
-/** An artist, with a green dot once it's linked to a QID. It goes to the artist in People. */
-function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
+/**
+ * An artist, with a green dot once it's linked to a QID. It goes to the artist in People.
+ * An `optional` one, a writer, is left off rather than needed when it isn't linked.
+ */
+function PerformerChip({
+  name,
+  linked,
+  optional = false,
+}: {
+  name: string;
+  linked: boolean;
+  optional?: boolean;
+}) {
   return (
     <a
-      className={cls("who-chip", !linked && "todo")}
+      className={cls("who-chip", !linked && (optional ? "unlinked" : "todo"))}
       href="#performers"
       onClick={(e) => {
         if (goToPerformer(name)) e.preventDefault();
@@ -943,7 +1013,13 @@ function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
     >
       <i aria-hidden="true" />
       {name}
-      {linked ? <span className="visually-hidden">, linked</span> : " · needs QID"}
+      {linked ? (
+        <span className="visually-hidden">, linked</span>
+      ) : optional ? (
+        " · not linked"
+      ) : (
+        " · needs QID"
+      )}
     </a>
   );
 }

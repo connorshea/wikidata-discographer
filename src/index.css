@@ -980,6 +980,24 @@ button.trk-title {
 .trk-foot {
   grid-column: 1 / -1;
 }
+/* An open card's composers and lyricists: a role, then its chips. */
+.writers {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+  margin: 0;
+}
+.writers dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+.writers dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
 .link-fields {
   display: flex;
   flex-wrap: wrap;
@@ -1081,6 +1099,9 @@ a.who-chip:hover {
 }
 .who-chip.todo i {
   background: var(--warn-edge);
+}
+.who-chip.unlinked i {
+  background: var(--muted);
 }
 /* The album artists, by the Tracks heading. */
 .album-head.tracks-head {
