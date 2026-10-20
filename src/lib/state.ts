@@ -38,7 +38,6 @@ const DEFAULT_SETTINGS: Settings = {
   compPerformer: true,
   straight: true,
   mbWriters: true,
-  mbDetails: true,
   recDate: "",
   recTypes: [],
 };
@@ -347,7 +346,6 @@ export function coerceState(raw: unknown): State {
     compPerformer: bool(s.compPerformer, d.compPerformer),
     straight: bool(s.straight, d.straight),
     mbWriters: bool(s.mbWriters, d.mbWriters),
-    mbDetails: bool(s.mbDetails, d.mbDetails),
     recDate: str(s.recDate),
     recTypes: Array.isArray(s.recTypes) ? knownRecTypes(s.recTypes) : [],
   };

@@ -38,8 +38,6 @@ export interface Settings {
   straight: boolean;
   /** Add the composers and lyricists a MusicBrainz import found to the compositions. */
   mbWriters: boolean;
-  /** Use what MusicBrainz says about each recording, such as being instrumental, for its track. */
-  mbDetails: boolean;
   /** The P10135 recording date of tracks with none of their own or from MusicBrainz. */
   recDate: string;
   /** The P1552 recording types, of `REC_TYPES`, of tracks with none of their own. */
@@ -370,7 +368,7 @@ export function trackRecTypesOf(
   S: Settings,
   t: Pick<Track, "mb" | "recTypes">,
 ): { qids: string[]; fromMb: string[] } {
-  const mb = S.mbDetails ? (t.mb?.attributes ?? []).flatMap((a) => MB_REC_TYPES[a] ?? []) : [];
+  const mb = (t.mb?.attributes ?? []).flatMap((a) => MB_REC_TYPES[a] ?? []);
   // A track's own types that MusicBrainz says too are still cited to it.
   if (t.recTypes) {
     const qids = knownRecTypes(t.recTypes);
@@ -389,7 +387,7 @@ export function trackRecTypesOf(
  */
 export function trackTypeOf(S: Settings, t: Pick<Track, "type" | "mb">) {
   if (t.type) return { qid: t.type, fromMb: false };
-  if (S.mbDetails && (t.mb?.attributes?.includes("instrumental") || wordlessWork(t)))
+  if (t.mb?.attributes?.includes("instrumental") || wordlessWork(t))
     return { qid: WITHOUT_LYRICS, fromMb: true };
   return { qid: S.trackType, fromMb: false };
 }
@@ -447,7 +445,7 @@ export function trackLangOf(
   const valid = (qs: string[]) => qs.map((q) => q.trim()).filter((q) => QID.test(q));
   if (t.p407 !== undefined) return { qids: valid([t.p407]), from: null };
   const { qid: type, fromMb } = trackTypeOf(S, t);
-  const mb = S.mbDetails ? valid(t.mb?.languages ?? []) : [];
+  const mb = valid(t.mb?.languages ?? []);
   if (mb.length && !(type === WITH_VOCALS && mb.includes(NO_LINGUISTIC_CONTENT)))
     return { qids: mb, from: "mb" };
   const album = valid([S.p407]);
@@ -467,7 +465,7 @@ export function trackRecordedOf(
   t: Pick<Track, "mb" | "recorded">,
 ): { date: string; from: "mb" | "album" | null } {
   if (t.recorded?.trim()) return { date: t.recorded.trim(), from: null };
-  if (S.mbDetails && t.mb?.recorded) return { date: t.mb.recorded.begin, from: "mb" };
+  if (t.mb?.recorded) return { date: t.mb.recorded.begin, from: "mb" };
   return { date: S.recDate.trim(), from: "album" };
 }
 

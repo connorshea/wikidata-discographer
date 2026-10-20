@@ -190,7 +190,7 @@ const labelLangName = (S: Settings) =>
   LABEL_LANGS.find(([c]) => c === S.lang.trim())?.[1] ?? S.lang.trim();
 
 /** The options Item settings lists as checkboxes. */
-export const SETTING_FLAGS = ["compPerformer", "straight", "mbWriters", "mbDetails"] as const;
+export const SETTING_FLAGS = ["compPerformer", "straight", "mbWriters"] as const;
 
 /** Item settings in a few pills, for when the section is collapsed. */
 export function settingsPills(S: Settings): string[] {
