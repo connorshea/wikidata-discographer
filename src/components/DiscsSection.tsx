@@ -580,6 +580,9 @@ function DiscBlock({
                           })
                         }
                       />
+                      {state.settings.mbWriters && (
+                        <Writers track={t} linkedComp={linkedTo("comp", r.n)} linked={linked} />
+                      )}
                       <LinkFields
                         di={di}
                         n={r.n}
@@ -588,9 +591,6 @@ function DiscBlock({
                         review={review}
                         setDisc={setDisc}
                       />
-                      {state.settings.mbWriters && (
-                        <Writers track={t} linkedComp={linkedTo("comp", r.n)} linked={linked} />
-                      )}
                       <div className="trk-foot">
                         {/* As the closed card's menu is, so the focus can come back here. */}
                         <button type="button" className="link danger" data-col="menu" onClick={del}>
@@ -1187,7 +1187,10 @@ function typeTag(track: Track, settings: Settings) {
   );
 }
 
-/** The existing composition and track a row reuses, by QID, and its matches to review. */
+/**
+ * The existing composition and track a row reuses, by QID, under a heading of their
+ * own, each with its matches to review.
+ */
 function LinkFields({
   di,
   n,
@@ -1214,33 +1217,42 @@ function LinkFields({
       else delete d[k][n];
     });
   return (
-    <div className="f wide">
-      <span className="with-badge">
-        Links to existing
-        {review && (
-          <a className="match-tag" href={`#${groupId(di, n)}`}>
-            {plural(review.candidates.length, "possible match", "possible matches")} · review ↓
-          </a>
-        )}
-      </span>
-      <span className="link-fields">
-        {kinds.map(({ k, name, lower }) => (
-          <label key={k} className="f">
-            {name}
+    <>
+      <div className="wide link-head">
+        <span className="kicker">Links to existing</span>
+        <span className="muted">Reuse items already on Wikidata instead of creating new.</span>
+      </div>
+      {kinds.map(({ k, name, lower }) => {
+        const found = review?.candidates.filter((c) => c.slot === k && !c.used).length ?? 0;
+        return (
+          <div key={k} className="f">
+            <label htmlFor={`${ids}-${k}`}>{name}</label>
             <QidInput
+              id={`${ids}-${k}`}
               className="mono"
-              placeholder="Q… to reuse one"
+              placeholder="Q…"
               aria-label={`Track ${n} existing ${lower}`}
               aria-invalid={!!errs[k]}
-              aria-describedby={errs[k] ? `${ids}-${k}` : undefined}
+              aria-describedby={errs[k] ? `${ids}-${k}-err` : undefined}
               value={disc[k][n] ?? ""}
               onChange={(q) => set(k, q)}
             />
-            {errs[k] && <CellErr id={`${ids}-${k}`}>{errs[k]}</CellErr>}
-          </label>
-        ))}
-      </span>
-    </div>
+            {found > 0 ? (
+              <span className="sub match-hint">
+                <i className="match-dot" aria-hidden="true" />
+                {plural(found, "possible match", "possible matches")}
+                <a href={`#${groupId(di, n)}`}>Review ↓</a>
+              </span>
+            ) : (
+              !disc[k][n]?.trim() && (
+                <span className="sub">{`Leave empty to create a new ${lower}.`}</span>
+              )
+            )}
+            {errs[k] && <CellErr id={`${ids}-${k}-err`}>{errs[k]}</CellErr>}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
