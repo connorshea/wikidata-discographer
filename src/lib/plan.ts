@@ -36,7 +36,6 @@ export interface Settings {
   albumDesc: string;
   compPerformer: boolean;
   straight: boolean;
-  extendExisting: boolean;
   /** Add the composers and lyricists a MusicBrainz import found to the compositions. */
   mbWriters: boolean;
   /** Use what MusicBrainz says about each recording, such as being instrumental, for its track. */
@@ -893,7 +892,7 @@ export function buildPlan(state: State): Plan {
       if (!perf[i]) unmapped.add(a);
       else if (!QID.test(perf[i])) badPerf.add(a);
     });
-    return perf.filter((x) => QID.test(x));
+    return [...new Set(perf.filter((x) => QID.test(x)))];
   };
   // Composers and lyricists are optional, so one with no QID is left off. One that isn't
   // a QID is still an error, as a performer's is.
@@ -969,17 +968,14 @@ export function buildPlan(state: State): Plan {
       if (et && !QID.test(et)) errs.track = `"${et}" isn't a QID.`;
       // An existing composition keeps its language, so what's typed for it doesn't matter.
       const ownLang = r.p407?.trim() ?? "";
-      // So does an existing track, unless Link reused items adds the date to it.
       const ownRecorded = parseDate(r.recorded ?? "");
-      if (!ownRecorded.ok && !(QID.test(et) && !S.extendExisting))
-        errs.recorded = ownRecorded.error;
+      if (!ownRecorded.ok) errs.recorded = ownRecorded.error;
       if (isCustomTrackLang(r) && !QID.test(ec)) {
         if (!ownLang) errs.lang = "Enter a QID, or choose another language.";
         else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
       }
       if (Object.keys(errs).length) rowErrs[`${di}:${r.n}`] = errs;
-      // A reused composition only gets them with Link reused items on.
-      const getsWriters = S.mbWriters && !!r.mb && (!ec || S.extendExisting);
+      const getsWriters = S.mbWriters && !!r.mb;
       items.push({
         r,
         di,
@@ -1004,8 +1000,8 @@ export function buildPlan(state: State): Plan {
   }
 
   // Tracks of one MusicBrainz work or recording would each give their own item the same P435
-  // or P4404. A reused item gets it too with Link reused items on, so it counts, but tracks
-  // reusing the same item give it to that one item.
+  // or P4404. A reused item gets it too, so it counts, but tracks reusing the same item give
+  // it to that one item.
   const sharedIds = (
     idOf: (it: PlanItem) => string | undefined,
     exist: (it: PlanItem) => string | null,
@@ -1014,7 +1010,7 @@ export function buildPlan(state: State): Plan {
     for (const it of items) {
       const id = idOf(it);
       const reused = exist(it);
-      if (!id || (reused && !S.extendExisting)) continue;
+      if (!id) continue;
       const shared = byId.get(id) ?? { at: [], items: new Set() };
       shared.at.push(`${it.di + 1}.${it.r.n}`);
       shared.items.add(reused ?? `${it.di}:${it.r.n}`);
@@ -1247,7 +1243,7 @@ export function buildPlan(state: State): Plan {
         ...writerClaims(it),
         ...work.map((c): Claim => ({ ...c, ifMissing: true })),
       ];
-      if (S.extendExisting && extend.length)
+      if (extend.length)
         ops.push({
           op: "addClaims",
           target: { id: it.existComp },
@@ -1280,28 +1276,27 @@ export function buildPlan(state: State): Plan {
   for (const it of items) {
     const perf = it.perf.map((p) => claim("P175", item(p)));
     if (it.existTrack) {
-      if (S.extendExisting)
-        ops.push({
-          op: "addClaims",
-          target: { id: it.existTrack },
-          what: where(it),
-          row: rowOf("track", it),
-          claims: [
-            claim("P2550", compOf(it)),
-            ...perf,
-            ...recordedClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
-            ...recTypeClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
-            // Not a second recording ID, as with a composition's work ID.
-            ...(it.r.mb?.recording
-              ? [
-                  {
-                    ...mbId("P4404", it.r.mb.recording, it.r.mb.recordingName),
-                    ifMissing: true as const,
-                  },
-                ]
-              : []),
-          ],
-        });
+      ops.push({
+        op: "addClaims",
+        target: { id: it.existTrack },
+        what: where(it),
+        row: rowOf("track", it),
+        claims: [
+          claim("P2550", compOf(it)),
+          ...perf,
+          ...recordedClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
+          ...recTypeClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
+          // Not a second recording ID, as with a composition's work ID.
+          ...(it.r.mb?.recording
+            ? [
+                {
+                  ...mbId("P4404", it.r.mb.recording, it.r.mb.recordingName),
+                  ifMissing: true as const,
+                },
+              ]
+            : []),
+        ],
+      });
       continue;
     }
     const type = trackTypeOf(S, it.r);

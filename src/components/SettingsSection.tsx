@@ -31,11 +31,6 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
         "Performer on compositions",
         "Add performer to compositions as well as tracks",
       ],
-      [
-        "extendExisting",
-        "Link reused items",
-        "Add missing recording-of, performer, composer and lyricist links, and MusicBrainz IDs, to existing items you reuse",
-      ],
     ],
   ],
   ["Text", [["straight", "Straight quotes", "Convert curly apostrophes and quotes"]]],

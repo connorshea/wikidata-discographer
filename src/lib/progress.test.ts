@@ -128,6 +128,16 @@ describe("createCounts", () => {
     const counts = createCounts(state, buildPlan(state));
     expect(counts.find((c) => c.kind === "tracks")?.count).toBe(24);
   });
+
+  it("counts a composition for a reused track whether or not the plan is blocked", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].track[2] = "Q999";
+    const comps = (s: typeof state) =>
+      createCounts(s, buildPlan(s)).find((c) => c.kind === "compositions")?.count;
+    const ready = comps(state);
+    state.artists = {};
+    expect(comps(state)).toBe(ready);
+  });
 });
 
 describe("runChecks", () => {
@@ -206,13 +216,13 @@ describe("settingsPills", () => {
       "Labels: English",
       "Language of work: English (Q1860)",
       "Published 2026-09-18",
-      "5 options on",
+      "4 options on",
     ]);
   });
 
   it("names what's missing", () => {
     const S = { ...EMPTY.settings, lang: "nds", straight: false };
-    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "4 options on"]);
+    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "3 options on"]);
   });
 });
 
@@ -272,10 +282,6 @@ describe("performerRows", () => {
         songs: 1,
       },
     ]);
-    // A reused composition only gets them with Link reused items on.
-    state.discs[0].comp[1] = "Q102";
-    state.settings.extendExisting = false;
-    expect(rows().map((r) => [r.name, r.songs])).toEqual([["Carly Rae Jepsen", 1]]);
     state.settings.mbWriters = false;
     state.discs[0].comp = {};
     expect(rows().map((r) => r.name)).toEqual(["Carly Rae Jepsen"]);

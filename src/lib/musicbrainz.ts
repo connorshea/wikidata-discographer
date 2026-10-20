@@ -334,8 +334,8 @@ export interface MbReport {
   /** The identifiers each kind of new item gets. */
   added: { album: string[]; tracks: MbIdCount[]; compositions: MbIdCount[] };
   /**
-   * The MusicBrainz IDs the tracks and compositions found on Wikidata get, with Link
-   * reused items on, unless they have one already. Those found by the ID have it.
+   * The MusicBrainz IDs the tracks and compositions found on Wikidata get, unless they
+   * have one already. Those found by the ID have it.
    */
   extended: { tracks: MbIdCount[]; compositions: MbIdCount[] };
   /** What gets a MusicBrainz reference: "durations", "ISRCs". */

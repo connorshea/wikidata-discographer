@@ -469,9 +469,7 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
             )}
           </dl>
           {extending && (
-            <p className="mb-report-aside">
-              Found items get the ID with Link reused items on, unless they already have one.
-            </p>
+            <p className="mb-report-aside">Found items get the ID unless they already have one.</p>
           )}
           {references.length > 0 && (
             <p className="mb-refs">
