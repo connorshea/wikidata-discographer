@@ -1021,13 +1021,34 @@ button.trk-done:hover {
   gap: 6px;
   margin: 0;
 }
-.link-fields {
+/* An open card's "Links to existing" heading, set off from the fields above it. */
+.link-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 400;
 }
-.link-fields .f {
-  flex: 1 1 200px;
+/* A field's possible matches, after a dot in the warning color. */
+.f span.match-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.match-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn-edge);
+}
+.f span.match-hint a {
+  font-weight: 600;
 }
 .trk-foot {
   display: flex;
