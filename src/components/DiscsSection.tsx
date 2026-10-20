@@ -1049,7 +1049,7 @@ function Recorded({
   const id = useId();
   const fallback = trackRecordedOf(settings, { mb: track.mb });
   const own = track.recorded !== undefined;
-  const mb = settings.mbDetails ? track.mb?.recorded : undefined;
+  const mb = track.mb?.recorded;
   const range =
     mb?.end && !own ? `MusicBrainz has ${mb.begin} to ${mb.end}. Using the first date.` : "";
   const note = linkedTrack

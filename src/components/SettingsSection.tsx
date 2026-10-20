@@ -42,11 +42,6 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
         "Composers and lyricists",
         "Add each work's composers and lyricists to new compositions",
       ],
-      [
-        "mbDetails",
-        "Track type, language, date and recording type",
-        "Use each work's language and each recording's date, make recordings tagged instrumental tracks without lyrics, and mark those tagged live, cover or medley",
-      ],
     ],
   ],
 ];

@@ -184,12 +184,6 @@ describe("buildPlan", () => {
       state.discs[0].tracks[1].mb!.languages = ["Q22282939", "Q1860"];
       expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
     });
-
-    it("leaves the album's type with the MusicBrainz details off", () => {
-      const state = instrumental(structuredClone(EXAMPLE));
-      state.settings.mbDetails = false;
-      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
-    });
   });
 
   describe("languages", () => {
@@ -243,10 +237,6 @@ describe("buildPlan", () => {
         property: "P435",
         value: { type: "string", value: "c8ee496c-48f7-456a-b5e6-b206eeb37726" },
       });
-      state.settings.mbDetails = false;
-      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
-        { type: "item", id: "Q1860" },
-      ]);
     });
 
     it("gives a track without lyrics no linguistic content, unless the work has a language", () => {
@@ -365,8 +355,6 @@ describe("buildPlan", () => {
         property: "P4404",
         value: { type: "string", value: REC },
       });
-      state.settings.mbDetails = false;
-      expect(recordedOf(state, "track:0:2")?.value).toMatchObject({ precision: 9 });
     });
 
     it("adds it to an existing track only if it has none", () => {
@@ -443,8 +431,6 @@ describe("buildPlan", () => {
       expect(ids(claims)).toEqual(["Q56123235", "Q155171", "Q25203386"]);
       expect(claims.find((c) => ids([c])[0] === "Q155171")?.references).toBeDefined();
       expect(claims.find((c) => ids([c])[0] === "Q25203386")?.references).toBeUndefined();
-      state.settings.mbDetails = false;
-      expect(ids(typesOf(state, "track:0:2"))).toEqual(["Q15975575", "Q25203386"]);
     });
 
     it("cites MusicBrainz for what it says, even when the album or the track says it too", () => {
