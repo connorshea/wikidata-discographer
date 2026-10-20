@@ -704,12 +704,6 @@ function DiscBlock({
           </svg>
           Add track
         </button>
-        <span className="sub">
-          {rows.length
-            ? "Click a track, or Edit track in its ⋯ menu, to open it. Enter or Escape closes it. "
-            : ""}
-          Paste a list into a title to add a track per line.
-        </span>
       </div>
       <p className="visually-hidden" aria-live="polite">
         {said}
@@ -1144,7 +1138,7 @@ function RecTypes({
         ? "Added to the existing track only if it has none."
         : track.recTypes
           ? "Its own, rather than the album's."
-          : "The album's, from Item settings, with what MusicBrainz says.";
+          : null;
   return (
     <div className="f wide" role="group" aria-label={`Track ${n} recording type`}>
       <span>Recording type</span>
@@ -1163,17 +1157,19 @@ function RecTypes({
           </button>
         ))}
       </div>
-      <span className="sub">
-        {note}
-        {track.recTypes && !(linkedTrack && !settings.extendExisting) && (
-          <>
-            {" "}
-            <button type="button" className="link" onClick={() => onChange(null)}>
-              Use the album's
-            </button>
-          </>
-        )}
-      </span>
+      {note && (
+        <span className="sub">
+          {note}
+          {track.recTypes && !(linkedTrack && !settings.extendExisting) && (
+            <>
+              {" "}
+              <button type="button" className="link" onClick={() => onChange(null)}>
+                Use the album's
+              </button>
+            </>
+          )}
+        </span>
+      )}
     </div>
   );
 }
