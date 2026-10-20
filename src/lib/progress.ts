@@ -211,6 +211,7 @@ export function settingsPills(S: Settings): string[] {
     `Labels: ${labelLangName(S) || "none"}`,
     ...(p407 ? [`Language of work: ${work ? `${work} (${p407})` : p407}`] : []),
     S.date.trim() ? `Published ${S.date.trim()}` : "No publication date",
+    ...(S.recDate.trim() ? [`Recorded ${S.recDate.trim()}`] : []),
     on ? plural(on, "option") + " on" : "No options on",
   ];
 }

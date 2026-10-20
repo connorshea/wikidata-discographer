@@ -275,6 +275,37 @@ describe("releaseToForm", () => {
     expect(releaseToForm(r, NONE).discs[0].tracks[0].mb?.languages).toEqual(["Q1860"]);
   });
 
+  it("keeps when the recording was made, with an end only when it differs", () => {
+    const r = release();
+    const rel = (i: number) => r.media[0].tracks![i].recording.relations!.find((x) => x.work)!;
+    Object.assign(rel(0), { begin: "2025-11-03", end: "2025-11-05" });
+    Object.assign(rel(1), { begin: "2025-11", end: "2025-11" });
+    Object.assign(rel(2), { begin: "Nov 2025", end: null });
+    const form = releaseToForm(r, NONE);
+    const [a, b, c] = form.discs[0].tracks;
+    expect(a.mb?.recorded).toEqual({ begin: "2025-11-03", end: "2025-11-05" });
+    expect(b.mb?.recorded).toEqual({ begin: "2025-11", end: "" });
+    expect(c.mb).not.toHaveProperty("recorded");
+    expect(form.report.references).toContain("recording dates");
+  });
+
+  it("dates a medley from the first to the last day of its works' recordings", () => {
+    const r = release();
+    const rels = r.media[0].tracks![0].recording.relations!;
+    const perf = rels.find((x) => x.work)!;
+    Object.assign(perf, { begin: "2025-11-10", end: "2025-11-12" });
+    rels.push({
+      ...perf,
+      work: { id: "2bf1a377-686f-426a-ab5a-309466d201e9", title: "Another" },
+      begin: "2025-11-03",
+      end: null,
+    });
+    expect(releaseToForm(r, NONE).discs[0].tracks[0].mb?.recorded).toEqual({
+      begin: "2025-11-03",
+      end: "2025-11-12",
+    });
+  });
+
   describe("composers and lyricists", () => {
     const BERGER = "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5";
     const KAPARI = "0d32b53d-6d72-4eea-9009-eca2cf7c11a8";
@@ -846,9 +877,17 @@ describe("releaseToForm", () => {
 
 describe("applyMbForm", () => {
   it("replaces the form but keeps the other settings", () => {
-    const state = { ...structuredClone(EXAMPLE), settings: { ...EXAMPLE.settings, lang: "fr" } };
+    const state = {
+      ...structuredClone(EXAMPLE),
+      settings: { ...EXAMPLE.settings, lang: "fr", recDate: "2019" },
+    };
     const next = applyMbForm(state, releaseToForm(RELEASE, NONE));
-    expect(next.settings).toMatchObject({ lang: "fr", date: "2026-09-18", p407: "Q1860" });
+    expect(next.settings).toMatchObject({
+      lang: "fr",
+      date: "2026-09-18",
+      p407: "Q1860",
+      recDate: "",
+    });
     expect(next.album.mode).toBe("create");
     expect(next.start).toBe("mb");
     expect(next.discs).toHaveLength(2);

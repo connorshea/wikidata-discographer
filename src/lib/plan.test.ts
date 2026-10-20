@@ -284,6 +284,95 @@ describe("buildPlan", () => {
     });
   });
 
+  describe("recording dates", () => {
+    const REC = "519d8f15-518b-479c-af8d-664fb3ae455a";
+    const recordedOf = (state: typeof EXAMPLE, key: string) => {
+      const op = buildPlan(state).ops.find((o) => (o.op === "create" ? o.key : o.what) === key) as {
+        claims: Claim[];
+      };
+      return op.claims.find((c) => c.property === "P10135");
+    };
+    const withMb = (state: typeof EXAMPLE) => {
+      state.discs[0].tracks[1].mb = {
+        recording: REC,
+        work: "",
+        recordingName: "",
+        workName: "",
+        iswcs: [],
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        deezer: [],
+        tidal: [],
+        composers: [],
+        lyricists: [],
+        recorded: { begin: "2025-11-03", end: "2025-11-05" },
+        source: { recording: REC, retrieved: "2026-10-04" },
+      };
+      return state;
+    };
+
+    it("adds none without a date", () => {
+      expect(recordedOf(structuredClone(EXAMPLE), "track:0:2")).toBeUndefined();
+    });
+
+    it("gives a track the album's date, or its own", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recDate = "2025";
+      state.discs[0].tracks[1].recorded = "2025-12";
+      expect(recordedOf(state, "track:0:2")?.value).toEqual({
+        type: "time",
+        time: "+2025-12-00T00:00:00Z",
+        precision: 10,
+      });
+      expect(recordedOf(state, "track:0:3")).toEqual({
+        property: "P10135",
+        value: { type: "time", time: "+2025-00-00T00:00:00Z", precision: 9 },
+      });
+    });
+
+    it("uses the first day MusicBrainz has, cited to the recording", () => {
+      const state = withMb(structuredClone(EXAMPLE));
+      state.settings.recDate = "2025";
+      const c = recordedOf(state, "track:0:2");
+      expect(c?.value).toEqual({ type: "time", time: "+2025-11-03T00:00:00Z", precision: 11 });
+      expect(c?.references?.[0]).toContainEqual({
+        property: "P4404",
+        value: { type: "string", value: REC },
+      });
+      state.settings.mbDetails = false;
+      expect(recordedOf(state, "track:0:2")?.value).toMatchObject({ precision: 9 });
+    });
+
+    it("adds it to an existing track only if it has none", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recDate = "2025";
+      state.discs[0].track[2] = "Q123";
+      const where = `track 1.2 “${state.discs[0].tracks[1].title}”`;
+      expect(recordedOf(state, where)).toMatchObject({ property: "P10135", ifMissing: true });
+    });
+
+    it("checks the dates typed in", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recDate = "Nov 2025";
+      state.discs[0].tracks[1].recorded = "2025-13";
+      const plan = buildPlan(state);
+      expect(plan.fieldErrs.recDate).toBe("Use YYYY, YYYY-MM or YYYY-MM-DD.");
+      expect(plan.rowErrs["0:2"].recorded).toBe("13 isn't a month (01–12).");
+      expect(plan.blockers).toContain("settings");
+    });
+
+    it("doesn't check a date an existing track won't get", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].recorded = "2025-13";
+      state.discs[0].track[2] = "Q123";
+      state.settings.extendExisting = false;
+      expect(buildPlan(state).rowErrs["0:2"]?.recorded).toBeUndefined();
+      state.settings.extendExisting = true;
+      expect(buildPlan(state).rowErrs["0:2"].recorded).toBe("13 isn't a month (01–12).");
+    });
+  });
+
   describe("identifiers from a MusicBrainz import", () => {
     const ids = {
       recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
