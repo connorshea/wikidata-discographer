@@ -1115,9 +1115,11 @@ function RecTypes({
     const same = next.length === fallback.length && next.every((x) => fallback.includes(x));
     onChange(same ? null : next);
   };
+  // With no album default there's nothing for the track's own types to override.
+  const overriding = !!track.recTypes && settings.recTypes.length > 0;
   const note = linkedTrack
     ? "Added to the existing track only if it has none."
-    : track.recTypes
+    : overriding
       ? "Overriding the album default."
       : null;
   return (
@@ -1141,7 +1143,7 @@ function RecTypes({
       {note && (
         <span className="sub">
           {note}
-          {track.recTypes && (
+          {overriding && (
             <>
               {" "}
               <button type="button" className="link" onClick={() => onChange(null)}>
