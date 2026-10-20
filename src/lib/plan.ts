@@ -139,6 +139,11 @@ export interface MbRowIds {
    */
   attributes?: MbAttribute[];
   /**
+   * The work's languages, as P407 values, of those the form lists. Left out when
+   * MusicBrainz has none, or one the form doesn't list.
+   */
+  languages?: string[];
+  /**
    * The recording, work and day the import came from, for the references on the
    * duration, identifiers and writers. Kept even when an item already has the recording
    * or work ID. `work` is left out when the track has no work.
@@ -169,6 +174,12 @@ export interface Track {
   mb: MbRowIds | null;
   /** Its P31, one of `TRACK_TYPES`, when it's not the one `trackTypeOf` gives it. */
   type?: string;
+  /**
+   * Its composition's P407, when it's not the one `trackLangOf` gives it. Empty for none.
+   * `langCustom` is set while it's a QID typed in, which may not be valid yet.
+   */
+  lang?: string;
+  langCustom?: boolean;
 }
 
 export interface Disc {
@@ -242,7 +253,9 @@ export type Op =
     };
 
 /** What's wrong with a row, by the cell it's fixed in. */
-export type RowErrs = Partial<Record<"title" | "artists" | "length" | "comp" | "track", string>>;
+export type RowErrs = Partial<
+  Record<"title" | "artists" | "length" | "comp" | "track" | "lang", string>
+>;
 
 export type MsgKind = "err" | "warn" | "ok";
 export type Msg = [MsgKind, string];
@@ -346,6 +359,30 @@ export const LANGS = [
 ] as const;
 export const NO_LINGUISTIC_CONTENT = "Q22282939";
 const KNOWN_LANGS = new Set<string>([...LANGS.map(([q]) => q), NO_LINGUISTIC_CONTENT]);
+
+/** Where a track's language comes from, when it isn't its own. */
+export type LangSource = "album" | "mb" | "type";
+
+/**
+ * A track's composition's P407 values: its own, or else the work's on MusicBrainz, or else
+ * no linguistic content for a track without lyrics on an album with lyrics, or else the album's.
+ * Values that aren't QIDs are left out.
+ */
+export function trackLangOf(
+  S: Settings,
+  t: Pick<Track, "type" | "mb" | "lang">,
+): { qids: string[]; from: LangSource | null } {
+  const valid = (qs: string[]) => qs.map((q) => q.trim()).filter((q) => QID.test(q));
+  if (t.lang !== undefined) return { qids: valid([t.lang]), from: null };
+  if (S.mbDetails && t.mb?.languages?.length) return { qids: valid(t.mb.languages), from: "mb" };
+  if (trackTypeOf(S, t).qid === WITHOUT_LYRICS && S.trackType !== WITHOUT_LYRICS)
+    return { qids: [NO_LINGUISTIC_CONTENT], from: "type" };
+  return { qids: valid([S.p407]), from: "album" };
+}
+
+/** Whether a track's own language is a QID typed in, rather than one the form lists. */
+export const isCustomTrackLang = (t: Pick<Track, "lang" | "langCustom">) =>
+  !!t.langCustom || (!!t.lang?.trim() && !KNOWN_LANGS.has(t.lang.trim()));
 
 export const LABEL_LANGS = [
   ["ar", "Arabic"],
@@ -859,6 +896,12 @@ export function buildPlan(state: State): Plan {
       if (r.length !== undefined && !parseLength(r.length).ok) errs.length = "Use m:ss";
       if (ec && !QID.test(ec)) errs.comp = `"${ec}" isn't a QID.`;
       if (et && !QID.test(et)) errs.track = `"${et}" isn't a QID.`;
+      // An existing composition keeps its language, so what's typed for it doesn't matter.
+      const ownLang = r.lang?.trim() ?? "";
+      if (isCustomTrackLang(r) && !ec) {
+        if (!ownLang) errs.lang = "Enter a QID, or choose another language.";
+        else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
+      }
       if (Object.keys(errs).length) rowErrs[`${di}:${r.n}`] = errs;
       let single: PlanItem["single"] = null;
       const sg = d.single[r.n];
@@ -1040,6 +1083,13 @@ export function buildPlan(state: State): Plan {
       ...mb.tidal.map((v) => cited("P4578", v)),
     ];
   };
+  // A language from MusicBrainz is cited to the work, as the writers are.
+  const langClaims = (it: PlanItem): Claim[] => {
+    const { qids, from } = trackLangOf(S, it.r);
+    const src = it.r.mb?.source;
+    const cite = from === "mb" && src?.work ? statedInMb("P435", src.work, src.retrieved) : {};
+    return qids.map((q) => ({ ...claim("P407", item(q)), ...cite }));
+  };
   // Cited to the work, which is what MusicBrainz states them on.
   const writerClaims = (it: PlanItem): Claim[] => {
     const src = it.r.mb?.source;
@@ -1124,7 +1174,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...writerClaims(it),
-        ...workLang,
+        ...langClaims(it),
         ...work,
         ...(it.r.mb?.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) })) ?? []),
       ],

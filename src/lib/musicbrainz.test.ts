@@ -260,6 +260,19 @@ describe("releaseToForm", () => {
     expect(releaseToForm(r, NONE).discs[0].tracks[0].mb?.attributes).toEqual(["medley"]);
   });
 
+  it("keeps the work's languages when the form lists them all", () => {
+    const r = release();
+    const work = (i: number) =>
+      r.media[0].tracks![i].recording.relations!.find((x) => x.work)!.work!;
+    work(0).languages = ["spa", "eng"];
+    work(1).languages = ["zxx"];
+    work(2).languages = ["eng", "fin"];
+    const [a, b, c] = releaseToForm(r, NONE).discs[0].tracks;
+    expect(a.mb?.languages).toEqual(["Q1321", "Q1860"]);
+    expect(b.mb?.languages).toEqual(["Q22282939"]);
+    expect(c.mb).not.toHaveProperty("languages");
+  });
+
   describe("composers and lyricists", () => {
     const BERGER = "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5";
     const KAPARI = "0d32b53d-6d72-4eea-9009-eca2cf7c11a8";

@@ -11,6 +11,9 @@ import {
 import {
   albumArtists,
   isCustomPart,
+  isCustomTrackLang,
+  LANGS,
+  NO_LINGUISTIC_CONTENT,
   normalizeDate,
   normalizeQid,
   PARTS,
@@ -18,6 +21,7 @@ import {
   partLabel,
   QID,
   TRACK_TYPES,
+  trackLangOf,
   trackTypeOf,
   WITHOUT_LYRICS,
   type Disc,
@@ -444,6 +448,7 @@ function DiscBlock({
               title ? errs.artists : undefined,
               errs.comp,
               errs.track,
+              errs.lang,
               single ? singleIssue(r.n) : undefined,
             ].filter((e): e is string => !!e);
             // A row from MusicBrainz can't be typed back in as easily.
@@ -552,6 +557,22 @@ function DiscBlock({
                           })
                         }
                       />
+                      <TrackLang
+                        n={r.n}
+                        track={t}
+                        settings={state.settings}
+                        linkedComp={linkedTo("comp", r.n)}
+                        error={errs.lang}
+                        onChange={(lang, custom) =>
+                          setDisc((disc) => {
+                            const row = disc.tracks[i];
+                            if (lang === undefined) delete row.lang;
+                            else row.lang = lang;
+                            if (custom) row.langCustom = true;
+                            else delete row.langCustom;
+                          })
+                        }
+                      />
                       <LinkFields
                         di={di}
                         n={r.n}
@@ -633,6 +654,7 @@ function DiscBlock({
                             </span>
                           )),
                         !linkedTo("track", r.n) && typeTag(t, state.settings),
+                        !linkedTo("comp", r.n) && langTag(t, state.settings),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -902,6 +924,121 @@ function TrackType({
         </span>
       )}
     </div>
+  );
+}
+
+/** A language's name, e.g. "English" or "no linguistic content", or its QID. */
+const langName = (qid: string) =>
+  qid === NO_LINGUISTIC_CONTENT
+    ? "no linguistic content"
+    : (LANGS.find(([q]) => q === qid)?.[1] ?? qid);
+const langNames = (qids: string[]) =>
+  qids.length ? capitalized(qids.map(langName).join(" and ")) : "None";
+
+const LANG_SOURCES = {
+  album: "default for album",
+  mb: "from MusicBrainz",
+  type: "as it's without lyrics",
+} as const;
+
+/**
+ * The language of a track's composition, which it takes from the work on MusicBrainz or
+ * the album unless it has its own. An existing composition keeps the one it has.
+ */
+function TrackLang({
+  n,
+  track,
+  settings,
+  linkedComp,
+  error,
+  onChange,
+}: {
+  n: number;
+  track: Track;
+  settings: Settings;
+  linkedComp: boolean;
+  error: string | undefined;
+  onChange: (lang: string | undefined, custom: boolean) => void;
+}) {
+  const id = useId();
+  const fallback = trackLangOf(settings, { ...track, lang: undefined });
+  const value =
+    track.lang === undefined
+      ? ""
+      : isCustomTrackLang(track)
+        ? "other"
+        : track.lang.trim() || "none";
+  const note = linkedComp
+    ? "Not used, as the composition is an existing one."
+    : value === "" && fallback.from === "mb"
+      ? "From the work's language on MusicBrainz"
+      : value === "" && fallback.from === "type"
+        ? "A track without lyrics gets no linguistic content."
+        : "";
+  return (
+    <div className="f">
+      <label htmlFor={id}>Language</label>
+      <select
+        id={id}
+        data-col="lang"
+        aria-label={`Track ${n} language`}
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "") onChange(undefined, false);
+          else if (v === "other") onChange("", true);
+          else onChange(v === "none" ? "" : v, false);
+        }}
+      >
+        <option value="">{`${langNames(fallback.qids)} (${LANG_SOURCES[fallback.from ?? "album"]})`}</option>
+        <option value="none">None</option>
+        <optgroup label="Languages">
+          {LANGS.map(([q, l]) => (
+            <option key={q} value={q}>
+              {l}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Instrumental">
+          <option value={NO_LINGUISTIC_CONTENT}>No linguistic content</option>
+        </optgroup>
+        <option value="other">Other QID…</option>
+      </select>
+      {value === "other" && (
+        <QidInput
+          className="mono"
+          placeholder="Q…"
+          aria-label={`Track ${n} language QID`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={`${id}-err`}
+          value={track.lang ?? ""}
+          onChange={(v) => onChange(v, true)}
+        />
+      )}
+      {note && (
+        <span className="sub with-badge">
+          {fallback.from === "mb" && !linkedComp && <span className="mb-badge">MB</span>}
+          {note}
+        </span>
+      )}
+      <FieldErr id={id} msg={error} />
+    </div>
+  );
+}
+
+/**
+ * A closed card's tag for a track whose language isn't the album's, or null. One that's
+ * only because it's without lyrics has its type's tag already.
+ */
+function langTag(track: Track, settings: Settings) {
+  const { qids, from } = trackLangOf(settings, track);
+  const album = trackLangOf(settings, { mb: null }).qids;
+  if (from === "type" || qids.join() === album.join()) return null;
+  return (
+    <span key="lang" className="fact-tag with-badge">
+      {langNames(qids)}
+      {from === "mb" && <span className="mb-badge">MB</span>}
+    </span>
   );
 }
 

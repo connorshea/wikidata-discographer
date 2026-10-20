@@ -47,8 +47,8 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
       ],
       [
         "mbDetails",
-        "Instrumentals",
-        "Make recordings MusicBrainz marks instrumental music tracks without lyrics",
+        "Track type and language",
+        "Use each work's language, and make recordings marked instrumental music tracks without lyrics",
       ],
     ],
   ],
@@ -241,7 +241,9 @@ export default function SettingsSection({
                   onChange={(e) => set("p407", normalizeQid(e.target.value))}
                 />
               )}
-              <span className="sub">Added to a new album and compositions</span>
+              <span className="sub">
+                Added to a new album and compositions. Change it per track in Tracks
+              </span>
               <FieldErr id="p407" msg={errs.p407} />
             </div>
           </div>
