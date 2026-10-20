@@ -11,7 +11,6 @@ import {
   type MbRowIds,
   type MbWriter,
   type Settings,
-  type SingleState,
   type StartingPoint,
   type State,
   type Track,
@@ -35,7 +34,6 @@ const DEFAULT_SETTINGS: Settings = {
   compDesc: "{year} song by {artists}",
   trackDesc: "vocal track by {artists}",
   trackType: "Q55850593",
-  singleDesc: "{year} single by {artists}",
   albumDesc: "{year} {type} by {artists}",
   compPerformer: true,
   straight: true,
@@ -51,7 +49,6 @@ export const emptyDisc = (): Disc => ({
   tracks: [],
   comp: {},
   track: {},
-  single: {},
 });
 
 export const EMPTY: State = {
@@ -346,7 +343,6 @@ export function coerceState(raw: unknown): State {
     compDesc: str(s.compDesc, d.compDesc),
     trackDesc: str(s.trackDesc, d.trackDesc),
     trackType: isTrackType(s.trackType) ? s.trackType : d.trackType,
-    singleDesc: str(s.singleDesc, d.singleDesc),
     albumDesc: str(s.albumDesc, d.albumDesc),
     compPerformer: bool(s.compPerformer, d.compPerformer),
     straight: bool(s.straight, d.straight),
@@ -388,17 +384,8 @@ export function coerceState(raw: unknown): State {
       ? disc.tracks.filter(isObj).flatMap((t) => coerceTrack(t) ?? [])
       : legacyTracks(str(disc.text), s.splitArtists !== false, isObj(disc.mb) ? disc.mb : {}),
     comp: strMap(disc.comp),
+    // A form saved while tracks could have singles drops them.
     track: strMap(disc.track),
-    single: isObj(disc.single)
-      ? Object.fromEntries(
-          Object.entries(disc.single)
-            .filter((e): e is [string, Obj] => isObj(e[1]))
-            .map(([n, sg]): [string, SingleState] => [
-              n,
-              { date: str(sg.date), qid: str(sg.qid), discogs: str(sg.discogs) },
-            ]),
-        )
-      : {},
   }));
   const rest = {
     settings,

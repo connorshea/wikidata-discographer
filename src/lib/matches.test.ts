@@ -39,15 +39,10 @@ const track = (qid: string, composition: string | null, singles: string[] = []):
 const rm = (m: Partial<RowMatches>): RowMatches => ({ comp: [], track: [], single: [], ...m });
 
 describe("pickTrack", () => {
-  it("fills the track's composition, and leaves its single alone", () => {
+  it("fills the track's composition", () => {
     const disc = emptyDisc();
-    disc.single[1] = { date: "", qid: "", discogs: "" };
     pickTrack(disc, 1, track("Q10", "Q20", ["Q30"]));
-    expect([disc.track[1], disc.comp[1], disc.single[1]]).toEqual([
-      "Q10",
-      "Q20",
-      { date: "", qid: "", discogs: "" },
-    ]);
+    expect([disc.track[1], disc.comp[1]]).toEqual(["Q10", "Q20"]);
     // The track's own composition replaces another, which would be a second P2550.
     disc.comp[2] = "Q99";
     pickTrack(disc, 2, track("Q11", "Q21"));
@@ -62,7 +57,6 @@ describe("pickTrack", () => {
 describe("fillUnambiguous", () => {
   it("fills matches on this disc, and leaves ambiguous ones and singles", () => {
     const disc = emptyDisc();
-    disc.single[1] = { date: "", qid: "", discogs: "" };
     const rows = {
       // A track with its composition: the other composition candidate doesn't matter.
       "0:1": rm({ track: [track("Q10", "Q20", ["Q30"])], comp: [match("Q20"), match("Q21")] }),
@@ -75,7 +69,6 @@ describe("fillUnambiguous", () => {
     expect(fillUnambiguous(disc, 0, rows)).toBe(3);
     expect(disc.track).toEqual({ 1: "Q10" });
     expect(disc.comp).toEqual({ 1: "Q20", 2: "Q22" });
-    expect(disc.single).toEqual({ 1: { date: "", qid: "", discogs: "" } });
     expect(fillUnambiguous(disc, 0, rows)).toBe(0);
   });
 

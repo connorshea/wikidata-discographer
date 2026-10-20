@@ -22,7 +22,6 @@ describe("formatDuration", () => {
 describe("previewPlan", () => {
   const state = structuredClone(EXAMPLE);
   state.album.mode = "create";
-  state.discs[0].single["2"] = { date: "2026-05-01", qid: "", discogs: "" };
   const plan = buildPlan(state);
   const groups = previewPlan(plan, state);
   const edits = groups.flatMap((g) => g.edits);
@@ -37,7 +36,7 @@ describe("previewPlan", () => {
   });
 
   it("groups by what each edit makes or changes", () => {
-    expect(groups.map((g) => g.id)).toEqual(["album", "comp", "track", "single", "existing"]);
+    expect(groups.map((g) => g.id)).toEqual(["album", "comp", "track", "existing"]);
     const [album] = groups;
     expect(album.edits.map((e) => e.heading)).toEqual([
       "Create album “Day and Night”",
@@ -88,12 +87,6 @@ describe("previewPlan", () => {
       ["album", false, "Album tracklist", null],
     ]);
     expect(about(byGroup("track")[0])).toEqual(["track", true, "After All", { disc: 1, n: 1 }]);
-    expect(about(byGroup("single")[0])).toEqual([
-      "single",
-      true,
-      "Habits of Creatures",
-      { disc: 1, n: 2 },
-    ]);
     // The reused composition, which only gains a performer.
     const [reused] = byGroup("existing");
     expect(about(reused)).toEqual(["comp", false, "After All", { disc: 1, n: 1 }]);

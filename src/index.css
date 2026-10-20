@@ -13,9 +13,6 @@
   --trk-edge: #4553c4;
   --cmp-edge: #2e8150;
   --rg-edge: #b0397a;
-  /* A done single's pill. */
-  --rg-tint: #fbe6f1;
-  --rg-ink: #7a1f52;
   /* Neutral fills: pills, the current page in the nav, a pending step. */
   --tint: #eef0f5;
   --hover: #e9ebf2;
@@ -79,8 +76,6 @@
     --trk-edge: #8c98f2;
     --cmp-edge: #6cc48f;
     --rg-edge: #f08cc4;
-    --rg-tint: #3a1a2d;
-    --rg-ink: #f5b8da;
     --tint: #23263f;
     --hover: #292c49;
     --warn-tint: #3a2f12;
@@ -1020,9 +1015,6 @@ button.trk-title {
 .link-fields .f {
   flex: 1 1 200px;
 }
-.trk-fields .single-panel {
-  margin: 0;
-}
 .trk-foot {
   display: flex;
   justify-content: flex-end;
@@ -1679,96 +1671,6 @@ button.quiet:hover {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
   }
-}
-/* A track's single: a pill in its closed card, and its fields in the open one. */
-.single-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 9px 2px 8px;
-  border-radius: 999px;
-  background: var(--rg-tint);
-  color: var(--rg-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.single-pill i {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--rg-edge);
-}
-.single-pill a {
-  color: inherit;
-  font-family: var(--mono);
-}
-.single-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 100%;
-  margin-bottom: 8px;
-  padding: 14px 16px;
-  background: var(--panel);
-  border: 1px solid color-mix(in srgb, var(--rg-edge) 45%, var(--line));
-  border-radius: 8px;
-}
-.single-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  font-size: 13px;
-  font-weight: 650;
-}
-.single-head .sw {
-  background: var(--rg-edge);
-}
-.single-head .muted {
-  font-weight: 400;
-}
-.single-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px 14px;
-  align-items: end;
-}
-.single-fields .f {
-  font-size: 12.5px;
-}
-.single-panel input[type="text"] {
-  width: 100%;
-  min-width: 0;
-  font-family: var(--sans);
-}
-.single-panel input.qid:not(:disabled) {
-  font-family: var(--mono);
-}
-.single-panel input:disabled {
-  background: transparent;
-  border-style: dashed;
-  cursor: not-allowed;
-}
-.single-panel .single-hint,
-.single-panel .field-err {
-  margin: 0;
-  font-size: 13px;
-}
-.single-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.single-note {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  font-size: 12.5px;
-  color: var(--muted);
 }
 .warn-note {
   display: inline-flex;

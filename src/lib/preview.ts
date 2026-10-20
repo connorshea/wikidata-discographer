@@ -15,7 +15,6 @@ import {
   PARTS,
   type Plan,
   SECOND_UNIT,
-  SINGLE_CLASS,
   type Snak,
   MUSICBRAINZ,
   SONG_FORM,
@@ -54,7 +53,7 @@ const LANGUAGE_NAMES: ReadonlyMap<string, string> = new Map([
 
 /**
  * A value as shown: `qid` links it to Wikidata; `isNew` marks an item this run
- * creates, `reused` an existing composition, track or single the form links to.
+ * creates, `reused` an existing composition or track the form links to.
  */
 export interface PreviewValue {
   text: string;
@@ -79,7 +78,10 @@ export interface PreviewStatement {
   ifMissing?: true;
 }
 
-/** The kind of item an edit makes or changes, which sets its colour swatch. */
+/**
+ * The kind of item an edit makes or changes, which sets its colour swatch. Runs made
+ * while tracks could have singles made those too.
+ */
 export type PreviewKind = "album" | "comp" | "track" | "single";
 
 export interface PreviewEdit {
@@ -101,7 +103,7 @@ export interface PreviewEdit {
   statements: PreviewStatement[];
 }
 
-export type PreviewGroupId = "album" | "comp" | "track" | "single" | "existing";
+export type PreviewGroupId = "album" | "comp" | "track" | "existing";
 
 export interface PreviewGroup {
   id: PreviewGroupId;
@@ -113,7 +115,6 @@ const GROUPS: readonly (readonly [PreviewGroupId, string])[] = [
   ["album", "Album"],
   ["comp", "Compositions"],
   ["track", "Tracks"],
-  ["single", "Singles"],
   ["existing", "Existing items"],
 ];
 
@@ -152,7 +153,7 @@ export function formatDuration(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
-/** The compositions, tracks and singles the form's rows link to, by QID. */
+/** The compositions and tracks the form's rows link to, by QID. */
 function reusedQids(state: State, tracks: Plan["tracks"]): Set<string> {
   const reused = new Set<string>();
   const add = (qid: string | undefined) => {
@@ -165,7 +166,6 @@ function reusedQids(state: State, tracks: Plan["tracks"]): Set<string> {
     for (const r of rows) {
       add(disc.comp[r.n]);
       add(disc.track[r.n]);
-      add(disc.single[r.n]?.qid);
     }
   });
   return reused;
@@ -184,7 +184,6 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
   const names = new Map<string, string>([
     ...fixed,
     [NO_LINGUISTIC_CONTENT, "no linguistic content"],
-    [SINGLE_CLASS, "single"],
     [COMPOSITION_CLASS, "musical work/composition"],
     [SONG_FORM, "song"],
     [SECOND_UNIT, "second"],
@@ -202,7 +201,6 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
     for (const r of rows) {
       add(disc.comp[r.n], `composition “${r.title}”`);
       add(disc.track[r.n], `track “${r.title}”`);
-      add(disc.single[r.n]?.qid, `single “${r.title}”`);
     }
   });
   return names;
@@ -212,12 +210,12 @@ function groupOf(op: Op, albumQid: string | null): PreviewGroupId {
   if (op.op === "create") {
     if (op.kind === "album" || op.kind === "ep") return "album";
     if (op.kind === "work") return "comp";
-    if (op.kind === "track" || op.kind === "single") return op.kind;
+    if (op.kind === "track") return op.kind;
     return "existing";
   }
   if ("id" in op.target) return op.target.id === albumQid ? "album" : "existing";
   const prefix = op.target.ref.split(":")[0];
-  return prefix === "comp" || prefix === "track" || prefix === "single" ? prefix : "album";
+  return prefix === "comp" || prefix === "track" ? prefix : "album";
 }
 
 /** What an edit is about: the item's kind and title, and the track row it's for. */

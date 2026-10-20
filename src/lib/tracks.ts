@@ -1,6 +1,6 @@
 // Editing a disc's rows by hand: lengths as typed, and adding, removing and
-// moving rows. A row's track number is its key in the disc's composition,
-// track and single maps, so whatever renumbers the rows moves those along.
+// moving rows. A row's track number is its key in the disc's composition
+// and track maps, so whatever renumbers the rows moves those along.
 import type { Disc, Track } from "./plan.ts";
 
 const LENGTH = /^(?:(\d+):([0-5]\d)|(\d{1,3})):([0-5]\d)$/;
@@ -40,7 +40,7 @@ export type Renumbered = Map<number, number>;
 
 /**
  * Number the rows 1, 2, 3… in `order` (the rows as they now stand, by index),
- * moving each row's composition, track and single along with it. A map entry
+ * moving each row's composition and track along with it. A map entry
  * for a row that's gone is dropped.
  */
 function renumber(disc: Disc, order: Track[]): Renumbered {
@@ -56,7 +56,6 @@ function renumber(disc: Disc, order: Track[]): Renumbered {
   };
   disc.comp = remap(disc.comp);
   disc.track = remap(disc.track);
-  disc.single = remap(disc.single);
   disc.tracks = order.map((t, i) => ({ ...t, n: i + 1 }));
   return moved;
 }

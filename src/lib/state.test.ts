@@ -134,7 +134,7 @@ describe("coerceState", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },
       artists: { A: "Q1", B: 2 },
-      discs: [{ single: { "1": { date: "2020" }, "2": "x" } }],
+      discs: [{ single: { "1": { date: "2020" } } }],
     });
     expect(s.album).toMatchObject({
       mode: "existing",
@@ -143,17 +143,8 @@ describe("coerceState", () => {
       ids: { spotify: "" },
     });
     expect(s.artists).toEqual({ A: "Q1" });
-    expect(s.discs[0].single).toEqual({ "1": { date: "2020", qid: "", discogs: "" } });
-  });
-
-  it("gives singles saved before the Discogs field an empty one", () => {
-    const s = coerceState({
-      discs: [{ single: { "1": { date: "2020", qid: "" }, "2": { qid: "Q30", discogs: "123" } } }],
-    });
-    expect(s.discs[0].single).toEqual({
-      "1": { date: "2020", qid: "", discogs: "" },
-      "2": { date: "", qid: "Q30", discogs: "123" },
-    });
+    // Tracks don't have singles any more.
+    expect(s.discs[0]).not.toHaveProperty("single");
   });
 
   it("keeps an album's import source only when it's well-formed", () => {

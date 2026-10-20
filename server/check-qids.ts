@@ -11,9 +11,6 @@
 // album or EP classes the app knows. And it mustn't have a tracklist yet, or
 // the run would add a second one beside it.
 //
-// An existing single must be an instance of single (Q134556), or the run would
-// give a song or an album a tracklist as if it were the track's single.
-//
 // A reused track mustn't record a different composition than the one the run
 // links it to, or it would end up with two (P2550). When what it records is
 // a single, album or EP rather than a composition, the track itself needs
@@ -41,7 +38,6 @@ import {
   KIND_NAMES,
   type Op,
   QID,
-  SINGLE_CLASS,
   type State,
   type Value,
 } from "../src/lib/plan.ts";
@@ -106,7 +102,6 @@ function formSources(state: State): Map<string, string[]> {
     add(d.part, `${disc} part`);
     for (const [n, qid] of Object.entries(d.comp)) add(qid, `${disc} track ${n} composition`);
     for (const [n, qid] of Object.entries(d.track)) add(qid, `${disc} track ${n} track`);
-    for (const [n, s] of Object.entries(d.single)) add(s.qid, `${disc} track ${n} single`);
     // An existing composition keeps its language, so a track's own one isn't used.
     for (const t of d.tracks)
       if (t.p407 && !QID.test((d.comp[t.n] ?? "").trim()))
@@ -174,7 +169,6 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
   }
   const tracks = new Map<string, Entity>();
   problems.push(...(await checkTrackCompositions(ops, sources, results, tracks)));
-  problems.push(...(await checkSingleKinds(ops, sources, results)));
   if (problems.length === 0)
     problems.push(...(await checkTermConflicts(ops, state, sources, results, tracks)));
   if (problems.length > MAX_PROBLEMS)
@@ -276,41 +270,6 @@ async function checkTrackCompositions(
   return problems;
 }
 
-/**
- * Existing singles that aren't instances of single, one sentence each. They're
- * fetched 50 per request, one request at a time.
- */
-async function checkSingleKinds(
-  ops: readonly Op[],
-  sources: Map<string, string[]>,
-  results: Map<string, ItemCheck>,
-): Promise<string[]> {
-  const singles = [
-    ...new Set(
-      ops.flatMap((op) =>
-        op.op === "addClaims" &&
-        "id" in op.target &&
-        op.row?.kind === "single" &&
-        results.get(op.target.id)?.status === "ok"
-          ? [op.target.id]
-          : [],
-      ),
-    ),
-  ];
-  const problems: string[] = [];
-  for (let i = 0; i < singles.length; i += 50) {
-    const entities = await getEntities(singles.slice(i, i + 50), { retries: 1 });
-    for (const [qid, entity] of entities) {
-      if (itemValues(entity, "P31").includes(SINGLE_CLASS)) continue;
-      const where = sources.get(qid)?.join(", ") ?? "An existing single";
-      problems.push(
-        `${where}: ${qid} isn't an instance of single (${SINGLE_CLASS}). Check the QID.`,
-      );
-    }
-  }
-  return problems;
-}
-
 const RELEASE_NAMES: Partial<Record<MusicKind, string>> = {
   single: "a single",
   album: "an album",
@@ -341,7 +300,7 @@ async function releaseKinds(qids: string[]): Promise<Map<string, MusicKind>> {
 
 /** Where a new item's row is in the form, e.g. `disc 1 track 4`, from its plan key. */
 function rowOf(key: string): string | null {
-  const m = /^(?:comp|track|single):(\d+):(.+)$/.exec(key);
+  const m = /^(?:comp|track):(\d+):(.+)$/.exec(key);
   return m ? `disc ${Number(m[1]) + 1} track ${m[2]}` : null;
 }
 
@@ -353,8 +312,7 @@ function newItemName(op: Extract<Op, { op: "create" }>): string {
 /** Where to change a new item's description. */
 function descriptionSetting(op: Extract<Op, { op: "create" }>): string {
   if (op.kind === "work") return "the composition description in Item settings";
-  if (op.kind === "track" || op.kind === "single")
-    return `the ${op.kind} description in Item settings`;
+  if (op.kind === "track") return "the track description in Item settings";
   return "its description in the form";
 }
 
@@ -373,10 +331,10 @@ const labelFor = (labels: Record<string, string>, lang: string): string | undefi
  * language, as another new item or an existing item, one sentence each. A
  * missing label counts as the `mul` label, as on Wikidata. Wikidata refuses
  * to create such an item, which would stop the run partway: a composition
- * described like the existing single in its row, say.
+ * described like the existing track in its row, say.
  *
- * The existing items asked about are the reused compositions, tracks and
- * singles, the existing album, and items the local mirror has with the same
+ * The existing items asked about are the reused compositions and tracks, the
+ * existing album, and items the local mirror has with the same
  * label and description. Only those languages' labels and descriptions are
  * fetched, and items in `fetched` aren't asked about again. If the mirror
  * can't be read, only the form's items are checked.
@@ -421,7 +379,6 @@ async function checkTermConflicts(
   for (const d of state.discs) {
     for (const q of Object.values(d.comp)) reused.add(q.trim());
     for (const q of Object.values(d.track)) reused.add(q.trim());
-    for (const s of Object.values(d.single)) if (s.qid) reused.add(s.qid.trim());
   }
   const qids = [...reused].filter((q) => results.get(q)?.status === "ok");
   const pairs = [...fresh.keys()].map((k) => {

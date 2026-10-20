@@ -18,7 +18,7 @@ import { SETTING_FLAGS, settingsPills } from "../lib/progress.ts";
 import { FieldErr, Lock } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
-type TextKey = "compDesc" | "trackDesc" | "singleDesc";
+type TextKey = "compDesc" | "trackDesc";
 type FlagKey = (typeof SETTING_FLAGS)[number];
 
 /** The options, grouped, each with a title and a line on what it does. */
@@ -78,7 +78,7 @@ export default function SettingsSection({
   const workLang = isCustomLang(S) ? "other" : S.p407.trim();
   const previews = descPreviews(state, plan);
 
-  const template = (k: TextKey, kind: string, edge: string, preview: string | null, note = "") => (
+  const template = (k: TextKey, kind: string, edge: string, preview: string | null) => (
     <div className="desc-row">
       <span className="desc-kind">
         <i className="sw" style={{ background: `var(--${edge})` }} />
@@ -102,8 +102,7 @@ export default function SettingsSection({
       </div>
       <span className="desc-preview" id={`${k}-preview`}>
         <span className="visually-hidden">Preview: </span>
-        {preview ?? (note ? "" : "Fills in from the first track's artists")}
-        {note && <span className="sub">{note}</span>}
+        {preview ?? "Fills in from the first track's artists"}
       </span>
     </div>
   );
@@ -274,13 +273,6 @@ export default function SettingsSection({
             </p>
             {template("compDesc", "Compositions", "cmp-edge", previews?.comp ?? null)}
             {template("trackDesc", "Tracks", "trk-edge", previews?.track ?? null)}
-            {template(
-              "singleDesc",
-              "Singles",
-              "rg-edge",
-              previews?.single ?? null,
-              "Year comes from each single's release date",
-            )}
           </div>
 
           <label className="f track-type">
