@@ -227,15 +227,15 @@ export default function SettingsSection({
                 }
               >
                 <option value="">None</option>
-                <optgroup label="Languages">
-                  {LANGS.map(([q, l]) => (
-                    <option key={q} value={q}>{`${l} (${q})`}</option>
-                  ))}
-                </optgroup>
                 <optgroup label="Instrumental">
                   <option
                     value={NO_LINGUISTIC_CONTENT}
                   >{`no linguistic content (${NO_LINGUISTIC_CONTENT})`}</option>
+                </optgroup>
+                <optgroup label="Languages">
+                  {LANGS.map(([q, l]) => (
+                    <option key={q} value={q}>{`${l} (${q})`}</option>
+                  ))}
                 </optgroup>
                 <option value="other">Other QID…</option>
               </select>
