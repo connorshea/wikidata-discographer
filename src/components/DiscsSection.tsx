@@ -983,6 +983,7 @@ function TrackLang({
         id={id}
         data-col="lang"
         aria-label={`Track ${n} language`}
+        disabled={linkedComp}
         value={value}
         onChange={(e) => {
           const v = e.target.value;
