@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { inArray } from "drizzle-orm";
 import { db, pool } from "./db.ts";
 import { propertyNumber } from "./ids.ts";
-import { musicItems, musicLinks } from "../db/schema.ts";
+import { musicExternalIds, musicItems, musicLinks } from "../db/schema.ts";
 import { artistRoutes } from "./artists.ts";
 import type { ArtistResponse } from "../src/lib/api-types.ts";
 
@@ -36,10 +36,12 @@ const STANDALONE = BASE + 21;
 const QIDS = [ARTIST, OTHER_ARTIST, ALBUM, OTHERS_ALBUM, SINGLE, STANDALONE];
 
 const P175 = propertyNumber("P175");
+const P434 = propertyNumber("P434");
 const P658 = propertyNumber("P658");
 const P13602 = propertyNumber("P13602");
 
 async function clear() {
+  await db.delete(musicExternalIds).where(inArray(musicExternalIds.qid, QIDS));
   await db.delete(musicLinks).where(inArray(musicLinks.qid, QIDS));
   await db.delete(musicItems).where(inArray(musicItems.qid, QIDS));
 }
@@ -116,5 +118,26 @@ describe.skipIf(!process.env.DB_TESTS)("GET /api/artists/:qid", () => {
     expect(res.albums.map((a) => a.label)).toEqual(["Ocean Eyes"]);
     expect(res.singles).toEqual([]);
     expect(res.singlesTruncated).toBe(false);
+  });
+
+  describe("the artist's MusicBrainz IDs (P434)", () => {
+    async function withIds(values: string[]): Promise<string[]> {
+      await db.insert(musicItems).values([item(ARTIST, "artist", "Owl City")]);
+      if (values.length)
+        await db
+          .insert(musicExternalIds)
+          .values(values.map((value) => ({ qid: ARTIST, property: P434, value })));
+      return (await get(ARTIST)).artist.musicBrainzIds.sort();
+    }
+
+    it("has the one it has", async () => {
+      expect(await withIds(["mb-owl-city"])).toEqual(["mb-owl-city"]);
+    });
+    it("has none for an artist without one", async () => {
+      expect(await withIds([])).toEqual([]);
+    });
+    it("has each of several", async () => {
+      expect(await withIds(["mb-1", "mb-2"])).toEqual(["mb-1", "mb-2"]);
+    });
   });
 });

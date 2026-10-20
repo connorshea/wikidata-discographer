@@ -247,7 +247,13 @@ export interface ArtistSingle {
 
 /** GET /api/artists/:qid: the artist and its albums, EPs and singles, oldest first. */
 export interface ArtistResponse {
-  artist: { qid: string; label: string | null; description: string | null };
+  artist: {
+    qid: string;
+    label: string | null;
+    description: string | null;
+    /** Its MusicBrainz artist IDs (P434), as of the mirror. */
+    musicBrainzIds: string[];
+  };
   albums: ArtistAlbum[];
   /** Whether there were more albums than the server sends. */
   truncated: boolean;

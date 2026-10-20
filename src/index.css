@@ -3854,12 +3854,18 @@ fieldset.lock {
   gap: 12px 18px;
   margin-bottom: 16px;
 }
-.artist-head > a {
+.artist-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+.artist-links > a {
   font-size: 14px;
   font-weight: 600;
   min-height: 36px;
   display: flex;
   align-items: center;
+  gap: 6px;
 }
 .artist-name {
   flex: 1 1 360px;

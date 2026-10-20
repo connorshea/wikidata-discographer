@@ -27,6 +27,7 @@ import type {
 export const artistRoutes = new Hono<AuthEnv>();
 
 const P175 = propertyNumber("P175");
+const P434 = propertyNumber("P434");
 const P436 = propertyNumber("P436");
 const P658 = propertyNumber("P658");
 const P13602 = propertyNumber("P13602");
@@ -91,7 +92,9 @@ export function rankArtists(
  * name them as performer, so one of those counts if something in the mirror
  * does. Null if it isn't an artist, or doesn't exist.
  */
-async function findArtist(qid: string): Promise<ArtistResponse["artist"] | null> {
+async function findArtist(
+  qid: string,
+): Promise<Omit<ArtistResponse["artist"], "musicBrainzIds"> | null> {
   const [row] = await db
     .select({ kind: musicItems.kind, label: musicItems.label, description: musicItems.description })
     .from(musicItems)
@@ -303,9 +306,14 @@ artistRoutes.get("/:qid", async (c) => {
   }
   if (!artist) return c.json({ error: `${qid} isn't an artist on Wikidata` }, 404);
 
-  const [rows, singleRows] = await Promise.all([
+  const [rows, singleRows, mbids] = await Promise.all([
     performedBy(qidNumber(qid), ALBUM_KINDS, MAX_ARTIST_ALBUMS),
     performedBy(qidNumber(qid), ["single"], MAX_ARTIST_SINGLES),
+    // None for an artist that isn't in the mirror, which findArtist read from Wikidata.
+    db
+      .select({ value: musicExternalIds.value })
+      .from(musicExternalIds)
+      .where(and(eq(musicExternalIds.qid, qidNumber(qid)), eq(musicExternalIds.property, P434))),
   ]);
   const truncated = rows.length > MAX_ARTIST_ALBUMS;
   const albums = rows.slice(0, MAX_ARTIST_ALBUMS);
@@ -359,7 +367,7 @@ artistRoutes.get("/:qid", async (c) => {
 
   c.header("Cache-Control", "no-store");
   return c.json({
-    artist,
+    artist: { ...artist, musicBrainzIds: mbids.map((r) => r.value) },
     albums: artistAlbums(
       albums,
       {
