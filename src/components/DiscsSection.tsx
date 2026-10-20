@@ -632,7 +632,7 @@ function DiscBlock({
                               <WikiLink base={wikiBaseUrl} qid={d[k][r.n].trim()} />
                             </span>
                           )),
-                        typeTag(t, state.settings),
+                        !linkedTo("track", r.n) && typeTag(t, state.settings),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -882,6 +882,7 @@ function TrackType({
         id={id}
         data-col="type"
         aria-label={`Track ${n} type`}
+        disabled={linkedTrack}
         value={track.type ?? ""}
         onChange={(e) => onChange(e.target.value)}
       >

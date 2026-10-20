@@ -406,16 +406,24 @@ function theWork(t: MbTrack) {
 
 /** The recording's performance relation to its work, when it has just one. */
 function performance(t: MbTrack) {
-  const works = (t.recording.relations ?? []).filter(
-    (r) => r["target-type"] === "work" && r.type === "performance" && r.work,
-  );
+  const works = performances(t);
   return works.length === 1 ? works[0] : undefined;
 }
 
-/** What a track's performance relation says about the recording, of the attributes the form reads. */
+/** The recording's performance relations to works. */
+function performances(t: MbTrack) {
+  return (t.recording.relations ?? []).filter(
+    (r) => r["target-type"] === "work" && r.type === "performance" && r.work,
+  );
+}
+
+/**
+ * What a track's performance relations say about the recording, of the attributes the form
+ * reads. A medley performs several works, so an attribute counts when every one of them has it.
+ */
 function attributesOf(t: MbTrack): MbAttribute[] {
-  const attrs = performance(t)?.attributes ?? [];
-  return MB_ATTRIBUTES.filter((a) => attrs.includes(a));
+  const rels = performances(t);
+  return MB_ATTRIBUTES.filter((a) => rels.length && rels.every((r) => r.attributes?.includes(a)));
 }
 
 /** The ISWCs MusicBrainz has for a track's composition, as `workOf` picks it. */

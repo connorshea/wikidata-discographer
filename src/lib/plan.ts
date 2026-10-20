@@ -305,14 +305,7 @@ export const TRACK_TYPES = [
 export const WITHOUT_LYRICS = "Q55850643";
 
 /** The attributes of a performance relation on MusicBrainz that the form reads. */
-export const MB_ATTRIBUTES = [
-  "live",
-  "cover",
-  "instrumental",
-  "medley",
-  "demo",
-  "partial",
-] as const;
+export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley", "demo"] as const;
 export type MbAttribute = (typeof MB_ATTRIBUTES)[number];
 
 /**
@@ -1165,13 +1158,14 @@ export function buildPlan(state: State): Plan {
         });
       continue;
     }
+    const type = trackTypeOf(S, it.r);
     ops.push({
       op: "create",
       key: trackKey(it),
       kind: "track",
       ...labelled(it.r.title, fillDesc(S.trackDesc, year, it.r.artists)),
       claims: [
-        claim("P31", item(trackTypeOf(S, it.r).qid)),
+        { ...claim("P31", item(type.qid)), ...(type.fromMb ? mbRef(it.r.mb) : {}) },
         title(it.r.title),
         ...perf,
         claim("P2550", compOf(it)),

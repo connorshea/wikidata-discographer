@@ -247,6 +247,19 @@ describe("releaseToForm", () => {
     expect(second.mb).not.toHaveProperty("attributes");
   });
 
+  it("keeps only what every performance of a medley says", () => {
+    const r = release();
+    const rels = r.media[0].tracks![0].recording.relations!;
+    const perf = rels.find((x) => x.work)!;
+    perf.attributes = ["instrumental", "medley"];
+    rels.push({
+      ...perf,
+      work: { id: "2bf1a377-686f-426a-ab5a-309466d201e9", title: "Another" },
+      attributes: ["medley"],
+    });
+    expect(releaseToForm(r, NONE).discs[0].tracks[0].mb?.attributes).toEqual(["medley"]);
+  });
+
   describe("composers and lyricists", () => {
     const BERGER = "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5";
     const KAPARI = "0d32b53d-6d72-4eea-9009-eca2cf7c11a8";

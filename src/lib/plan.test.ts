@@ -160,6 +160,21 @@ describe("buildPlan", () => {
       expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
     });
 
+    it("cites MusicBrainz for the type only when it gave it", () => {
+      const state = instrumental(structuredClone(EXAMPLE));
+      state.discs[0].tracks[1].mb!.source = {
+        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+        retrieved: "2026-10-04",
+      };
+      const p31 = () =>
+        (find(buildPlan(state).ops, "track:0:2") as { claims: Claim[] }).claims.find(
+          (c) => c.property === "P31",
+        );
+      expect(p31()?.references).toHaveLength(1);
+      state.discs[0].tracks[1].type = "Q55850643";
+      expect(p31()).not.toHaveProperty("references");
+    });
+
     it("leaves the album's type with the MusicBrainz details off", () => {
       const state = instrumental(structuredClone(EXAMPLE));
       state.settings.mbDetails = false;
