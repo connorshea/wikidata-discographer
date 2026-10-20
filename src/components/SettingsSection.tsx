@@ -277,7 +277,7 @@ export default function SettingsSection({
                 <option key={q} value={q}>{`${l} (${q})`}</option>
               ))}
             </select>
-            <span className="sub">The default for every track. Change it per track in Tracks</span>
+            <span className="sub">The default for every track.</span>
           </label>
 
           <div className="f" role="group" aria-labelledby="recTypes-label">
@@ -303,8 +303,7 @@ export default function SettingsSection({
               ))}
             </div>
             <span className="sub">
-              The default for every track. A MusicBrainz import starts a live album with live
-              recording and a studio album with studio recording. Change it per track in Tracks
+              The default for every track. A MusicBrainz import will sometimes fill this in for you.
             </span>
           </div>
 
