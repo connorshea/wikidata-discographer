@@ -162,6 +162,9 @@ export interface MbRelation {
   };
   /** What the relation says about it, e.g. "live" or "cover" on a recording's performance of a work. */
   attributes?: string[];
+  /** When it began and ended, each YYYY, YYYY-MM or YYYY-MM-DD, or null. */
+  begin?: string | null;
+  end?: string | null;
 }
 
 export interface MbTrack {
@@ -436,6 +439,24 @@ function languagesOf(t: MbTrack): string[] {
 }
 
 /**
+ * When a track's recording was made, from its performance relations, or undefined without
+ * a date the form can read. A recording made over several sessions, or a medley of works
+ * recorded apart, has an end too: the last day of any of them.
+ */
+function recordedOf(t: MbTrack): MbRowIds["recorded"] {
+  const dates = (k: "begin" | "end") =>
+    performances(t)
+      .map((r) => r[k] ?? "")
+      .filter((d) => d && parseDate(d).ok)
+      .sort();
+  const begins = dates("begin");
+  const begin = begins[0];
+  if (!begin) return undefined;
+  const last = [...begins, ...dates("end")].sort().at(-1)!;
+  return { begin, end: last !== begin ? last : "" };
+}
+
+/**
  * What a track's performance relations say about the recording, of the attributes the form
  * reads. A medley performs several works, so an attribute counts when every one of them has it.
  */
@@ -562,6 +583,7 @@ export function releaseToForm(
     deezer: 0,
     tidal: 0,
     durationRefs: 0,
+    recordedRefs: 0,
   };
   const toExtend = { recordings: 0, works: 0 };
   const discs = media.map((m, i): Disc => {
@@ -576,6 +598,7 @@ export function releaseToForm(
       const writers = writersOf(t);
       const attributes = attributesOf(t);
       const languages = languagesOf(t);
+      const recorded = recordedOf(t);
       addWriters([...writers.composers, ...writers.lyricists]);
       if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
         misplaced.set(work, t.title.trim());
@@ -605,6 +628,7 @@ export function releaseToForm(
         ...writers,
         ...(attributes.length ? { attributes } : {}),
         ...(languages.length ? { languages } : {}),
+        ...(recorded ? { recorded } : {}),
         source: { recording: t.recording.id, ...(work ? { work } : {}), retrieved },
       };
       if (disc.track[t.position]) toExtend.recordings += ids.recording ? 1 : 0;
@@ -619,6 +643,7 @@ export function releaseToForm(
         for (const key of Object.keys(several) as TrackLinkKey[])
           if (trackLinks(t, key).length > 1) several[key].push(t.title.trim());
         toAdd.durationRefs += t.length === null ? 0 : 1;
+        toAdd.recordedRefs += recorded ? 1 : 0;
       }
       if (!disc.comp[t.position]) {
         toAdd.works += ids.work ? 1 : 0;
@@ -806,11 +831,13 @@ function references(n: {
   deezer: number;
   tidal: number;
   durationRefs: number;
+  recordedRefs: number;
 }): string[] {
   return [
     n.date && "publication date",
     n.albumIds && "album IDs",
     n.durationRefs && "durations",
+    n.recordedRefs && "recording dates",
     n.isrcs && "ISRCs",
     n.iswcs && "ISWCs",
     n.spotify + n.appleMusic + n.deezer + n.tidal && "track IDs",
@@ -842,11 +869,18 @@ export function reportCounts(r: MbReport) {
   };
 }
 
-/** The form filled from `form`, keeping the settings other than the date and language. */
+/** The form filled from `form`, keeping the settings other than the album's dates and language. */
 export function applyMbForm(state: State, form: MbForm): State {
   return coerceState({
     start: "mb",
-    settings: { ...state.settings, date: form.date, p407: form.p407, p407Custom: false },
+    settings: {
+      ...state.settings,
+      date: form.date,
+      p407: form.p407,
+      p407Custom: false,
+      // The last album's recording date isn't this one's.
+      recDate: "",
+    },
     album: form.album,
     artists: form.artists,
     discs: form.discs,

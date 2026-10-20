@@ -2,6 +2,7 @@
 // state from an older version, or a request body) into a well-formed `State`.
 import {
   MB_ATTRIBUTES,
+  parseDate,
   TRACK_TYPES,
   type AlbumMb,
   type Disc,
@@ -40,6 +41,7 @@ const DEFAULT_SETTINGS: Settings = {
   extendExisting: true,
   mbWriters: true,
   mbDetails: true,
+  recDate: "",
 };
 
 export const emptyDisc = (): Disc => ({
@@ -105,11 +107,22 @@ function writers(v: unknown): MbWriter[] {
   return [...out.values()];
 }
 
+/** A date MusicBrainz writes YYYY, YYYY-MM or YYYY-MM-DD, as the form reads one. */
+const mbDate = (v: unknown) => (typeof v === "string" && v && parseDate(v).ok ? v : "");
+
+function coerceRecorded(v: unknown): MbRowIds["recorded"] {
+  if (!isObj(v)) return undefined;
+  const begin = mbDate(v.begin);
+  const end = mbDate(v.end);
+  return begin ? { begin, end: end !== begin ? end : "" } : undefined;
+}
+
 const isTrackType = (v: unknown): v is string => TRACK_TYPES.some(([q]) => q === v);
 
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
   const languages = strList(ids.languages, /^Q\d+$/);
+  const recorded = coerceRecorded(ids.recorded);
   const attributes = MB_ATTRIBUTES.filter(
     (a) => Array.isArray(ids.attributes) && ids.attributes.includes(a),
   );
@@ -128,6 +141,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     lyricists: writers(ids.lyricists),
     ...(attributes.length ? { attributes } : {}),
     ...(languages.length ? { languages } : {}),
+    ...(recorded ? { recorded } : {}),
     // Forms saved before identifiers had references kept the source with the length.
     source: coerceSource(ids.source ?? ids.length),
   };
@@ -153,6 +167,7 @@ function coerceTrack(t: Obj): Track | null {
     ...(isTrackType(t.type) ? { type: t.type } : {}),
     ...(typeof t.p407 === "string" ? { p407: t.p407 } : {}),
     ...(t.p407Custom === true ? { p407Custom: true } : {}),
+    ...(typeof t.recorded === "string" && t.recorded.trim() ? { recorded: t.recorded } : {}),
   };
 }
 
@@ -332,6 +347,7 @@ export function coerceState(raw: unknown): State {
     extendExisting: bool(s.extendExisting, d.extendExisting),
     mbWriters: bool(s.mbWriters, d.mbWriters),
     mbDetails: bool(s.mbDetails, d.mbDetails),
+    recDate: str(s.recDate),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};

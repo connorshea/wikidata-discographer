@@ -81,6 +81,35 @@ describe("coerceState", () => {
     expect(none).not.toHaveProperty("p407Custom");
   });
 
+  it("keeps a track's recording dates when they're dates", () => {
+    const [kept, dropped, impossible, sameDay] = coerceState({
+      discs: [
+        {
+          tracks: [
+            {
+              n: 1,
+              title: "A",
+              recorded: "2025-13",
+              mb: { recorded: { begin: "2025-11", end: 3 } },
+            },
+            { n: 2, title: "B", recorded: " ", mb: { recorded: { begin: "Nov 2025" } } },
+            { n: 3, title: "C", mb: { recorded: { begin: "2025-02-31" } } },
+            { n: 4, title: "D", mb: { recorded: { begin: "2025-11", end: "2025-11" } } },
+          ],
+        },
+      ],
+    }).discs[0].tracks;
+    // What's typed is kept, for the form to say what's wrong with it.
+    expect(kept).toMatchObject({
+      recorded: "2025-13",
+      mb: { recorded: { begin: "2025-11", end: "" } },
+    });
+    expect(dropped).not.toHaveProperty("recorded");
+    expect(dropped.mb).not.toHaveProperty("recorded");
+    expect(impossible.mb).not.toHaveProperty("recorded");
+    expect(sameDay.mb?.recorded).toEqual({ begin: "2025-11", end: "" });
+  });
+
   it("drops mistyped values", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },

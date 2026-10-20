@@ -47,8 +47,8 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
       ],
       [
         "mbDetails",
-        "Track type and language",
-        "Use each work's language, and make recordings marked instrumental music tracks without lyrics",
+        "Track type, language and recording date",
+        "Use each work's language and each recording's date, and make recordings marked instrumental music tracks without lyrics",
       ],
     ],
   ],
@@ -204,6 +204,23 @@ export default function SettingsSection({
                 </span>
               )}
               <FieldErr id="date" msg={errs.date} />
+            </label>
+            <label className="f">
+              Recording date
+              <input
+                type="text"
+                className="mono"
+                spellCheck={false}
+                placeholder="YYYY, YYYY-MM or YYYY-MM-DD"
+                value={S.recDate}
+                aria-invalid={errs.recDate ? true : undefined}
+                onChange={(e) => set("recDate", e.target.value)}
+                onBlur={(e) => set("recDate", normalizeDate(e.target.value))}
+              />
+              <span className="sub">
+                Optional. Used for tracks with no date of their own or from MusicBrainz
+              </span>
+              <FieldErr id="recDate" msg={errs.recDate} />
             </label>
             <div className="f">
               <label htmlFor="p407Sel">Language of work</label>

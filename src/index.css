@@ -977,6 +977,14 @@ button.trk-title {
 .trk-fields select {
   font-weight: 400;
 }
+/* A long note wraps beside its MB badge, not under it. */
+.trk-fields .f span.sub.with-badge {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.trk-fields .sub .mb-badge {
+  flex: none;
+}
 .trk-fields .wide,
 .trk-foot {
   grid-column: 1 / -1;

@@ -22,6 +22,7 @@ import {
   QID,
   TRACK_TYPES,
   trackLangOf,
+  trackRecordedOf,
   trackTypeOf,
   WITHOUT_LYRICS,
   type Disc,
@@ -45,6 +46,7 @@ import {
   rowPerformers,
   type Renumbered,
 } from "../lib/tracks.ts";
+import { formatTime } from "../lib/preview.ts";
 import { FieldErr, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
@@ -449,6 +451,7 @@ function DiscBlock({
               errs.comp,
               errs.track,
               errs.lang,
+              errs.recorded,
               single ? singleIssue(r.n) : undefined,
             ].filter((e): e is string => !!e);
             // A row from MusicBrainz can't be typed back in as easily.
@@ -573,6 +576,20 @@ function DiscBlock({
                           })
                         }
                       />
+                      <Recorded
+                        n={r.n}
+                        track={t}
+                        settings={state.settings}
+                        linkedTrack={linkedTo("track", r.n)}
+                        error={errs.recorded}
+                        onChange={(v) =>
+                          setDisc((disc) => {
+                            const row = disc.tracks[i];
+                            if (v.trim()) row.recorded = v;
+                            else delete row.recorded;
+                          })
+                        }
+                      />
                       <LinkFields
                         di={di}
                         n={r.n}
@@ -655,6 +672,8 @@ function DiscBlock({
                           )),
                         !linkedTo("track", r.n) && typeTag(t, state.settings),
                         !linkedTo("comp", r.n) && langTag(t, state.settings),
+                        !(linkedTo("track", r.n) && !state.settings.extendExisting) &&
+                          recordedFact(t, state.settings),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -1041,6 +1060,87 @@ function langTag(track: Track, settings: Settings) {
   return (
     <span key="lang" className="fact-tag with-badge">
       {langNames(qids)}
+      {from === "mb" && <span className="mb-badge">MB</span>}
+    </span>
+  );
+}
+
+/**
+ * When a track was recorded, which it takes from MusicBrainz or the album unless it has its
+ * own. An existing track only gets it if it has none.
+ */
+function Recorded({
+  n,
+  track,
+  settings,
+  linkedTrack,
+  error,
+  onChange,
+}: {
+  n: number;
+  track: Track;
+  settings: Settings;
+  linkedTrack: boolean;
+  error: string | undefined;
+  onChange: (date: string) => void;
+}) {
+  const id = useId();
+  const fallback = trackRecordedOf(settings, { mb: track.mb });
+  const own = track.recorded !== undefined;
+  const mb = settings.mbDetails ? track.mb?.recorded : undefined;
+  const unused = linkedTrack && !settings.extendExisting;
+  const range =
+    mb?.end && !own ? `MusicBrainz has ${mb.begin} to ${mb.end}. Using the first date.` : "";
+  const note = unused
+    ? "Not added, as the track is an existing one and Link reused items is off."
+    : linkedTrack
+      ? `Added to the existing track only if it has none.${range && ` ${range}`}`
+      : range
+        ? range
+        : mb && !own
+          ? "From the recording on MusicBrainz"
+          : mb
+            ? `MusicBrainz has ${mb.begin}${mb.end ? ` to ${mb.end}` : ""}`
+            : fallback.date && !own
+              ? "Default from Item settings"
+              : "";
+  return (
+    <div className="f">
+      <label htmlFor={id}>Recording date</label>
+      <input
+        id={id}
+        type="text"
+        className="mono"
+        data-col="recorded"
+        spellCheck={false}
+        aria-label={`Track ${n} recording date`}
+        disabled={unused}
+        placeholder={unused ? "" : fallback.date || "YYYY, YYYY-MM or YYYY-MM-DD"}
+        value={track.recorded ?? ""}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={`${id}-err`}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => onChange(normalizeDate(e.target.value))}
+      />
+      {note && (
+        <span className="sub with-badge">
+          {mb && !linkedTrack && <span className="mb-badge">MB</span>}
+          {note}
+        </span>
+      )}
+      <FieldErr id={id} msg={error} />
+    </div>
+  );
+}
+
+/** A closed card's "Recorded Nov 2025", or null for a track with no recording date. */
+function recordedFact(track: Track, settings: Settings) {
+  const { date, from } = trackRecordedOf(settings, track);
+  const parsed = parseDate(date);
+  if (from === "album" || !parsed.ok || !parsed.val) return null;
+  return (
+    <span key="recorded" className="with-badge">
+      {`Recorded ${formatTime(parsed.val.time, parsed.val.precision)}`}
       {from === "mb" && <span className="mb-badge">MB</span>}
     </span>
   );

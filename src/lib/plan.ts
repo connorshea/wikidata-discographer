@@ -43,6 +43,8 @@ export interface Settings {
   mbWriters: boolean;
   /** Use what MusicBrainz says about each recording, such as being instrumental, for its track. */
   mbDetails: boolean;
+  /** The P10135 recording date of tracks with none of their own or from MusicBrainz. */
+  recDate: string;
 }
 
 export interface AlbumState {
@@ -144,6 +146,12 @@ export interface MbRowIds {
    */
   languages?: string[];
   /**
+   * When the recording was made, from its performance relation to its work, each YYYY,
+   * YYYY-MM or YYYY-MM-DD. `end` is empty when MusicBrainz has none. Left out without a
+   * `begin`.
+   */
+  recorded?: { begin: string; end: string };
+  /**
    * The recording, work and day the import came from, for the references on the
    * duration, identifiers and writers. Kept even when an item already has the recording
    * or work ID. `work` is left out when the track has no work.
@@ -180,6 +188,8 @@ export interface Track {
    */
   p407?: string;
   p407Custom?: boolean;
+  /** Its P10135 recording date as typed, when it's not the one `trackRecordedOf` gives it. */
+  recorded?: string;
 }
 
 export interface Disc {
@@ -254,7 +264,7 @@ export type Op =
 
 /** What's wrong with a row, by the cell it's fixed in. */
 export type RowErrs = Partial<
-  Record<"title" | "artists" | "length" | "comp" | "track" | "lang", string>
+  Record<"title" | "artists" | "length" | "comp" | "track" | "lang" | "recorded", string>
 >;
 
 export type MsgKind = "err" | "warn" | "ok";
@@ -387,6 +397,19 @@ export function trackLangOf(
     return { qids: [NO_LINGUISTIC_CONTENT], from: "type" };
   if (type === WITH_VOCALS && wordless) return { qids: [], from: "vocals" };
   return { qids: album, from: "album" };
+}
+
+/**
+ * A track's recording date as written: its own, or else the first day MusicBrainz has for
+ * the recording, or else the album's. Empty for none.
+ */
+export function trackRecordedOf(
+  S: Settings,
+  t: Pick<Track, "mb" | "recorded">,
+): { date: string; from: "mb" | "album" | null } {
+  if (t.recorded?.trim()) return { date: t.recorded.trim(), from: null };
+  if (S.mbDetails && t.mb?.recorded) return { date: t.mb.recorded.begin, from: "mb" };
+  return { date: S.recDate.trim(), from: "album" };
 }
 
 /** Whether a track's own language is a QID typed in, rather than one the form lists. */
@@ -796,6 +819,8 @@ export function buildPlan(state: State): Plan {
         ? `"${p407}" isn't a QID (e.g. Q1860).`
         : ""
     : "";
+  const recDate = parseDate(S.recDate);
+  fieldErrs.recDate = recDate.ok ? "" : recDate.error;
   fieldErrs.compDesc = checkTemplate(S.compDesc, date).join(" ");
   fieldErrs.trackDesc = checkTemplate(S.trackDesc, date).join(" ");
   // {year} comes from each single's own date, which a new single must have.
@@ -907,6 +932,10 @@ export function buildPlan(state: State): Plan {
       if (et && !QID.test(et)) errs.track = `"${et}" isn't a QID.`;
       // An existing composition keeps its language, so what's typed for it doesn't matter.
       const ownLang = r.p407?.trim() ?? "";
+      // So does an existing track, unless Link reused items adds the date to it.
+      const ownRecorded = parseDate(r.recorded ?? "");
+      if (!ownRecorded.ok && !(QID.test(et) && !S.extendExisting))
+        errs.recorded = ownRecorded.error;
       if (isCustomTrackLang(r) && !QID.test(ec)) {
         if (!ownLang) errs.lang = "Enter a QID, or choose another language.";
         else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
@@ -1034,6 +1063,7 @@ export function buildPlan(state: State): Plan {
     !!fieldErrs.lang ||
     !!fieldErrs.date ||
     !!fieldErrs.p407 ||
+    !!fieldErrs.recDate ||
     blocking(fieldErrs.compDesc) ||
     blocking(fieldErrs.trackDesc);
   if (settingsErr) err("Fix the errors in Item settings.", "settings");
@@ -1090,6 +1120,18 @@ export function buildPlan(state: State): Plan {
       ...mb.appleMusic.map((v) => cited("P10110", v)),
       ...mb.deezer.map((v) => cited("P2724", v)),
       ...mb.tidal.map((v) => cited("P4578", v)),
+    ];
+  };
+  // P10135, cited to the recording when it's the date MusicBrainz has.
+  const recordedClaims = (it: PlanItem): Claim[] => {
+    const { date: d, from } = trackRecordedOf(S, it.r);
+    const parsed = parseDate(d);
+    if (!parsed.ok || !parsed.val) return [];
+    return [
+      {
+        ...claim("P10135", { type: "time", ...parsed.val }),
+        ...(from === "mb" ? mbRef(it.r.mb) : {}),
+      },
     ];
   };
   // A language from MusicBrainz is cited to the work, as the writers are.
@@ -1204,6 +1246,7 @@ export function buildPlan(state: State): Plan {
           claims: [
             claim("P2550", compOf(it)),
             ...perf,
+            ...recordedClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
             // Not a second recording ID, as with a composition's work ID.
             ...(it.r.mb?.recording
               ? [
@@ -1237,6 +1280,7 @@ export function buildPlan(state: State): Plan {
               },
             ]
           : []),
+        ...recordedClaims(it),
         ...trackIds(it.r.mb),
       ],
     });
