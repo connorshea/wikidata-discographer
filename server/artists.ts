@@ -37,6 +37,15 @@ export const MAX_ARTIST_ALBUMS = 500;
 /** The most singles an artist page lists: the oldest ones, if it has more. */
 export const MAX_ARTIST_SINGLES = 500;
 
+/**
+ * Performers the artist page won't open, by QID, with the name its error
+ * gives. "Various artists" (Q3108914) isn't a real artist, and is the
+ * performer of so many compilations that its page would list all of them.
+ */
+export const BLOCKED_ARTISTS: ReadonlyMap<string, string> = new Map([
+  ["Q3108914", "Various artists"],
+]);
+
 /** The query's QID, if it's one or a Wikidata URL. */
 export function queryQid(q: string): string | null {
   const qid = normalizeQid(q);
@@ -107,6 +116,7 @@ artistRoutes.get("/search", async (c) => {
   const q = c.req.query("q")?.trim() ?? "";
   const qid = queryQid(q);
   if (qid) {
+    if (BLOCKED_ARTISTS.has(qid)) return c.json({ artists: [] } satisfies ArtistSearchResponse);
     let artist;
     try {
       artist = await findArtist(qid);
@@ -121,7 +131,9 @@ artistRoutes.get("/search", async (c) => {
         : [],
     } satisfies ArtistSearchResponse);
   }
-  const rows = await searchLabels(q, ["artist"]);
+  const rows = (await searchLabels(q, ["artist"])).filter(
+    (r) => !BLOCKED_ARTISTS.has(toQid(r.qid)),
+  );
   const albums = await albumCounts(rows.map((r) => r.qid));
   const byQid = new Map(rows.map((r) => [r.qid, r]));
   const key = labelSearchKey(q);
@@ -280,6 +292,8 @@ function performedBy(artist: number, kinds: MusicKind[], max: number) {
 artistRoutes.get("/:qid", async (c) => {
   const qid = c.req.param("qid").toUpperCase();
   if (!QID.test(qid)) return c.json({ error: "Not a QID" }, 400);
+  const blocked = BLOCKED_ARTISTS.get(qid);
+  if (blocked) return c.json({ error: `${blocked} can't be opened on the artist page` }, 404);
   let artist;
   try {
     artist = await findArtist(qid);
