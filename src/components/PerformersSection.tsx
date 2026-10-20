@@ -25,8 +25,13 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
   // An open row stays open, and in its place, until Done or Use.
   const [opened, setOpened] = useState<Record<string, boolean>>({});
   const settled = (name: string) => opened[name] ?? isLinked(name);
-  const rows = [...all].sort((a, b) => Number(settled(a.name)) - Number(settled(b.name)));
-  const linked = all.filter((r) => isLinked(r.name)).length;
+  // Unlinked performers first, as the run needs them, then unlinked writers, then the rest.
+  const order = (r: PerformerRow) => (settled(r.name) ? 2 : r.performer ? 0 : 1);
+  const rows = [...all].sort((a, b) => order(a) - order(b));
+  const performers = all.filter((r) => r.performer);
+  const linked = performers.filter((r) => isLinked(r.name)).length;
+  const writers = all.filter((r) => r.composer || r.lyricist);
+  const linkedWriters = writers.filter((r) => isLinked(r.name)).length;
   // A row that just closed, for focus to go to its Change button.
   const closing = useRef<string | null>(null);
   useEffect(() => {
@@ -53,10 +58,16 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
   return (
     <section className="block" id="performers">
       <div className="perf-top">
-        <h2>Performers</h2>
-        {all.length > 0 && (
-          <span className={linked < all.length ? "pill warn" : "pill"}>
-            {linked} of {all.length} linked
+        <h2>People</h2>
+        {performers.length > 0 && (
+          <span className={linked < performers.length ? "pill warn" : "pill"}>
+            {linked} of {performers.length} {performers.length === 1 ? "performer" : "performers"}{" "}
+            linked
+          </span>
+        )}
+        {writers.length > 0 && (
+          <span className="pill">
+            {linkedWriters} of {writers.length} {writers.length === 1 ? "writer" : "writers"} linked
           </span>
         )}
         {user && (
@@ -71,8 +82,10 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
         )}
       </div>
       <p className="hint">
-        Link every artist name in the tracklist to its Wikidata item. Unlinked artists are listed
-        first.
+        {writers.length
+          ? "Link everyone who performed on or wrote these songs to their Wikidata item. " +
+            "Performers need a QID before the run can start. Composers and lyricists are optional."
+          : "Link every artist name in the tracklist to its Wikidata item. Unlinked artists are listed first."}
       </p>
       <p className="perf-added" role="status">
         {added && (
@@ -96,7 +109,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
               return (
                 <div className="perf-row linked" key={r.name} data-performer={r.name}>
                   <StatusIcon linked />
-                  <PerformerName row={r} />
+                  <PerformerName row={r} roles={writers.length > 0} />
                   <div className="perf-line">
                     <Chosen qid={v} found={found} showQid />
                     <button
@@ -131,8 +144,8 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
             );
             return (
               <div className="perf-row" key={r.name} data-performer={r.name}>
-                <StatusIcon linked={ok} />
-                <PerformerName row={r} />
+                <StatusIcon linked={ok} optional={!r.performer} />
+                <PerformerName row={r} roles={writers.length > 0} />
                 <div className="perf-pick">
                   {ok ? (
                     <div className="perf-edit">
@@ -146,6 +159,18 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
                   )}
                   {v ? (
                     <Chosen qid={v} found={found} onUse={set} />
+                  ) : !r.performer ? (
+                    <p className="muted perf-note">
+                      Optional. Not found by their MusicBrainz ID. Leave it empty and{" "}
+                      {r.songs === 1 ? "this song won't name them" : "these songs won't name them"}{" "}
+                      as{" "}
+                      {r.composer && r.lyricist
+                        ? "composer or lyricist"
+                        : r.composer
+                          ? "composer"
+                          : "lyricist"}
+                      .
+                    </p>
                   ) : (
                     <Suggestions
                       name={r.name}
@@ -186,8 +211,11 @@ function findRow(name: string): HTMLElement | undefined {
   );
 }
 
-/** A green check once a name is linked, an amber ring until then. */
-function StatusIcon({ linked }: { linked: boolean }) {
+/**
+ * A green check once a name is linked, an amber ring until then, or a dashed grey one
+ * for a composer or lyricist, who can be left unlinked.
+ */
+function StatusIcon({ linked, optional }: { linked: boolean; optional?: boolean }) {
   return (
     <svg className="perf-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       {linked ? (
@@ -196,23 +224,47 @@ function StatusIcon({ linked }: { linked: boolean }) {
           <path d="M4.8 8.2l2 2 4.2-4.4" />
         </>
       ) : (
-        <circle className="todo" cx="8" cy="8" r="6.5" />
+        <circle className={optional ? "optional" : "todo"} cx="8" cy="8" r="6.5" />
       )}
     </svg>
   );
 }
 
-function PerformerName({ row }: { row: PerformerRow }) {
+/**
+ * A name and where it's used. With composers and lyricists in the list, each role
+ * gets a pill so the two kinds of row can be told apart.
+ */
+function PerformerName({ row, roles }: { row: PerformerRow; roles: boolean }) {
+  const counts = [
+    row.performer && plural(row.tracks, "track"),
+    (row.composer || row.lyricist) && plural(row.songs, "song"),
+  ].filter(Boolean);
+  if (!roles)
+    return (
+      <span className="perf-name">
+        <b>{row.name}</b>
+        <span className="muted">
+          {row.albumArtist && "Album artist · "}
+          {counts.join(" · ")}
+        </span>
+      </span>
+    );
   return (
     <span className="perf-name">
       <b>{row.name}</b>
-      <span className="muted">
-        {row.albumArtist && "Album artist · "}
-        {row.tracks} {row.tracks === 1 ? "track" : "tracks"}
+      <span className="perf-roles">
+        {row.performer && (
+          <span className="perf-role">{row.albumArtist ? "Album artist" : "Performer"}</span>
+        )}
+        {row.composer && <span className="perf-role writer">Composer</span>}
+        {row.lyricist && <span className="perf-role writer">Lyricist</span>}
+        <span className="muted">{counts.join(" · ")}</span>
       </span>
     </span>
   );
 }
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /** What the QID entered for a name points at, or why it can't be used. */
 function Chosen({

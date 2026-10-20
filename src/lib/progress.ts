@@ -55,23 +55,67 @@ export function performerNames(state: State, plan: Plan): string[] {
   return [...names];
 }
 
+/**
+ * The composers and lyricists the compositions get, by name, with how many songs each
+ * wrote: those of every imported track, with the setting on, unless the row reuses a
+ * composition and Link reused items is off.
+ */
+export function writers(
+  state: State,
+  plan: Plan,
+): Map<string, { composer: boolean; lyricist: boolean; songs: number }> {
+  const out = new Map<string, { composer: boolean; lyricist: boolean; songs: number }>();
+  if (!state.settings.mbWriters) return out;
+  plan.tracks.forEach((rows, di) => {
+    for (const t of rows) {
+      if (!t.mb) continue;
+      if ((state.discs[di]?.comp[t.n] ?? "").trim() && !state.settings.extendExisting) continue;
+      const names = new Set<string>();
+      for (const [role, ws] of [
+        ["composer", t.mb.composers],
+        ["lyricist", t.mb.lyricists],
+      ] as const)
+        for (const w of ws) {
+          const row = out.get(w.name) ?? { composer: false, lyricist: false, songs: 0 };
+          row[role] = true;
+          out.set(w.name, row);
+          names.add(w.name);
+        }
+      for (const name of names) out.get(name)!.songs++;
+    }
+  });
+  return out;
+}
+
 export interface PerformerRow {
   name: string;
   /** How many tracks list them. */
   tracks: number;
   /** One of the album artists, as entered for a new album or imported from MusicBrainz. */
   albumArtist: boolean;
+  /** Whether they're a performer, whom the run needs a QID for. */
+  performer: boolean;
+  /** Composer or lyricist of some composition, and of how many songs. */
+  composer: boolean;
+  lyricist: boolean;
+  songs: number;
 }
 
-/** Each name in Performers, in the table's order, with where it's used. */
+/** Each name in People, in the table's order, with where it's used: performers, then writers. */
 export function performerRows(state: State, plan: Plan): PerformerRow[] {
   const ofAlbum =
     state.album.mode === "create" || state.start === "mb" ? new Set(albumArtists(state)) : null;
   const tracks = plan.tracks.flat();
-  return performerNames(state, plan).map((name) => ({
+  const performers = new Set(performerNames(state, plan));
+  const wrote = writers(state, plan);
+  return [...new Set([...performers, ...wrote.keys()])].map((name) => ({
     name,
     tracks: tracks.filter((t) => t.artists.includes(name)).length,
     albumArtist: ofAlbum?.has(name) ?? false,
+    performer: performers.has(name),
+    composer: wrote.get(name)?.composer ?? false,
+    lyricist: wrote.get(name)?.lyricist ?? false,
+    songs: wrote.get(name)?.songs ?? 0,
   }));
 }
 
@@ -149,7 +193,7 @@ const labelLangName = (S: Settings) =>
   LABEL_LANGS.find(([c]) => c === S.lang.trim())?.[1] ?? S.lang.trim();
 
 /** The options Item settings lists as checkboxes. */
-export const SETTING_FLAGS = ["compPerformer", "extendExisting", "straight"] as const;
+export const SETTING_FLAGS = ["compPerformer", "extendExisting", "straight", "mbWriters"] as const;
 
 /** Item settings in a few pills, for when the section is collapsed. */
 export function settingsPills(S: Settings): string[] {
@@ -217,8 +261,10 @@ export function railSteps(p: ProgressInput): Step[] {
     },
     {
       id: "performers",
-      name: "Performers",
-      summary: perf.total ? `${perf.linked} of ${perf.total} linked` : "From the tracklist",
+      name: "People",
+      summary: perf.total
+        ? `${perf.linked} of ${plural(perf.total, "performer")} linked`
+        : "From the tracklist",
       status: perf.total ? status(perf.linked < perf.total, true) : "pending",
     },
     {
@@ -366,7 +412,7 @@ export function runChecks(
           text:
             perf.linked < perf.total
               ? `Link ${plural(perf.total - perf.linked, "more performer")}`
-              : "Fix the performer QIDs",
+              : "Fix the QIDs under People",
           at: "performers",
           // Once there are tracks, an unlinked performer holds the run up.
           problem: trackCount > 0 || blockedAt(plan, "performers"),

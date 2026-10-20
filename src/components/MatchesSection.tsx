@@ -204,7 +204,7 @@ export default function MatchesSection({
               <StateIcon kind="off" />
               <span>
                 Give the performers QIDs to look for items already on Wikidata.{" "}
-                <a href="#performers">Go to Performers</a>
+                <a href="#performers">Go to People</a>
               </span>
             </>
           ) : status === "pending" ? (

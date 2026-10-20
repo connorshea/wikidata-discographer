@@ -2062,6 +2062,13 @@ button.perf-add {
   stroke: var(--warn-edge);
   stroke-width: 1.6;
 }
+/* A composer or lyricist can be left unlinked, so theirs isn't a warning. */
+.perf-icon .optional {
+  fill: none;
+  stroke: var(--disc-edge);
+  stroke-width: 1.6;
+  stroke-dasharray: 2.5 2.5;
+}
 .perf-icon .done {
   fill: var(--ok);
 }
@@ -2084,6 +2091,25 @@ button.perf-add {
 .perf-name .muted,
 .perf-note {
   font-size: 13px;
+}
+.perf-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 2px;
+}
+.perf-role {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--ink);
+}
+.perf-role.writer {
+  background: var(--cmp-tint);
+  color: var(--cmp-ink);
 }
 .perf-pick {
   display: flex;

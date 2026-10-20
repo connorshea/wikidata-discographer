@@ -136,6 +136,8 @@ describe("previewPlan", () => {
       appleMusic: [],
       deezer: [],
       tidal: [],
+      composers: [],
+      lyricists: [],
       source: null,
     };
     const id = previewPlan(buildPlan(state), state)

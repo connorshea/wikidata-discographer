@@ -66,6 +66,8 @@ describe("loadedReleaseGroup", () => {
         appleMusic: [],
         deezer: [],
         tidal: [],
+        composers: [],
+        lyricists: [],
         source: { recording: "1f0c9a3e-3c2b-4a8e-9b0e-0d6f1c2a3b4c", retrieved: "2026-10-12" },
       };
     return state;
@@ -130,6 +132,8 @@ describe("buildPlan", () => {
       appleMusic: ["1820000002"],
       deezer: ["69018826"],
       tidal: ["454960380"],
+      composers: [],
+      lyricists: [],
       source: { recording: "519d8f15-518b-479c-af8d-664fb3ae455a", retrieved: "2026-10-04" },
     };
     const MB_REF = [
@@ -358,6 +362,114 @@ describe("buildPlan", () => {
         state.discs[0].tracks[1].mb = { ...ids, recording: "" };
         expect(refsOf(state).P1243).toEqual(MB_REF);
       });
+    });
+  });
+
+  describe("composers and lyricists from a MusicBrainz import", () => {
+    const WORK = "c8ee496c-48f7-456a-b5e6-b206eeb37726";
+    const CRJ = { id: "09887aa7-226e-4ecc-9a0c-02d2ae5777e1", name: "Carly Rae Jepsen" };
+    const BERGER = { id: "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5", name: "Patrik Berger" };
+    const withWriters = () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].mb = {
+        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+        work: WORK,
+        recordingName: "",
+        workName: "",
+        iswcs: [],
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        deezer: [],
+        tidal: [],
+        composers: [CRJ, BERGER],
+        lyricists: [CRJ],
+        source: {
+          recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+          work: WORK,
+          retrieved: "2026-10-04",
+        },
+      };
+      state.artists["Patrik Berger"] = "Q7146018";
+      return state;
+    };
+    const writersOf = (op: Op | undefined) =>
+      (op?.claims ?? [])
+        .filter((c) => c.property === "P86" || c.property === "P676")
+        .map((c) => [c.property, c.value.type === "item" && "id" in c.value ? c.value.id : null]);
+    const update = (ops: Op[], qid: string) =>
+      ops.find((o) => o.op === "addClaims" && "id" in o.target && o.target.id === qid);
+
+    it("go on the new composition, cited to the work", () => {
+      const comp = find(buildPlan(withWriters()).ops, "comp:0:2");
+      expect(writersOf(comp)).toEqual([
+        ["P86", "Q52583"],
+        ["P86", "Q7146018"],
+        ["P676", "Q52583"],
+      ]);
+      expect(comp?.claims.find((c) => c.property === "P86")?.references).toEqual([
+        [
+          { property: "P248", value: { type: "item", id: "Q14005" } },
+          { property: "P435", value: { type: "string", value: WORK } },
+          {
+            property: "P813",
+            value: { type: "time", time: "+2026-10-04T00:00:00Z", precision: 11 },
+          },
+        ],
+      ]);
+      // Not the track.
+      expect(writersOf(find(buildPlan(withWriters()).ops, "track:0:2"))).toEqual([]);
+    });
+
+    it("leave out a writer with no QID, without holding up the run", () => {
+      const state = withWriters();
+      delete state.artists["Patrik Berger"];
+      const plan = buildPlan(state);
+      expect(plan.ready).toBe(true);
+      expect(writersOf(find(plan.ops, "comp:0:2"))).toEqual([
+        ["P86", "Q52583"],
+        ["P676", "Q52583"],
+      ]);
+    });
+
+    it("hold up the run for a writer whose QID isn't one", () => {
+      const state = withWriters();
+      state.artists["Patrik Berger"] = "Berger";
+      const plan = buildPlan(state);
+      expect(plan.ready).toBe(false);
+      expect(plan.messages).toContainEqual([
+        "err",
+        "Composer or lyricist QID isn't valid for: Patrik Berger.",
+      ]);
+      expect(plan.blockers).toContain("performers");
+    });
+
+    it("aren't added with the setting off", () => {
+      const state = withWriters();
+      state.settings.mbWriters = false;
+      state.artists["Patrik Berger"] = "Berger";
+      const plan = buildPlan(state);
+      expect(plan.ready).toBe(true);
+      expect(writersOf(find(plan.ops, "comp:0:2"))).toEqual([]);
+    });
+
+    it("go on a reused composition only with Link reused items on", () => {
+      const state = withWriters();
+      state.discs[0].comp[2] = "Q102";
+      expect(writersOf(update(buildPlan(state).ops, "Q102"))).toEqual([
+        ["P86", "Q52583"],
+        ["P86", "Q7146018"],
+        ["P676", "Q52583"],
+      ]);
+      state.settings.extendExisting = false;
+      expect(update(buildPlan(state).ops, "Q102")).toBeUndefined();
+    });
+
+    it("go uncited without the work they came from", () => {
+      const state = withWriters();
+      delete state.discs[0].tracks[1].mb!.source!.work;
+      const comp = find(buildPlan(state).ops, "comp:0:2");
+      expect(comp?.claims.find((c) => c.property === "P86")).not.toHaveProperty("references");
     });
   });
 

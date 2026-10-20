@@ -59,7 +59,7 @@ describe("railSteps", () => {
     const byId = Object.fromEntries(steps.map((s) => [s.id, s]));
     expect(byId.album.summary).toBe(`Existing · ${EXAMPLE.album.qid}`);
     expect(byId.tracks.summary).toBe("2 discs · 24 tracks");
-    expect(byId.performers).toMatchObject({ summary: "1 of 1 linked", status: "done" });
+    expect(byId.performers).toMatchObject({ summary: "1 of 1 performer linked", status: "done" });
     expect(byId.create.summary).toMatch(/^Ready · \d+ edits$/);
   });
 
@@ -71,7 +71,10 @@ describe("railSteps", () => {
     );
     expect(byId.tracks).toMatchObject({ status: "attention" });
     expect(byId.tracks.summary).toContain("2 to review");
-    expect(byId.performers).toMatchObject({ summary: "0 of 1 linked", status: "attention" });
+    expect(byId.performers).toMatchObject({
+      summary: "0 of 1 performer linked",
+      status: "attention",
+    });
     expect(byId.create.summary).toBe("Blocked: 1 performer");
   });
 
@@ -212,25 +215,78 @@ describe("settingsPills", () => {
       "Labels: English",
       "Language of work: English (Q1860)",
       "Published 2026-09-18",
-      "3 options on",
+      "4 options on",
     ]);
   });
 
   it("names what's missing", () => {
     const S = { ...EMPTY.settings, lang: "nds", straight: false };
-    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "2 options on"]);
+    expect(settingsPills(S)).toEqual(["Labels: nds", "No publication date", "3 options on"]);
   });
 });
 
 describe("performerRows", () => {
+  const performer = { performer: true, composer: false, lyricist: false, songs: 0 };
   it("counts each name's tracks and marks the album artists", () => {
     const state = structuredClone(EXAMPLE);
     state.discs[0].tracks[1].artists = ["Carly Rae Jepsen", "Guest"];
     expect(performerRows(state, buildPlan(state))).toEqual([
-      { name: "Carly Rae Jepsen", tracks: 24, albumArtist: false },
-      { name: "Guest", tracks: 1, albumArtist: false },
+      { name: "Carly Rae Jepsen", tracks: 24, albumArtist: false, ...performer },
+      { name: "Guest", tracks: 1, albumArtist: false, ...performer },
     ]);
     state.start = "mb";
     expect(performerRows(state, buildPlan(state))[0].albumArtist).toBe(true);
+  });
+
+  it("lists the composers and lyricists after the performers", () => {
+    const state = structuredClone(EXAMPLE);
+    const writer = (id: string, name: string) => ({ id, name });
+    const crj = writer("09887aa7-226e-4ecc-9a0c-02d2ae5777e1", "Carly Rae Jepsen");
+    const berger = writer("ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5", "Patrik Berger");
+    state.discs[0].tracks.slice(0, 2).forEach((t, i) => {
+      t.mb = {
+        recording: "",
+        work: "",
+        recordingName: "",
+        workName: "",
+        iswcs: [],
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        deezer: [],
+        tidal: [],
+        composers: i ? [crj] : [crj, berger],
+        lyricists: [crj],
+        source: null,
+      };
+    });
+    const rows = () => performerRows(state, buildPlan(state));
+    expect(rows()).toEqual([
+      {
+        name: "Carly Rae Jepsen",
+        tracks: 24,
+        albumArtist: false,
+        ...performer,
+        composer: true,
+        lyricist: true,
+        songs: 2,
+      },
+      {
+        name: "Patrik Berger",
+        tracks: 0,
+        albumArtist: false,
+        performer: false,
+        composer: true,
+        lyricist: false,
+        songs: 1,
+      },
+    ]);
+    // A reused composition only gets them with Link reused items on.
+    state.discs[0].comp[1] = "Q102";
+    state.settings.extendExisting = false;
+    expect(rows().map((r) => [r.name, r.songs])).toEqual([["Carly Rae Jepsen", 1]]);
+    state.settings.mbWriters = false;
+    state.discs[0].comp = {};
+    expect(rows().map((r) => r.name)).toEqual(["Carly Rae Jepsen"]);
   });
 });

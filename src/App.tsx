@@ -105,7 +105,7 @@ function LockedSteps() {
         <h2>Tracks</h2>
       </section>
       <section className="block locked-step" id="performers">
-        <h2>Performers</h2>
+        <h2>People</h2>
       </section>
     </div>
   );

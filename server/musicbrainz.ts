@@ -39,7 +39,7 @@ import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../sr
 const API_URL = () =>
   (process.env.MUSICBRAINZ_API_URL ?? "https://musicbrainz.org/ws/2").replace(/\/+$/, "");
 const RELEASE_INC =
-  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+url-rels+release-group-level-rels+isrcs";
+  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+release-group-level-rels+isrcs";
 /** MusicBrainz's largest page, and how many pages of a release group's releases to read. */
 const PAGE_SIZE = 100;
 const MAX_PAGES = 3;
