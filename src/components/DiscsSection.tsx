@@ -59,6 +59,16 @@ const discHasErrors = (plan: Plan, badSingles: Record<string, string>, di: numbe
     (k) => k.startsWith(`${di}:`),
   );
 
+/**
+ * The artists listed once above the cards: the album's, as entered or imported, or else
+ * those on every row. Cards list only who differs from them.
+ */
+function baseArtists(state: SectionProps["state"], rows: Parameters<typeof commonArtists>[0]) {
+  const ofAlbum =
+    (state.album.mode === "create" || state.start === "mb") && albumArtists(state).length > 0;
+  return { ofAlbum, base: ofAlbum ? albumArtists(state) : commonArtists(rows) };
+}
+
 export default function DiscsSection({
   state,
   update,
@@ -82,13 +92,25 @@ export default function DiscsSection({
     setTab(i);
     if (focus) tabs.current[i]?.focus();
   };
+  const rows = plan.tracks[di] ?? [];
+  const { ofAlbum, base } = baseArtists(state, rows);
   return (
     <section className="block" id="tracks">
-      <div className="album-head">
+      <div className="album-head tracks-head">
         <h2>
           <span className="sw" style={{ background: "var(--trk-edge)" }} aria-hidden="true" />
           Tracks
         </h2>
+        {rows.length > 0 && base.length > 0 && (
+          <p className="album-line">
+            <span>
+              {ofAlbum ? (base.length > 1 ? "Album artists" : "Album artist") : "On every track"}
+            </span>
+            {base.map((a) => (
+              <PerformerChip key={a} name={a} linked={QID.test((state.artists[a] ?? "").trim())} />
+            ))}
+          </p>
+        )}
       </div>
       <div className="disc-tabs">
         <div role="tablist" aria-label="Discs">
@@ -171,8 +193,11 @@ export default function DiscsSection({
   );
 }
 
-/** A cell of the row editor: a column and the row's index. */
+/** An element of a card: its column and the row's index. */
 type CellAt = { row: number; col: string };
+
+/** What a click on a closed card does itself, rather than open the card. */
+const INTERACTIVE = "a, button, input, select, label, [role='menu'], [role='dialog']";
 
 function DiscBlock({
   di,
@@ -190,6 +215,7 @@ function DiscBlock({
   onRenumber: (moved: Renumbered) => void;
   onRemove: () => void;
 }) {
+  const { wikiBaseUrl } = useAuth();
   const d = state.discs[di];
   const rows = plan.tracks[di] ?? [];
   const open = new Map(reviews.filter((r) => !r.reviewed).map((r) => [r.n, r]));
@@ -198,21 +224,13 @@ function DiscBlock({
   // Rows typed in, or added to an import, can be moved. A plain import is a release's
   // tracklist, so it keeps its order. Any row can be deleted.
   const manual = state.start !== "mb" || d.tracks.some((t) => !t.mb);
-  const cols = manual ? 7 : 6;
   const setDisc = (fn: (disc: Disc) => void) => update((s) => fn(s.discs[di]));
   const ids = useId();
   const partErr = plan.fieldErrs[`part-${di}`];
   const known = [...Object.keys(state.artists), ...albumArtists(state)];
-  // The artists listed once above the table: the album's, as entered or imported, or else
-  // those on every row. Rows list only who differs from them.
-  const ofAlbum = (creating || state.start === "mb") && albumArtists(state).length > 0;
-  const base = ofAlbum ? albumArtists(state) : commonArtists(rows);
+  const { ofAlbum, base } = baseArtists(state, rows);
   const linked = (name: string) => QID.test((state.artists[name] ?? "").trim());
   const featOf = (i: number) => (d.tracks[i].artists.length ? d.tracks[i].feat : undefined);
-  const differs = rows.some((r, i) => {
-    const p = rowPerformers({ artists: r.artists, feat: featOf(i) }, base);
-    return p.only.length + p.with.length + p.feat.length > 0;
-  });
   const linkedTo = (k: "comp" | "track", n: number) => QID.test((d[k][n] ?? "").trim());
   const mbOf = (i: number) =>
     mbFacts(
@@ -222,7 +240,6 @@ function DiscBlock({
       state.settings.extendExisting,
       state.settings.mbWriters,
     );
-  const anyMb = rows.some((_, i) => mbOf(i));
 
   // A key for each row that follows it when rows move, so React moves the row's
   // inputs (and the focus in them) along with it.
@@ -230,11 +247,10 @@ function DiscBlock({
   if (keys.length !== d.tracks.length)
     setKeys([...keys.slice(0, d.tracks.length), ...d.tracks.slice(keys.length).map(newKey)]);
 
-  // The rows (by key) whose single's fields are open. They open when Single is ticked or
-  // Edit is clicked, and stay open while something is wrong with them.
-  const [singlesOpen, setSinglesOpen] = useState<ReadonlySet<number>>(new Set());
-  const openSingle = (key: number, isOpen: boolean) =>
-    setSinglesOpen((was) => {
+  // The cards (by key) open to edit.
+  const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
+  const setOpen = (key: number, isOpen: boolean) =>
+    setOpened((was) => {
       const next = new Set(was);
       if (isOpen) next.add(key);
       else next.delete(key);
@@ -249,21 +265,14 @@ function DiscBlock({
       .filter(Boolean)
       .join(" ");
   };
-  const stuck = rows.findIndex(
-    (r, i) => d.single[r.n] && !singlesOpen.has(keys[i]) && singleIssue(r.n),
-  );
-  if (stuck !== -1) setSinglesOpen(new Set([...singlesOpen, keys[stuck]]));
 
-  // The row (by key) whose artists are open in a dialog.
-  const [artistsOf, setArtistsOf] = useState<number | null>(null);
-  const artistsAt = artistsOf === null ? -1 : keys.indexOf(artistsOf);
   // The MusicBrainz row (by key) waiting on a confirmation to delete it.
   const [deleting, setDeleting] = useState<number | null>(null);
   const deletingAt = deleting === null ? -1 : keys.indexOf(deleting);
 
-  const table = useRef<HTMLTableElement>(null);
+  const list = useRef<HTMLOListElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
-  // The cell to focus once the rows have changed.
+  // The element to focus once the rows have changed.
   const focusNext = useRef<CellAt | null>(null);
   const setFocusNext = (at: CellAt) => void (focusNext.current = at);
   const [said, setSaid] = useState("");
@@ -271,11 +280,24 @@ function DiscBlock({
     const at = focusNext.current;
     if (!at) return;
     focusNext.current = null;
-    const el = table.current?.querySelector<HTMLElement>(
+    const el = list.current?.querySelector<HTMLElement>(
       `[data-row="${at.row}"] [data-col="${at.col}"]`,
     );
     (el ?? addButton.current)?.focus();
   });
+
+  const openCard = (i: number) => {
+    setOpen(keys[i], true);
+    setFocusNext({ row: i, col: "title" });
+  };
+  /** Close a card, once the field in it that has the focus has kept what was typed. */
+  const closeCard = (i: number) => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && list.current?.querySelector(`[data-row="${i}"]`)?.contains(el))
+      el.blur();
+    setOpen(keys[i], false);
+    setFocusNext({ row: i, col: "edit" });
+  };
 
   /** Change the rows' order or number, then tell whatever keeps rows by number. */
   const reorder = (fn: (disc: Disc) => Renumbered) => {
@@ -284,11 +306,15 @@ function DiscBlock({
     setDisc((disc) => Object.assign(disc, structuredClone(next)));
     onRenumber(moved);
   };
-  const add = (focus: string) => {
+  /** Add a row at the end, open to type in. */
+  const add = () => {
+    const key = newKey();
+    setKeys((ks) => [...ks, key]);
     setDisc(addTrack);
-    setFocusNext({ row: d.tracks.length, col: focus });
+    setOpen(key, true);
+    setFocusNext({ row: d.tracks.length, col: "title" });
   };
-  const move = (from: number, to: number, focus = "grip") => {
+  const move = (from: number, to: number) => {
     if (to < 0 || to >= d.tracks.length || to === from) return;
     setKeys((ks) => {
       const next = [...ks];
@@ -296,7 +322,7 @@ function DiscBlock({
       return next;
     });
     reorder((disc) => moveTrack(disc, from, to));
-    setFocusNext({ row: to, col: focus });
+    setFocusNext({ row: to, col: "menu" });
     setSaid(`Track moved to position ${to + 1} of ${d.tracks.length}.`);
   };
   const remove = (i: number) => {
@@ -333,19 +359,6 @@ function DiscBlock({
     });
     setSaid(`Added ${plural(lines.length, "track")} from the pasted list.`);
     return true;
-  };
-  /** Enter moves down a row, and adds one from the last. */
-  const enter = (i: number, col: string) => {
-    if (i === d.tracks.length - 1) add("title");
-    else setFocusNext({ row: i + 1, col });
-  };
-
-  // Dragging a row by its handle: the row it's over, to drop it there.
-  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
-  const rowAt = (y: number) => {
-    const trs = [...(table.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])];
-    const i = trs.findIndex((tr) => y < tr.getBoundingClientRect().bottom);
-    return i === -1 ? trs.length - 1 : i;
   };
 
   return (
@@ -409,158 +422,70 @@ function DiscBlock({
       {open.size > 0 && (
         <UnreviewedNotice count={open.size} href={`#${groupId(di, Math.min(...open.keys()))}`} />
       )}
-      {rows.length > 0 && base.length > 0 && (
-        <p className="album-line">
-          <span>
-            {ofAlbum ? (base.length > 1 ? "Album artists" : "Album artist") : "On every track"}
-          </span>
-          {base.map((a) => (
-            <PerformerChip key={a} name={a} linked={linked(a)} />
-          ))}
-          <span className="muted">
-            {differs
-              ? "rows only list who differs"
-              : "on every track, so only other performers are listed per row"}
-          </span>
-        </p>
-      )}
       {rows.length > 0 && (
-        <div className="tablewrap">
-          <table className="tracks" ref={table}>
-            <thead>
-              <tr>
-                {manual && (
-                  <th className="grip-col">
-                    <span className="visually-hidden">Move</span>
-                  </th>
-                )}
-                <th>#</th>
-                <th>Title</th>
-                <th>Length</th>
-                <th>Links to existing</th>
-                <th className="single-toggle">
-                  Single
-                  <InfoTip id={`disc${di}-single`} label="About singles" end>
-                    Tick a track that was also released as a single. The single becomes its own
-                    item, an instance of single (Q134556) with the track’s title and artists, that
-                    lists the track and is taken from the album. Its Edit button sets the new
-                    single’s release date, or an existing single’s QID to link that one instead, and
-                    its Discogs master ID. Currently, you can only create singles with one track.
-                  </InfoTip>
-                </th>
-                <th>
-                  <span className="visually-hidden">Options</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const t = d.tracks[i];
-                const errs: RowErrs = plan.rowErrs[`${di}:${r.n}`] ?? {};
-                const cell = (col: string) => ({
-                  "data-col": col,
-                  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                    enter(i, col);
-                  },
-                });
-                const dragging = drag && drag.from !== drag.to;
-                const single = d.single[r.n];
-                const singleOpen = !!single && singlesOpen.has(keys[i]);
-                return (
-                  <Fragment key={keys[i]}>
-                    <tr
-                      data-row={i}
-                      className={cls(
-                        singleOpen && "has-sub",
-                        single && "is-single",
-                        dragging && drag.from === i && "dragging",
-                        dragging &&
-                          drag.to === i &&
-                          (drag.to < drag.from ? "drop-before" : "drop-after"),
-                      )}
-                    >
-                      {manual && (
-                        <td className="grip-col">
-                          <button
-                            type="button"
-                            className="grip"
-                            data-col="grip"
-                            aria-label={`Move track ${r.n}`}
-                            aria-describedby={`${ids}-grip`}
-                            onKeyDown={(e) => {
-                              const to = { ArrowUp: i - 1, ArrowDown: i + 1 }[e.key];
-                              if (to === undefined) return;
-                              e.preventDefault();
-                              move(i, to);
-                            }}
-                            onPointerDown={(e) => {
-                              if (e.button !== 0) return;
-                              e.currentTarget.setPointerCapture(e.pointerId);
-                              setDrag({ from: i, to: i });
-                            }}
-                            onPointerMove={(e) =>
-                              drag && setDrag({ from: drag.from, to: rowAt(e.clientY) })
-                            }
-                            onPointerUp={() => {
-                              if (drag) move(drag.from, drag.to);
-                              setDrag(null);
-                            }}
-                            onPointerCancel={() => setDrag(null)}
-                          >
-                            <svg width="12" height="16" viewBox="0 0 12 16" aria-hidden="true">
-                              {[4, 8, 12].map((y) => (
-                                <Fragment key={y}>
-                                  <circle cx="4" cy={y} r="1.3" />
-                                  <circle cx="8" cy={y} r="1.3" />
-                                </Fragment>
-                              ))}
-                            </svg>
-                          </button>
-                        </td>
-                      )}
-                      <td className="num">{r.n}</td>
-                      <td className="title-col">
-                        <span className="title-cell">
-                          <Cell
-                            {...cell("title")}
-                            label={`Track ${r.n} title`}
-                            placeholder="Title"
-                            value={t.title}
-                            error={errs.title}
-                            onChange={(v) => setDisc((disc) => void (disc.tracks[i].title = v))}
-                            onPaste={(e) => {
-                              if (paste(i, e.clipboardData.getData("text"))) e.preventDefault();
-                            }}
-                          />
-                          {open.has(r.n) && <MatchFlag review={open.get(r.n)!} />}
-                          <MbBadge n={r.n} title={r.title} facts={mbOf(i)} />
-                          {single && !singleOpen && (
-                            <SinglePill
-                              n={r.n}
-                              single={single}
-                              found={
-                                QID.test(single.qid.trim()) ? lookup(single.qid.trim()) : undefined
-                              }
-                              onEdit={() => openSingle(keys[i], true)}
-                            />
-                          )}
-                          <RowArtists
-                            performers={rowPerformers(
-                              { artists: r.artists, feat: featOf(i) },
-                              base,
-                            )}
-                            prefixed={base.length > 0}
-                            linked={linked}
-                            error={t.title.trim() ? errs.artists : undefined}
-                          />
-                        </span>
-                      </td>
-                      <td className="length-col">
+        <ol className="trk-list" ref={list} aria-label={`Disc ${di + 1} tracks`}>
+          {rows.map((r, i) => {
+            const t = d.tracks[i];
+            const errs: RowErrs = plan.rowErrs[`${di}:${r.n}`] ?? {};
+            const title = t.title.trim();
+            const single = d.single[r.n];
+            const found =
+              single && QID.test(single.qid.trim()) ? lookup(single.qid.trim()) : undefined;
+            const review = open.get(r.n);
+            const isOpen = opened.has(keys[i]);
+            const performers = rowPerformers({ artists: r.artists, feat: featOf(i) }, base);
+            const issues = [
+              errs.title,
+              errs.length,
+              title ? errs.artists : undefined,
+              errs.comp,
+              errs.track,
+              single ? singleIssue(r.n) : undefined,
+            ].filter((e): e is string => !!e);
+            // A row from MusicBrainz can't be typed back in as easily.
+            const del = () => (t.mb ? setDeleting(keys[i]) : remove(i));
+            return (
+              <li
+                key={keys[i]}
+                data-row={i}
+                className={cls("trk", isOpen && "open", !isOpen && issues.length > 0 && "has-err")}
+                onClick={(e) => {
+                  if (!isOpen && !(e.target as HTMLElement).closest(INTERACTIVE)) openCard(i);
+                }}
+                onKeyDown={(e) => {
+                  if (!isOpen || e.defaultPrevented || e.nativeEvent.isComposing) return;
+                  const typing = e.target instanceof HTMLInputElement && e.target.type === "text";
+                  if (e.key !== "Escape" && !(e.key === "Enter" && typing)) return;
+                  e.preventDefault();
+                  closeCard(i);
+                }}
+              >
+                <span className="num">{r.n}</span>
+                {isOpen ? (
+                  <>
+                    <span className="trk-title-edit">
+                      <Cell
+                        data-col="title"
+                        label={`Track ${r.n} title`}
+                        placeholder="Title"
+                        value={t.title}
+                        error={errs.title}
+                        onChange={(v) => setDisc((disc) => void (disc.tracks[i].title = v))}
+                        onPaste={(e) => {
+                          if (paste(i, e.clipboardData.getData("text"))) e.preventDefault();
+                        }}
+                      />
+                    </span>
+                    <span className="trk-side">
+                      <button type="button" className="ghost small" onClick={() => closeCard(i)}>
+                        Done
+                      </button>
+                    </span>
+                    <div className="trk-fields">
+                      <label className="f">
+                        Length
                         <Cell
-                          {...cell("length")}
+                          data-col="length"
                           className="mono"
                           label={`Track ${r.n} length`}
                           placeholder="m:ss"
@@ -579,99 +504,154 @@ function DiscBlock({
                             })
                           }
                         />
-                      </td>
-                      <td className="links-col">
-                        <LinksCell n={r.n} errs={errs} disc={d} setDisc={setDisc} />
-                      </td>
-                      <td className="single-toggle">
-                        <input
-                          type="checkbox"
-                          aria-label={`Track ${r.n} is a single`}
-                          checked={!!single}
-                          onChange={(e) => {
-                            const ticked = e.target.checked;
-                            update((s) => {
-                              const disc = s.discs[di];
-                              if (ticked) disc.single[r.n] = { date: "", qid: "", discogs: "" };
-                              else delete disc.single[r.n];
-                            });
-                            openSingle(keys[i], ticked);
-                          }}
-                        />
-                      </td>
-                      <td className="menu-col">
-                        <RowMenu
-                          label={`Track options for ${t.title.trim() || `track ${r.n}`}`}
-                          items={[
-                            {
-                              label: t.artists.length ? "Edit artists" : "Add artists",
-                              onSelect: () => setArtistsOf(keys[i]),
-                            },
-                            ...(manual && i > 0
-                              ? [{ label: "Move up", onSelect: () => move(i, i - 1, "menu") }]
-                              : []),
-                            ...(manual && i < rows.length - 1
-                              ? [{ label: "Move down", onSelect: () => move(i, i + 1, "menu") }]
-                              : []),
-                            {
-                              label: "Delete track",
-                              danger: true,
-                              // A row from MusicBrainz can't be typed back in as easily.
-                              onSelect: () => (t.mb ? setDeleting(keys[i]) : remove(i)),
-                            },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                    {singleOpen && (
-                      <tr className="sub-row is-single">
-                        <td colSpan={manual ? 2 : 1} />
-                        <td colSpan={cols - (manual ? 2 : 1)}>
+                        {t.mb && t.seconds !== null && (
+                          <span className="sub with-badge">
+                            <span className="mb-badge">MB</span>
+                            {t.length === undefined
+                              ? "Matches MusicBrainz"
+                              : `MusicBrainz has ${formatLength(t.seconds)}`}
+                          </span>
+                        )}
+                      </label>
+                      <ArtistsField
+                        n={r.n}
+                        track={t}
+                        known={known}
+                        linked={linked}
+                        placeholder={
+                          ofAlbum
+                            ? `${base.join(", ")} (default for album)`
+                            : creating
+                              ? "Album artist"
+                              : "Artists"
+                        }
+                        error={title ? errs.artists : undefined}
+                        onCommit={(names) =>
+                          setDisc((disc) => {
+                            const row = disc.tracks[i];
+                            row.artists = names.artists;
+                            if (names.feat) row.feat = names.feat;
+                            else delete row.feat;
+                          })
+                        }
+                      />
+                      <LinkFields
+                        di={di}
+                        n={r.n}
+                        errs={errs}
+                        disc={d}
+                        review={review}
+                        setDisc={setDisc}
+                      />
+                      <div className="f wide trk-single">
+                        <span className="with-badge">
+                          <label className="c">
+                            <input
+                              type="checkbox"
+                              checked={!!single}
+                              onChange={(e) => {
+                                const ticked = e.target.checked;
+                                update((s) => {
+                                  const disc = s.discs[di];
+                                  if (ticked) disc.single[r.n] = { date: "", qid: "", discogs: "" };
+                                  else delete disc.single[r.n];
+                                });
+                                if (ticked) setFocusNext({ row: i, col: "single" });
+                              }}
+                            />
+                            Also released as a single
+                          </label>
+                          <InfoTip id={`disc${di}-single-${r.n}`} label="About singles">
+                            Tick a track that was also released as a single. The single becomes its
+                            own item, an instance of single (Q134556) with the track’s title and
+                            artists, that lists the track and is taken from the album. Set the new
+                            single’s release date, or an existing single’s QID to link that one
+                            instead, and its Discogs master ID. Currently, you can only create
+                            singles with one track.
+                          </InfoTip>
+                        </span>
+                        {single && (
                           <SinglePanel
                             di={di}
                             n={r.n}
                             title={r.title}
                             issue={singleIssue(r.n)}
-                            found={
-                              QID.test(single.qid.trim()) ? lookup(single.qid.trim()) : undefined
-                            }
-                            onDone={() => {
-                              openSingle(keys[i], false);
-                              setFocusNext({ row: i, col: "single-edit" });
-                            }}
+                            found={found}
                             {...{ state, update }}
                           />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {artistsAt !== -1 && (
-        <ArtistsDialog
-          n={rows[artistsAt].n}
-          title={d.tracks[artistsAt].title}
-          track={d.tracks[artistsAt]}
-          linked={linked}
-          known={known}
-          placeholder={creating ? "Album artist" : "Artists"}
-          onCommit={(names) =>
-            setDisc((disc) => {
-              const row = disc.tracks[artistsAt];
-              row.artists = names.artists;
-              if (names.feat) row.feat = names.feat;
-              else delete row.feat;
-            })
-          }
-          onClose={() => {
-            setArtistsOf(null);
-            setFocusNext({ row: artistsAt, col: "menu" });
-          }}
-        />
+                        )}
+                      </div>
+                      <div className="trk-foot">
+                        {/* As the closed card's menu is, so the focus can come back here. */}
+                        <button type="button" className="link danger" data-col="menu" onClick={del}>
+                          Delete track
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="trk-title"
+                      data-col="edit"
+                      aria-label={`Edit track ${r.n}${title ? `, ${title}` : ""}`}
+                      onClick={() => openCard(i)}
+                    >
+                      {title || <span className="muted">No title</span>}
+                    </button>
+                    <span className="trk-side">
+                      {lengthText(t) && <span>{lengthText(t)}</span>}
+                      <MbBadge n={r.n} title={r.title} facts={mbOf(i)} />
+                      <RowMenu
+                        label={`Track options for ${title || `track ${r.n}`}`}
+                        items={[
+                          { label: "Edit track", onSelect: () => openCard(i) },
+                          ...(manual && i > 0
+                            ? [{ label: "Move up", onSelect: () => move(i, i - 1) }]
+                            : []),
+                          ...(manual && i < rows.length - 1
+                            ? [{ label: "Move down", onSelect: () => move(i, i + 1) }]
+                            : []),
+                          { label: "Delete track", danger: true, onSelect: del },
+                        ]}
+                      />
+                    </span>
+                    <TrackFacts
+                      facts={[
+                        ...(["comp", "track"] as const)
+                          .filter((k) => linkedTo(k, r.n))
+                          .map((k) => (
+                            <span key={k} className={`link-chip ${k}`}>
+                              <i aria-hidden="true" />
+                              {k === "comp" ? "Composition" : "Track"}{" "}
+                              <WikiLink base={wikiBaseUrl} qid={d[k][r.n].trim()} />
+                            </span>
+                          )),
+                        hasPerformers(performers) && (
+                          <RowArtists
+                            key="who"
+                            performers={performers}
+                            prefixed={base.length > 0}
+                            linked={linked}
+                          />
+                        ),
+                        review && (
+                          <a key="match" className="match-tag" href={`#${groupId(di, r.n)}`}>
+                            {plural(review.candidates.length, "possible match", "possible matches")}{" "}
+                            · review ↓
+                          </a>
+                        ),
+                        single && <SingleTag key="single" single={single} found={found} />,
+                      ]}
+                      issues={issues}
+                    />
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ol>
       )}
       <ConfirmDialog
         confirm={
@@ -692,24 +672,8 @@ function DiscBlock({
           setDeleting(null);
         }}
       />
-      {rows.length > 0 && (base.length > 0 || anyMb) && (
-        <p className="table-note">
-          {base.length > 0 &&
-            (differs
-              ? `Only performers that differ from ${ofAlbum ? (base.length > 1 ? "the album artists" : "the album artist") : "those on every track"} are listed on their rows. `
-              : ofAlbum
-                ? `All performers here are ${base.length > 1 ? "the album artists" : "the album artist"}, so they're not repeated per row. `
-                : "Every track has the same performers, so they're listed once above the table. ")}
-          {anyMb && (
-            <>
-              Click the <span className="mb-badge">MB</span> badge to see its MusicBrainz
-              identifiers.
-            </>
-          )}
-        </p>
-      )}
       <div className="add-track">
-        <button ref={addButton} type="button" className="ghost" onClick={() => add("title")}>
+        <button ref={addButton} type="button" className="ghost" onClick={add}>
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <path
               d="M7 2v10M2 7h10"
@@ -721,18 +685,190 @@ function DiscBlock({
           Add track
         </button>
         <span className="sub">
-          {rows.length ? "Press Enter in the last row to add another. " : ""}
-          Paste a list into a title to add a row per line.
-          {creating ? " Empty artists use the album artist." : ""}
+          {rows.length
+            ? "Click a track, or Edit track in its ⋯ menu, to open it. Enter or Escape closes it. "
+            : ""}
+          Paste a list into a title to add a track per line.
         </span>
       </div>
-      <span id={`${ids}-grip`} hidden>
-        Drag, or press the up and down arrow keys, to move it.
-      </span>
       <p className="visually-hidden" aria-live="polite">
         {said}
       </p>
     </div>
+  );
+}
+
+/**
+ * A closed card's line under its title: what it links, who it credits beyond the
+ * artists above, its matches and single, then what's wrong with it.
+ */
+function TrackFacts({ facts, issues }: { facts: React.ReactNode[]; issues: string[] }) {
+  const id = useId();
+  const shown = facts.filter(Boolean);
+  if (!shown.length && !issues.length) return null;
+  return (
+    <span className="trk-facts">
+      {shown.map((f, k) => (
+        <Fragment key={k}>
+          {k > 0 && (
+            <span className="sep" aria-hidden="true">
+              ·
+            </span>
+          )}
+          {f}
+        </Fragment>
+      ))}
+      {issues.map((msg, k) => (
+        <CellErr key={k} id={`${id}-${k}`}>
+          {msg}
+        </CellErr>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * A row's artists, typed as "A, B feat. C", with the names as they'll be read
+ * under it. They're kept once the field is left.
+ */
+function ArtistsField({
+  n,
+  track,
+  known,
+  linked,
+  placeholder,
+  error,
+  onCommit,
+}: {
+  n: number;
+  track: Track;
+  known: string[];
+  linked: (name: string) => boolean;
+  placeholder: string;
+  error?: string;
+  onCommit: (names: Pick<Track, "artists" | "feat">) => void;
+}) {
+  const ids = useId();
+  const text = artistsText(track);
+  // What's typed, until the field is left.
+  const [draft, setDraft] = useState<string | null>(null);
+  const parsed = parseArtists(draft ?? text, known);
+  const feat = new Set(parsed.feat);
+  return (
+    <div className="f">
+      <label htmlFor={`${ids}-in`}>Artists</label>
+      <input
+        id={`${ids}-in`}
+        type="text"
+        data-col="artists"
+        aria-describedby={`${ids}-hint${error ? ` ${ids}-err` : ""}`}
+        aria-invalid={!!error}
+        placeholder={placeholder}
+        value={draft ?? text}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          if (draft !== null && draft !== text) onCommit(parsed);
+          setDraft(null);
+        }}
+      />
+      <span className="sub" id={`${ids}-hint`}>
+        Separate names with commas, and put featured artists after "feat."
+      </span>
+      {parsed.artists.length > 0 && (
+        <ul className="artists-preview" aria-label={`Track ${n} artists read as`}>
+          {parsed.artists.map((a) => (
+            <li key={a} className={cls("who-chip", !linked(a) && "todo")}>
+              <i aria-hidden="true" />
+              {feat.has(a) && <span className="muted">feat.</span>}
+              {a}
+              {linked(a) ? <span className="visually-hidden">, linked</span> : " · needs QID"}
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <CellErr id={`${ids}-err`}>{error}</CellErr>}
+    </div>
+  );
+}
+
+/** The existing composition and track a row reuses, by QID, and its matches to review. */
+function LinkFields({
+  di,
+  n,
+  errs,
+  disc,
+  review,
+  setDisc,
+}: {
+  di: number;
+  n: number;
+  errs: RowErrs;
+  disc: Disc;
+  review: TrackReview | undefined;
+  setDisc: (fn: (disc: Disc) => void) => void;
+}) {
+  const ids = useId();
+  const kinds = [
+    { k: "comp", name: "Composition", lower: "composition" },
+    { k: "track", name: "Track", lower: "track" },
+  ] as const;
+  const set = (k: "comp" | "track", q: string) =>
+    setDisc((d) => {
+      if (q.trim()) d[k][n] = q.trim();
+      else delete d[k][n];
+    });
+  return (
+    <div className="f wide">
+      <span className="with-badge">
+        Links to existing
+        {review && (
+          <a className="match-tag" href={`#${groupId(di, n)}`}>
+            {plural(review.candidates.length, "possible match", "possible matches")} · review ↓
+          </a>
+        )}
+      </span>
+      <span className="link-fields">
+        {kinds.map(({ k, name, lower }) => (
+          <label key={k} className="f">
+            {name}
+            <QidInput
+              className="mono"
+              placeholder="Q… to reuse one"
+              aria-label={`Track ${n} existing ${lower}`}
+              aria-invalid={!!errs[k]}
+              aria-describedby={errs[k] ? `${ids}-${k}` : undefined}
+              value={disc[k][n] ?? ""}
+              onChange={(q) => set(k, q)}
+            />
+            {errs[k] && <CellErr id={`${ids}-${k}`}>{errs[k]}</CellErr>}
+          </label>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** A track's single, in its closed card: the single it reuses, or the new one's date. */
+function SingleTag({ single: sg, found }: { single: SingleState; found: ItemLookup | undefined }) {
+  const { wikiBaseUrl } = useAuth();
+  const qid = sg.qid.trim();
+  const date = sg.date.trim();
+  return (
+    <span className="single-pill">
+      <i aria-hidden="true" />
+      {QID.test(qid) ? (
+        <span>
+          On the single <WikiLink base={wikiBaseUrl} qid={qid} />
+          {found?.status === "ok" && found.label && ` ${found.label}`}
+          {found?.status === "loading" && <span className="muted"> · looking it up…</span>}
+          {found?.status === "failed" && (
+            <span className="muted"> · couldn’t look it up on Wikidata</span>
+          )}
+        </span>
+      ) : (
+        <span>New single{date ? ` · ${date}` : ""}</span>
+      )}
+    </span>
   );
 }
 
@@ -833,23 +969,20 @@ function PerformerChip({ name, linked }: { name: string; linked: boolean }) {
   );
 }
 
-/**
- * Who a row credits beyond the artists above the table, as chips. Its menu's
- * Edit artists opens a dialog to change them.
- */
+const hasPerformers = (p: ReturnType<typeof rowPerformers>) =>
+  p.only.length + p.with.length + p.feat.length > 0;
+
+/** Who a row credits beyond the artists above the cards, as chips. */
 function RowArtists({
   performers: p,
   prefixed,
   linked,
-  error,
 }: {
   performers: ReturnType<typeof rowPerformers>;
-  /** Whether there are artists above the table that the chips differ from. */
+  /** Whether there are artists above the cards that the chips differ from. */
   prefixed: boolean;
   linked: (name: string) => boolean;
-  error?: string;
 }) {
-  const id = useId();
   const chips = (names: string[]) =>
     names.map((a) => <PerformerChip key={a} name={a} linked={linked(a)} />);
   const groups = [
@@ -858,7 +991,7 @@ function RowArtists({
     p.feat.length > 0 && (["feat.", p.feat] as const),
   ].filter((g) => g !== false);
   return (
-    (groups.length > 0 || error) && (
+    groups.length > 0 && (
       <span className="who">
         {groups.map(([label, names], g) => (
           <Fragment key={label}>
@@ -871,7 +1004,6 @@ function RowArtists({
             {chips(names)}
           </Fragment>
         ))}
-        {error && <CellErr id={`${id}-err`}>{error}</CellErr>}
       </span>
     )
   );
@@ -998,253 +1130,8 @@ function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
 }
 
 /**
- * A modal dialog that edits a row's artists as "A, B feat. C", showing the
- * names as they'll be read. Done or Enter keeps them, and Cancel, Escape or a
- * click on the backdrop drops what was typed. It opens when it mounts, and
- * `onClose` should unmount it.
- */
-function ArtistsDialog({
-  n,
-  title,
-  track,
-  linked,
-  known,
-  placeholder,
-  onCommit,
-  onClose,
-}: {
-  n: number;
-  title: string;
-  track: Track;
-  linked: (name: string) => boolean;
-  known: string[];
-  placeholder: string;
-  onCommit: (names: Pick<Track, "artists" | "feat">) => void;
-  onClose: () => void;
-}) {
-  const ids = useId();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const text = artistsText(track);
-  const [draft, setDraft] = useState(text);
-  useEffect(() => {
-    const d = dialog.current;
-    if (d && !d.open) d.showModal();
-    input.current?.select();
-  }, []);
-  const close = () => dialog.current?.close();
-  const parsed = parseArtists(draft, known);
-  const feat = new Set(parsed.feat);
-  return (
-    <dialog
-      ref={dialog}
-      className="confirm add-item artists-dialog"
-      aria-labelledby={`${ids}-title`}
-      onClose={onClose}
-      // As in ConfirmDialog: a click on the backdrop lands on the <dialog> itself.
-      onClick={(e) => e.target === e.currentTarget && close()}
-    >
-      <form
-        className="confirm-body"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (draft !== text) onCommit(parsed);
-          close();
-        }}
-      >
-        <div className="add-item-head">
-          <h2 id={`${ids}-title`}>Artists · {title.trim() || `Track ${n}`}</h2>
-          <button type="button" className="add-item-x" aria-label="Close" onClick={close}>
-            ×
-          </button>
-        </div>
-        <label className="f">
-          Artists
-          <input
-            ref={input}
-            type="text"
-            data-col="artists"
-            aria-describedby={`${ids}-hint`}
-            placeholder={placeholder}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-        </label>
-        <p id={`${ids}-hint`}>Separate names with commas, and put featured artists after "feat."</p>
-        {parsed.artists.length > 0 && (
-          <ul className="artists-preview" aria-label="Read as">
-            {parsed.artists.map((a) => (
-              <li key={a} className={cls("who-chip", !linked(a) && "todo")}>
-                <i aria-hidden="true" />
-                {feat.has(a) && <span className="muted">feat.</span>}
-                {a}
-                {linked(a) ? <span className="visually-hidden">, linked</span> : " · needs QID"}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="row">
-          <button type="button" className="ghost" onClick={close}>
-            Cancel
-          </button>
-          <button type="submit">Done</button>
-        </div>
-      </form>
-    </dialog>
-  );
-}
-
-/**
- * The existing composition and track a row reuses, as chips. "Link existing…"
- * opens their QID fields, which stay open while one isn't a QID.
- */
-function LinksCell({
-  n,
-  errs,
-  disc,
-  setDisc,
-}: {
-  n: number;
-  errs: RowErrs;
-  disc: Disc;
-  setDisc: (fn: (disc: Disc) => void) => void;
-}) {
-  const { wikiBaseUrl } = useAuth();
-  const ids = useId();
-  const [editing, setEditing] = useState(false);
-  const problem = !!(errs.comp || errs.track);
-  const isOpen = editing || problem;
-  const button = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const wasOpen = useRef(isOpen);
-  useEffect(() => {
-    if (isOpen === wasOpen.current) return;
-    wasOpen.current = isOpen;
-    if (isOpen && editing) panel.current?.querySelector("input")?.focus();
-    if (!isOpen) button.current?.focus();
-  }, [isOpen, editing]);
-
-  const kinds = [
-    { k: "comp", name: "Composition", lower: "composition" },
-    { k: "track", name: "Track", lower: "track" },
-  ] as const;
-  const set = (k: "comp" | "track", q: string) =>
-    setDisc((d) => {
-      if (q.trim()) d[k][n] = q.trim();
-      else delete d[k][n];
-    });
-
-  if (isOpen)
-    return (
-      <div
-        className="links-edit"
-        ref={panel}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !problem) setEditing(false);
-        }}
-      >
-        {kinds.map(({ k, name, lower }) => (
-          <label key={k} className="f">
-            {name}
-            <QidInput
-              placeholder="Q…"
-              aria-label={`Track ${n} existing ${lower}`}
-              aria-invalid={!!errs[k]}
-              aria-describedby={errs[k] ? `${ids}-${k}` : undefined}
-              value={disc[k][n] ?? ""}
-              onChange={(q) => set(k, q)}
-            />
-            {errs[k] && <CellErr id={`${ids}-${k}`}>{errs[k]}</CellErr>}
-          </label>
-        ))}
-        <button
-          type="button"
-          className="ghost small"
-          aria-label={`Done linking track ${n}`}
-          onClick={() => !problem && setEditing(false)}
-        >
-          Done
-        </button>
-      </div>
-    );
-  const linked = kinds.filter(({ k }) => QID.test((disc[k][n] ?? "").trim()));
-  return (
-    <span className="links">
-      {linked.map(({ k, name, lower }) => {
-        const q = disc[k][n].trim();
-        return (
-          <span key={k} className={`link-chip ${k}`}>
-            <i aria-hidden="true" />
-            {name} <WikiLink base={wikiBaseUrl} qid={q} />
-            <button
-              type="button"
-              aria-label={`Unlink ${lower} from track ${n}`}
-              onClick={() => set(k, "")}
-            >
-              ×
-            </button>
-          </span>
-        );
-      })}
-      <button
-        ref={button}
-        type="button"
-        className="link"
-        aria-label={linked.length ? `Edit links for track ${n}` : undefined}
-        onClick={() => setEditing(true)}
-      >
-        {linked.length ? "Edit" : "Link existing…"}
-      </button>
-    </span>
-  );
-}
-
-/** A track's single once its fields are done: "Single · date", or the single it reuses, and Edit. */
-function SinglePill({
-  n,
-  single: sg,
-  found,
-  onEdit,
-}: {
-  n: number;
-  single: SingleState;
-  found: ItemLookup | undefined;
-  onEdit: () => void;
-}) {
-  const { wikiBaseUrl } = useAuth();
-  const qid = sg.qid.trim();
-  return (
-    <span className="single-pill">
-      <i aria-hidden="true" />
-      {QID.test(qid) ? (
-        <span>
-          Single · <WikiLink base={wikiBaseUrl} qid={qid} />
-          {found?.status === "ok" && found.label && ` ${found.label}`}
-          {found?.status === "loading" && <span className="muted"> · looking it up…</span>}
-          {found?.status === "failed" && (
-            <span className="muted"> · couldn’t look it up on Wikidata</span>
-          )}
-        </span>
-      ) : (
-        <span>Single · {sg.date.trim()}</span>
-      )}
-      <button
-        type="button"
-        className="link"
-        data-col="single-edit"
-        aria-label={`Edit single for track ${n}`}
-        onClick={onEdit}
-      >
-        Edit
-      </button>
-    </span>
-  );
-}
-
-/**
- * A track's single's fields, on their own row under the track: a release
- * date for a new single or an existing single's QID, and its Discogs master
- * ID. Done only closes them once nothing is wrong with them.
+ * A track's single's fields, in its open card: a release date for a new
+ * single or an existing single's QID, and its Discogs master ID.
  */
 function SinglePanel({
   di,
@@ -1252,7 +1139,6 @@ function SinglePanel({
   title,
   issue,
   found,
-  onDone,
   state,
   update,
 }: Pick<SectionProps, "state" | "update"> & {
@@ -1262,22 +1148,17 @@ function SinglePanel({
   /** What's wrong with the fields, or "". */
   issue: string;
   found: ItemLookup | undefined;
-  onDone: () => void;
 }) {
   const sg = state.discs[di].single[n];
   const qid = sg.qid.trim();
   const date = sg.date.trim();
   const discogs = sg.discogs.trim();
   const ids = useId();
-  const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    panel.current?.querySelector<HTMLInputElement>("input:enabled")?.focus();
-  }, []);
   const blank = qid === "" && date === "" && discogs === "";
   const existing = QID.test(qid);
 
   return (
-    <div className="single-panel" ref={panel}>
+    <div className="single-panel">
       <div className="single-head">
         <span className="sw" aria-hidden="true" />
         {existing ? (
@@ -1294,6 +1175,7 @@ function SinglePanel({
           Release date
           <input
             type="text"
+            data-col="single"
             spellCheck={false}
             placeholder={qid ? "Not for an existing single" : "YYYY-MM-DD"}
             aria-invalid={date !== "" && !parseDate(date).ok}
@@ -1363,15 +1245,6 @@ function SinglePanel({
             Singles can only have one track for now.
           </span>
         </span>
-        <button
-          type="button"
-          className="ghost small"
-          aria-label={`Done editing single for track ${n}`}
-          aria-disabled={!!issue}
-          onClick={() => !issue && onDone()}
-        >
-          Done
-        </button>
       </div>
     </div>
   );
@@ -1618,21 +1491,6 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
         </div>
       )}
     </>
-  );
-}
-
-function MatchFlag({ review }: { review: TrackReview }) {
-  const n = review.candidates.length;
-  const what = `${n} possible match${n === 1 ? "" : "es"}`;
-  return (
-    <a
-      className="match-flag"
-      href={`#${groupId(review.di, review.n)}`}
-      aria-label={`Track ${review.n}: ${what} to review`}
-      title={`${what}. Review under Possible matches`}
-    >
-      <span aria-hidden="true" />
-    </a>
   );
 }
 
