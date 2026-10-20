@@ -86,16 +86,18 @@ export default function MusicBrainzImport({
   // is loading, and only the latest may change the form.
   const latest = useRef(0);
   // Clearing the form remounts this, and a load still going mustn't fill the cleared form.
-  useEffect(
-    () => () => {
-      latest.current++;
-    },
-    [],
-  );
+  // StrictMode's dev remount sets this back, so a load started at mount carries on.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const run = async (what: string, fn: (current: () => boolean) => Promise<void>) => {
     const id = ++latest.current;
-    const current = () => latest.current === id;
+    const current = () => mounted.current && latest.current === id;
     setError("");
     setBusy(true);
     try {
