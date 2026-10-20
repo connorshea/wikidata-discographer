@@ -63,6 +63,24 @@ describe("coerceState", () => {
     expect(dropped.mb).not.toHaveProperty("attributes");
   });
 
+  it("keeps a track's own language, a QID typed in and the work's languages", () => {
+    const [own, typed, none] = coerceState({
+      discs: [
+        {
+          tracks: [
+            { n: 1, title: "A", lang: "Q5287", mb: { languages: ["Q1860", "eng", 5] } },
+            { n: 2, title: "B", lang: "Q", langCustom: true },
+            { n: 3, title: "C", lang: 4, langCustom: "yes" },
+          ],
+        },
+      ],
+    }).discs[0].tracks;
+    expect(own).toMatchObject({ lang: "Q5287", mb: { languages: ["Q1860"] } });
+    expect(typed).toMatchObject({ lang: "Q", langCustom: true });
+    expect(none).not.toHaveProperty("lang");
+    expect(none).not.toHaveProperty("langCustom");
+  });
+
   it("drops mistyped values", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },
