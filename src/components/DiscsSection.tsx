@@ -973,6 +973,11 @@ function TrackLang({
       >
         <option value="">{`${langNames(fallback.qids)} (${LANG_SOURCES[fallback.from ?? "album"]})`}</option>
         {same !== "" && <option value="none">None</option>}
+        {same !== NO_LINGUISTIC_CONTENT && (
+          <optgroup label="Instrumental">
+            <option value={NO_LINGUISTIC_CONTENT}>No linguistic content</option>
+          </optgroup>
+        )}
         <optgroup label="Languages">
           {LANGS.filter(([q]) => q !== same).map(([q, l]) => (
             <option key={q} value={q}>
@@ -980,11 +985,6 @@ function TrackLang({
             </option>
           ))}
         </optgroup>
-        {same !== NO_LINGUISTIC_CONTENT && (
-          <optgroup label="Instrumental">
-            <option value={NO_LINGUISTIC_CONTENT}>No linguistic content</option>
-          </optgroup>
-        )}
         <option value="other">Other QID…</option>
       </select>
       {value === "other" && (
