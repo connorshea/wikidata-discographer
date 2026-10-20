@@ -249,9 +249,7 @@ export default function SettingsSection({
                   onChange={(e) => set("p407", normalizeQid(e.target.value))}
                 />
               )}
-              <span className="sub">
-                Added to a new album and compositions. Change it per track in Tracks
-              </span>
+              <span className="sub">Added to a new album and compositions.</span>
               <FieldErr id="p407" msg={errs.p407} />
             </div>
           </div>
