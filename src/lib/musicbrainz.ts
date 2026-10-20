@@ -648,12 +648,13 @@ export function releaseToForm(
   const toExtend = { recordings: 0, works: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
-    // By its place on the release, so a medium left out for having no tracks doesn't shift
-    // the parts of those after it.
-    if (release.media.length > 1) {
-      const at = m.position || i + 1;
-      disc.part = parts[at - 1] ?? "";
-      if (!disc.part) notes.push(`Disc ${at} has no part. Choose one under Discs.`);
+    if (media.length > 1) {
+      // A medium left out for having no tracks still takes its place when it's the same
+      // format, a CD with no tracklist in a set of CDs say. A DVD left out of a CD set doesn't.
+      const before = release.media.slice(0, release.media.indexOf(m));
+      const at = before.filter((o) => o.tracks?.length || o.format === m.format).length;
+      disc.part = parts[at] ?? "";
+      if (!disc.part) notes.push(`Disc ${i + 1} has no part. Choose one under Discs.`);
     }
     disc.tracks = m.tracks!.map((t): Track => {
       addCredit(t["artist-credit"]);

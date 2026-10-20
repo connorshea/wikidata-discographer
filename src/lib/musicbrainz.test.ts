@@ -963,13 +963,21 @@ describe("releaseToForm", () => {
     expect(form.report.notes[0]).toBe("1 medium has no tracks on MusicBrainz and was left out.");
   });
 
-  it("gives each disc the part of its place on the release, after a medium left out", () => {
+  it("counts a CD left out for having no tracks when giving the CDs after it their parts", () => {
     const r = release();
-    r.media[0].tracks = [];
-    expect(releaseToForm(r, NONE).discs.map((d) => d.part)).toEqual(["Q61629680"]);
     r.media = [release().media[0], { position: 2, format: "CD", tracks: [] }, release().media[1]];
     r.media[2].position = 3;
+    for (const m of r.media) m.format = "CD";
     expect(releaseToForm(r, NONE).discs.map((d) => d.part)).toEqual(["Q61629664", "Q61747994"]);
+  });
+
+  it("doesn't count a DVD left out for having no tracks", () => {
+    const r = release();
+    r.media = [{ position: 1, format: "DVD-Video", tracks: [] }, ...release().media];
+    r.media.forEach((m, i) => (m.position = i + 1));
+    expect(releaseToForm(r, NONE).discs.map((d) => d.part)).toEqual(["Q61629664", "Q61629680"]);
+    r.media = r.media.slice(0, 2);
+    expect(releaseToForm(r, NONE).discs.map((d) => d.part)).toEqual([""]);
   });
 });
 
