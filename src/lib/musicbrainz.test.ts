@@ -7,6 +7,7 @@ import {
   type MbLookups,
   type MbRelease,
   type MbReleaseListing,
+  type MbTrack,
   parseMbInput,
   releaseChoices,
   releaseIds,
@@ -568,6 +569,51 @@ describe("releaseToForm", () => {
       const r = withIswcs("T-345.246.800-1", "T-345.246.801-2");
       const byIswc = { ...NONE, iswcs: { "T-345.246.801-2": "Q30" } };
       expect(releaseToForm(r, byIswc).discs[0].comp).toEqual({ "1": "Q30" });
+    });
+  });
+
+  describe("identifiers on more than one recording or work", () => {
+    const [first, second] = RELEASE.media[0].tracks!;
+    const workRel = (t: MbTrack) => t.recording.relations!.find((x) => x.work)!;
+
+    it("go on neither track, with a note", () => {
+      const r = release();
+      r.media[0].tracks![1].recording.isrcs = ["USUM72604366"];
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].tracks[0].mb!.isrcs).toEqual([]);
+      expect(form.discs[0].tracks[1].mb!.isrcs).toEqual([]);
+      expect(form.report.notes).toContain(
+        `1 identifier is on more than one recording or work on MusicBrainz, so no new item gets it: ISRC USUM72604366 (1.${first.position} “${first.title}” and 1.${second.position} “${second.title}”).`,
+      );
+      expect(form.report.added.tracks).toContainEqual({ label: "ISRCs", n: 4 });
+    });
+
+    it("name each track by its row when they share a title", () => {
+      const r = release();
+      r.media[0].tracks![1].title = first.title;
+      r.media[0].tracks![1].recording.isrcs = ["USUM72604366"];
+      const form = releaseToForm(r, NONE);
+      expect(form.report.notes.join(" ")).toContain(
+        `(1.${first.position} “${first.title}” and 1.${second.position} “${first.title}”)`,
+      );
+    });
+
+    it("go on neither composition when two works have the same ISWC", () => {
+      const r = release();
+      for (const t of r.media[0].tracks!.slice(0, 2)) workRel(t).work!.iswcs = ["T-345.246.800-1"];
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].tracks[0].mb!.iswcs).toEqual([]);
+      expect(form.discs[0].tracks[1].mb!.iswcs).toEqual([]);
+      expect(form.report.notes.join(" ")).toContain("ISWC T-345.246.800-1");
+    });
+
+    it("stay on a recording that's on the release twice", () => {
+      const r = release();
+      r.media[0].tracks![1].recording = structuredClone(r.media[0].tracks![0].recording);
+      const form = releaseToForm(r, NONE);
+      expect(form.discs[0].tracks[1].mb!.isrcs).toEqual(["USUM72604366"]);
+      expect(form.discs[0].tracks[1].mb!.spotify).toEqual(["6HSinPEEP7FeS2k1y7BD7j"]);
+      expect(form.report.notes.join(" ")).not.toContain("more than one recording");
     });
   });
 
