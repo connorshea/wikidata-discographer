@@ -2,7 +2,15 @@ import { describe, expect, it } from "vite-plus/test";
 import type { SubmissionInfo } from "./api-types.ts";
 import { EXAMPLE } from "./example.fixture.ts";
 import { buildPlan, describeOp } from "./plan.ts";
-import { editShares, entryKind, runEdits, runProgress, startedAt, timeLeft } from "./run-view.ts";
+import {
+  editShares,
+  entryKind,
+  roughly,
+  runEdits,
+  runProgress,
+  startedAt,
+  timeLeft,
+} from "./run-view.ts";
 
 const plan = buildPlan(EXAMPLE);
 const edits = runEdits(plan, EXAMPLE);
@@ -112,5 +120,13 @@ describe("startedAt", () => {
     const at = startedAt("2026-10-17 10:00:00", new Date("2026-10-17T12:00:00Z"));
     expect(at).not.toContain("·");
     expect(startedAt("2026-10-01 10:00:00", new Date("2026-10-17T12:00:00Z"))).toContain(" · ");
+  });
+});
+
+describe("roughly", () => {
+  it("rounds to the minute, in lower case for the middle of a sentence", () => {
+    expect(roughly(20)).toBe("less than a minute");
+    expect(roughly(70)).toBe("about a minute");
+    expect(roughly(200)).toBe("about 3 minutes");
   });
 });

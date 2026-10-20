@@ -36,8 +36,10 @@ import {
   entryKind,
   KIND_EDGES,
   plannedEdits,
+  roughly,
   runEdits,
   runProgress,
+  runSeconds,
   startedAt,
   timeLeft,
 } from "../lib/run-view.ts";
@@ -437,9 +439,8 @@ export default function RunSection({
                     {label}
                   </button>
                   <p className="hint">
-                    You'll confirm once more before anything is written. Edits go out a few seconds
-                    apart, grouped in one EditGroup so the whole run can be reviewed or undone
-                    together.
+                    Please make sure you've checked your tracklist for correctness. Edits will take{" "}
+                    {roughly(runSeconds(edits))}.
                   </p>
                 </div>
                 {staleHint}
