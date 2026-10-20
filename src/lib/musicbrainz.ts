@@ -155,7 +155,7 @@ export interface MbRelation {
   type: string;
   "target-type": string;
   url?: { resource: string };
-  artist?: { id: string; name: string };
+  artist?: { id: string; name: string; disambiguation?: string };
   work?: {
     id: string;
     title: string;
@@ -486,13 +486,16 @@ const WRITER_ROLES: Record<string, "composers" | "lyricists"> = {
 };
 
 /** The composers and lyricists of a track's composition, as `workOf` picks it, each once. */
-function writersOf(t: MbTrack): { composers: MbWriter[]; lyricists: MbWriter[] } {
+function writersOf(
+  t: MbTrack,
+  /** The name to list the writer under, the one on MusicBrainz unless it's given. */
+  nameOf: (artist: NonNullable<MbRelation["artist"]>) => string = (a) => a.name.trim(),
+): { composers: MbWriter[]; lyricists: MbWriter[] } {
   const out = { composers: new Map<string, MbWriter>(), lyricists: new Map<string, MbWriter>() };
   for (const r of theWork(t)?.relations ?? []) {
     const role = Object.hasOwn(WRITER_ROLES, r.type) ? WRITER_ROLES[r.type] : undefined;
-    const name = r.artist?.name.trim();
-    if (role && r["target-type"] === "artist" && r.artist && name)
-      out[role].set(r.artist.id, { id: r.artist.id, name });
+    if (role && r["target-type"] === "artist" && r.artist && r.artist.name.trim())
+      out[role].set(r.artist.id, { id: r.artist.id, name: nameOf(r.artist) });
   }
   return { composers: [...out.composers.values()], lyricists: [...out.lyricists.values()] };
 }
@@ -562,6 +565,27 @@ export function releaseToForm(
 
   // Discs: one per medium with tracks.
   const media = release.media.filter((m) => m.tracks?.length);
+
+  // The MusicBrainz artist each name stands for. A writer who shares a name with another
+  // artist, a performer say, is listed under their own, so they don't get that one's QID.
+  const nameOwner = new Map<string, string>();
+  const credits = media.flatMap((m) => m.tracks!.flatMap((t) => t["artist-credit"]));
+  for (const c of [...release["artist-credit"], ...credits])
+    if (!nameOwner.has(c.name.trim())) nameOwner.set(c.name.trim(), c.artist.id);
+  const writerNames = new Map<string, string>();
+  const writerName = (a: NonNullable<MbRelation["artist"]>) => {
+    const known = writerNames.get(a.id);
+    if (known) return known;
+    const name = a.name.trim();
+    const free = (n: string) => (nameOwner.get(n) ?? a.id) === a.id;
+    const disambiguated = a.disambiguation?.trim() && `${name} (${a.disambiguation.trim()})`;
+    let listed = [name, disambiguated].find((n) => n && free(n));
+    for (let i = 2; !listed; i++) if (free(`${name} (${i})`)) listed = `${name} (${i})`;
+    nameOwner.set(listed, a.id);
+    writerNames.set(a.id, listed);
+    return listed;
+  };
+
   if (media.length < release.media.length)
     notes.push(
       `${plural(release.media.length - media.length, "medium has", "media have")} no tracks on MusicBrainz and ${release.media.length - media.length === 1 ? "was" : "were"} left out.`,
@@ -601,7 +625,7 @@ export function releaseToForm(
     disc.tracks = m.tracks!.map((t): Track => {
       addCredit(t["artist-credit"]);
       const work = workOf(t);
-      const writers = writersOf(t);
+      const writers = writersOf(t, writerName);
       const attributes = attributesOf(t);
       const languages = languagesOf(t);
       const recorded = recordedOf(t);
@@ -677,8 +701,7 @@ export function releaseToForm(
       newComp: !lookups.works[work],
     })),
   );
-  // One linked under the same name, as a performer say, is linked after all.
-  const unlinked = [...new Set(unlinkedWriters.values())].filter((name) => !(name in artists));
+  const unlinked = [...new Set(unlinkedWriters.values())];
   if (unlinked.length)
     notes.push(
       `${plural(unlinked.length, "composer or lyricist has", "composers and lyricists have")} no Wikidata item with their MusicBrainz artist ID: ${joinList(unlinked)}. Link them under People, or the compositions won't name them.`,

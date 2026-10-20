@@ -311,10 +311,10 @@ describe("releaseToForm", () => {
     const BERGER = "ffadf26a-2593-4eaf-8c5d-a54cbc5aedc5";
     const KAPARI = "0d32b53d-6d72-4eea-9009-eca2cf7c11a8";
     const NOONIE = "e292bc5a-ee7f-4160-97d5-d175983421ab";
-    const rel = (type: string, id: string, name: string) => ({
+    const rel = (type: string, id: string, name: string, disambiguation = "") => ({
       type,
       "target-type": "artist",
-      artist: { id, name },
+      artist: { id, name, disambiguation },
     });
     const withWriters = () => {
       const r = release();
@@ -353,6 +353,42 @@ describe("releaseToForm", () => {
       });
       expect(linked.artists).toEqual({ "Carly Rae Jepsen": "Q52583", "Patrik Berger": "Q7146018" });
       expect(linked.report.notes.join(" ")).not.toContain("composer");
+    });
+
+    describe("who share a name with another artist", () => {
+      const OTHER = "8b8a38a9-a290-4560-84f6-3d4466e8d791";
+      const sharing = (disambiguation?: string) => {
+        const r = withWriters();
+        r.media[0].tracks![0].recording.relations!.find((x) => x.work)!.work!.relations = [
+          rel("composer", OTHER, "Carly Rae Jepsen", disambiguation),
+        ];
+        return r;
+      };
+
+      it("are listed under their disambiguation, and don't get the other's QID", () => {
+        const form = releaseToForm(sharing("composer"), { ...NONE, artists: { [CRJ]: "Q52583" } });
+        expect(form.discs[0].tracks[0].mb?.composers).toEqual([
+          { id: OTHER, name: "Carly Rae Jepsen (composer)" },
+        ]);
+        expect(form.artists).toEqual({ "Carly Rae Jepsen": "Q52583" });
+        expect(form.report.notes.join(" ")).toContain(
+          "no Wikidata item with their MusicBrainz artist ID: Carly Rae Jepsen (composer)",
+        );
+      });
+
+      it("are numbered when theirs is empty", () => {
+        const form = releaseToForm(sharing(), {
+          ...NONE,
+          artists: { [CRJ]: "Q52583", [OTHER]: "Q1" },
+        });
+        expect(form.discs[0].tracks[0].mb?.composers).toEqual([
+          { id: OTHER, name: "Carly Rae Jepsen (2)" },
+        ]);
+        expect(form.artists).toEqual({
+          "Carly Rae Jepsen": "Q52583",
+          "Carly Rae Jepsen (2)": "Q1",
+        });
+      });
     });
   });
 
