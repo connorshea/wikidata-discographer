@@ -42,8 +42,11 @@ export default function AlbumList() {
   useEffect(() => {
     if (loading) return;
     const ctl = new AbortController();
+    // A Show more clicked while this loads used the last filter's cursor.
+    const settle = () => more.current?.abort();
     fetchAlbums(null, onlyMine, ctl.signal)
       .then((r) => {
+        settle();
         setAlbums(r.albums);
         setNext(r.next);
         setError(null);
@@ -51,6 +54,10 @@ export default function AlbumList() {
       })
       .catch((e: unknown) => {
         if (ctl.signal.aborted) return;
+        settle();
+        // The last filter's albums and cursor would let Show more mix the two.
+        setAlbums([]);
+        setNext(null);
         setError(errorText(e));
         setBusy(false);
       });
