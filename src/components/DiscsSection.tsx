@@ -816,9 +816,9 @@ function Writers({
     ["Lyricists", track.mb?.lyricists ?? []],
   ] as const;
   if (groups.every(([, ws]) => !ws.length)) return null;
-  const note = !linkedComp
-    ? "Added to the new composition. Writers that aren't linked in People are left off."
-    : "The linked composition only gets the ones it doesn't have yet.";
+  const note = linkedComp
+    ? null
+    : "Added to the new composition. Writers that aren't linked in People are left off.";
   return (
     <div className="f wide">
       <span className="with-badge">
@@ -839,7 +839,7 @@ function Writers({
             ),
         )}
       </dl>
-      <span className="sub">{note}</span>
+      {note && <span className="sub">{note}</span>}
     </div>
   );
 }
