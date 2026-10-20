@@ -14,6 +14,7 @@ import {
   normalizeDate,
   normalizeQid,
   type Claim,
+  type MbRowIds,
   type Op,
   PARTS,
 } from "./plan.ts";
@@ -179,6 +180,107 @@ describe("buildPlan", () => {
       const state = instrumental(structuredClone(EXAMPLE));
       state.settings.mbDetails = false;
       expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
+    });
+  });
+
+  describe("languages", () => {
+    const langsOf = (state: typeof EXAMPLE, key: string) => {
+      const op = find(buildPlan(state).ops, key) as { claims: Claim[] };
+      return op.claims.filter((c) => c.property === "P407");
+    };
+    const ids = (more: Partial<MbRowIds>): MbRowIds => ({
+      recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+      work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+      recordingName: "",
+      workName: "",
+      iswcs: [],
+      isrcs: [],
+      spotify: [],
+      appleMusic: [],
+      deezer: [],
+      tidal: [],
+      composers: [],
+      lyricists: [],
+      source: {
+        recording: "519d8f15-518b-479c-af8d-664fb3ae455a",
+        work: "c8ee496c-48f7-456a-b5e6-b206eeb37726",
+        retrieved: "2026-10-04",
+      },
+      ...more,
+    });
+
+    it("gives a composition its track's own language, or none", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].p407 = "Q5287";
+      state.discs[0].tracks[2].p407 = "";
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q5287" },
+      ]);
+      expect(langsOf(state, "comp:0:3")).toEqual([]);
+      expect(langsOf(state, "comp:0:4").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1860" },
+      ]);
+    });
+
+    it("uses the work's languages on MusicBrainz, cited to the work", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].mb = ids({ languages: ["Q1321", "Q1860"] });
+      const claims = langsOf(state, "comp:0:2");
+      expect(claims.map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1321" },
+        { type: "item", id: "Q1860" },
+      ]);
+      expect(claims[0].references?.[0]).toContainEqual({
+        property: "P435",
+        value: { type: "string", value: "c8ee496c-48f7-456a-b5e6-b206eeb37726" },
+      });
+      state.settings.mbDetails = false;
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1860" },
+      ]);
+    });
+
+    it("gives a track without lyrics no linguistic content, unless the work has a language", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].type = "Q55850643";
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q22282939" },
+      ]);
+      state.discs[0].tracks[1].mb = ids({ languages: ["Q1860"] });
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1860" },
+      ]);
+    });
+
+    it("leaves a track without lyrics with no language when the album has none", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.p407 = "";
+      state.discs[0].tracks[1].type = "Q55850643";
+      expect(langsOf(state, "comp:0:2")).toEqual([]);
+    });
+
+    it("doesn't give a track with vocals no linguistic content", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].type = "Q55850593";
+      state.discs[0].tracks[1].mb = ids({ languages: ["Q22282939"] });
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1860" },
+      ]);
+      Object.assign(state.settings, { p407: "Q22282939", trackType: "Q55850643" });
+      expect(langsOf(state, "comp:0:2")).toEqual([]);
+      expect(langsOf(state, "comp:0:3").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q22282939" },
+      ]);
+    });
+
+    it("needs a QID for a language typed in", () => {
+      const state = structuredClone(EXAMPLE);
+      Object.assign(state.discs[0].tracks[1], { p407: "", p407Custom: true });
+      Object.assign(state.discs[0].tracks[2], { p407: "Finnish", p407Custom: true });
+      const plan = buildPlan(state);
+      expect(plan.rowErrs["0:2"].lang).toBe("Enter a QID, or choose another language.");
+      expect(plan.rowErrs["0:3"].lang).toBe(`"Finnish" isn't a QID (e.g. Q1860).`);
+      expect(plan.ready).toBe(false);
     });
   });
 

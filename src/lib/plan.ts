@@ -139,6 +139,11 @@ export interface MbRowIds {
    */
   attributes?: MbAttribute[];
   /**
+   * The work's languages, as P407 values, of those the form lists. Left out when
+   * MusicBrainz has none, or one the form doesn't list.
+   */
+  languages?: string[];
+  /**
    * The recording, work and day the import came from, for the references on the
    * duration, identifiers and writers. Kept even when an item already has the recording
    * or work ID. `work` is left out when the track has no work.
@@ -169,6 +174,12 @@ export interface Track {
   mb: MbRowIds | null;
   /** Its P31, one of `TRACK_TYPES`, when it's not the one `trackTypeOf` gives it. */
   type?: string;
+  /**
+   * Its composition's P407, when it's not the one `trackLangOf` gives it. Empty for none.
+   * `p407Custom` is set while it's a QID typed in, which may not be valid yet.
+   */
+  p407?: string;
+  p407Custom?: boolean;
 }
 
 export interface Disc {
@@ -242,7 +253,9 @@ export type Op =
     };
 
 /** What's wrong with a row, by the cell it's fixed in. */
-export type RowErrs = Partial<Record<"title" | "artists" | "length" | "comp" | "track", string>>;
+export type RowErrs = Partial<
+  Record<"title" | "artists" | "length" | "comp" | "track" | "lang", string>
+>;
 
 export type MsgKind = "err" | "warn" | "ok";
 export type Msg = [MsgKind, string];
@@ -302,6 +315,7 @@ export const TRACK_TYPES = [
   ["Q55850643", "music track without lyrics"],
   ["Q7302866", "audio track"],
 ] as const;
+export const WITH_VOCALS = "Q55850593";
 export const WITHOUT_LYRICS = "Q55850643";
 
 /** The attributes of a performance relation on MusicBrainz that the form reads. */
@@ -346,6 +360,38 @@ export const LANGS = [
 ] as const;
 export const NO_LINGUISTIC_CONTENT = "Q22282939";
 const KNOWN_LANGS = new Set<string>([...LANGS.map(([q]) => q), NO_LINGUISTIC_CONTENT]);
+
+/** Where a track's language comes from, when it isn't its own. */
+/** "type" is no linguistic content for a track without lyrics, "vocals" none for one with. */
+export type LangSource = "album" | "mb" | "type" | "vocals";
+
+/**
+ * A track's composition's P407 values: its own, or else the work's on MusicBrainz, or else
+ * the album's. A track's type wins over a language that says otherwise: one without lyrics
+ * on an album with a language has no linguistic content, and one with vocals doesn't take
+ * no linguistic content from MusicBrainz or the album. Values that aren't QIDs are left out.
+ */
+export function trackLangOf(
+  S: Settings,
+  t: Pick<Track, "type" | "mb" | "p407">,
+): { qids: string[]; from: LangSource | null } {
+  const valid = (qs: string[]) => qs.map((q) => q.trim()).filter((q) => QID.test(q));
+  if (t.p407 !== undefined) return { qids: valid([t.p407]), from: null };
+  const type = trackTypeOf(S, t).qid;
+  const mb = S.mbDetails ? valid(t.mb?.languages ?? []) : [];
+  if (mb.length && !(type === WITH_VOCALS && mb.includes(NO_LINGUISTIC_CONTENT)))
+    return { qids: mb, from: "mb" };
+  const album = valid([S.p407]);
+  const wordless = album.includes(NO_LINGUISTIC_CONTENT);
+  if (type === WITHOUT_LYRICS && album.length && !wordless)
+    return { qids: [NO_LINGUISTIC_CONTENT], from: "type" };
+  if (type === WITH_VOCALS && wordless) return { qids: [], from: "vocals" };
+  return { qids: album, from: "album" };
+}
+
+/** Whether a track's own language is a QID typed in, rather than one the form lists. */
+export const isCustomTrackLang = (t: Pick<Track, "p407" | "p407Custom">) =>
+  !!t.p407Custom || (!!t.p407?.trim() && !KNOWN_LANGS.has(t.p407.trim()));
 
 export const LABEL_LANGS = [
   ["ar", "Arabic"],
@@ -859,6 +905,12 @@ export function buildPlan(state: State): Plan {
       if (r.length !== undefined && !parseLength(r.length).ok) errs.length = "Use m:ss";
       if (ec && !QID.test(ec)) errs.comp = `"${ec}" isn't a QID.`;
       if (et && !QID.test(et)) errs.track = `"${et}" isn't a QID.`;
+      // An existing composition keeps its language, so what's typed for it doesn't matter.
+      const ownLang = r.p407?.trim() ?? "";
+      if (isCustomTrackLang(r) && !QID.test(ec)) {
+        if (!ownLang) errs.lang = "Enter a QID, or choose another language.";
+        else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
+      }
       if (Object.keys(errs).length) rowErrs[`${di}:${r.n}`] = errs;
       let single: PlanItem["single"] = null;
       const sg = d.single[r.n];
@@ -1040,6 +1092,13 @@ export function buildPlan(state: State): Plan {
       ...mb.tidal.map((v) => cited("P4578", v)),
     ];
   };
+  // A language from MusicBrainz is cited to the work, as the writers are.
+  const langClaims = (it: PlanItem): Claim[] => {
+    const { qids, from } = trackLangOf(S, it.r);
+    const src = it.r.mb?.source;
+    const cite = from === "mb" && src?.work ? statedInMb("P435", src.work, src.retrieved) : {};
+    return qids.map((q) => ({ ...claim("P407", item(q)), ...cite }));
+  };
   // Cited to the work, which is what MusicBrainz states them on.
   const writerClaims = (it: PlanItem): Claim[] => {
     const src = it.r.mb?.source;
@@ -1124,7 +1183,7 @@ export function buildPlan(state: State): Plan {
         title(it.r.title),
         ...perf,
         ...writerClaims(it),
-        ...workLang,
+        ...langClaims(it),
         ...work,
         ...(it.r.mb?.iswcs.map((v) => ({ ...str("P1827", v), ...mbRef(it.r.mb) })) ?? []),
       ],

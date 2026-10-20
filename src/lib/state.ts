@@ -109,6 +109,7 @@ const isTrackType = (v: unknown): v is string => TRACK_TYPES.some(([q]) => q ===
 
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
+  const languages = strList(ids.languages, /^Q\d+$/);
   const attributes = MB_ATTRIBUTES.filter(
     (a) => Array.isArray(ids.attributes) && ids.attributes.includes(a),
   );
@@ -126,6 +127,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     composers: writers(ids.composers),
     lyricists: writers(ids.lyricists),
     ...(attributes.length ? { attributes } : {}),
+    ...(languages.length ? { languages } : {}),
     // Forms saved before identifiers had references kept the source with the length.
     source: coerceSource(ids.source ?? ids.length),
   };
@@ -149,6 +151,8 @@ function coerceTrack(t: Obj): Track | null {
     ...(typeof t.length === "string" ? { length: t.length } : {}),
     mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
     ...(isTrackType(t.type) ? { type: t.type } : {}),
+    ...(typeof t.p407 === "string" ? { p407: t.p407 } : {}),
+    ...(t.p407Custom === true ? { p407Custom: true } : {}),
   };
 }
 

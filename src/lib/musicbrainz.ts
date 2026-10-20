@@ -152,7 +152,14 @@ export interface MbRelation {
   "target-type": string;
   url?: { resource: string };
   artist?: { id: string; name: string };
-  work?: { id: string; title: string; iswcs?: string[]; relations?: MbRelation[] };
+  work?: {
+    id: string;
+    title: string;
+    iswcs?: string[];
+    /** ISO 639-3 codes, "zxx" for none and "mul" for several. */
+    languages?: string[];
+    relations?: MbRelation[];
+  };
   /** What the relation says about it, e.g. "live" or "cover" on a recording's performance of a work. */
   attributes?: string[];
 }
@@ -418,6 +425,17 @@ function performances(t: MbTrack) {
 }
 
 /**
+ * A track's work's languages, as P407 values, or none if MusicBrainz has one the form doesn't
+ * list. A work with words in some language has linguistic content, whatever else it says.
+ */
+function languagesOf(t: MbTrack): string[] {
+  const codes = (theWork(t)?.languages ?? []).filter((c) => c !== "mul");
+  const spoken = codes.some((c) => c !== "zxx") ? codes.filter((c) => c !== "zxx") : codes;
+  const qids = spoken.map((c) => LANGUAGES[c]);
+  return qids.every(Boolean) ? [...new Set(qids)] : [];
+}
+
+/**
  * What a track's performance relations say about the recording, of the attributes the form
  * reads. A medley performs several works, so an attribute counts when every one of them has it.
  */
@@ -557,6 +575,7 @@ export function releaseToForm(
       const work = workOf(t);
       const writers = writersOf(t);
       const attributes = attributesOf(t);
+      const languages = languagesOf(t);
       addWriters([...writers.composers, ...writers.lyricists]);
       if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
         misplaced.set(work, t.title.trim());
@@ -585,6 +604,7 @@ export function releaseToForm(
         tidal: trackLinkOf(t, "tidal").filter((v) => !taken.has(v)),
         ...writers,
         ...(attributes.length ? { attributes } : {}),
+        ...(languages.length ? { languages } : {}),
         source: { recording: t.recording.id, ...(work ? { work } : {}), retrieved },
       };
       if (disc.track[t.position]) toExtend.recordings += ids.recording ? 1 : 0;
