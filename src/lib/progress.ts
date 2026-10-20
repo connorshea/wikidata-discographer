@@ -41,8 +41,6 @@ export interface ProgressInput {
   hasTracklist: boolean;
   /** The existing album's QID can't be used: it doesn't exist, redirects, or isn't an album or EP. */
   notAlbum: boolean;
-  /** An existing single's QID can't be used: it doesn't exist, redirects, or isn't a single. */
-  notSingle: boolean;
   running: RunningInfo | null;
 }
 
@@ -227,7 +225,7 @@ export function settingsPills(S: Settings): string[] {
 
 /** The rail's steps, in page order. */
 export function railSteps(p: ProgressInput): Step[] {
-  const { state, plan, unreviewed, hasTracklist, notAlbum, notSingle, running } = p;
+  const { state, plan, unreviewed, hasTracklist, notAlbum, running } = p;
   const S = state.settings;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const discCount = plan.tracks.filter((rows) => rows.length).length;
@@ -271,9 +269,7 @@ export function railSteps(p: ProgressInput): Step[] {
             ...(unreviewed ? [`${unreviewed} to review`] : []),
           ].join(" · ")
         : "No tracks yet",
-      status: trackCount
-        ? status(blockedAt(plan, "tracks") || notSingle || unreviewed > 0, true)
-        : "pending",
+      status: trackCount ? status(blockedAt(plan, "tracks") || unreviewed > 0, true) : "pending",
     },
     {
       id: "performers",
@@ -292,7 +288,7 @@ export function railSteps(p: ProgressInput): Step[] {
           : "Running"
         : !trackCount
           ? "Nothing to create yet"
-          : plan.ready && !unreviewed && !hasTracklist && !notAlbum && !notSingle
+          : plan.ready && !unreviewed && !hasTracklist && !notAlbum
             ? `Ready · ${plural(plan.ops.length, "edit")}`
             : `Blocked: ${createBlockedBy(p, perf)}`,
       status: "pending",
@@ -310,12 +306,12 @@ function createBlockedBy(p: ProgressInput, perf: { linked: number; total: number
   if (perf.linked < perf.total) return plural(perf.total - perf.linked, "performer");
   if (p.unreviewed) return plural(p.unreviewed, "match", "matches");
   if (blockedAt(p.plan, "settings")) return "item settings";
-  if (blockedAt(p.plan, "tracks") || p.notSingle) return "tracks";
+  if (blockedAt(p.plan, "tracks")) return "tracks";
   return "errors";
 }
 
 export interface CreateCount {
-  kind: "tracks" | "compositions" | "album" | "singles";
+  kind: "tracks" | "compositions" | "album";
   label: string;
   /** The colour token for its swatch. */
   edge: string;
@@ -338,10 +334,6 @@ export function createCounts(state: State, plan: Plan): CreateCount[] {
   const comps = fromOps
     ? creates("comp:")
     : rows.filter(({ t, d }) => !has(d.comp[t.n]) && !has(d.track[t.n])).length;
-  const singles = rows.filter(({ t, d }) => d.single[t.n]);
-  const newSingles = fromOps
-    ? creates("single:")
-    : singles.filter(({ t, d }) => !has(d.single[t.n]?.qid)).length;
   return [
     {
       kind: "tracks",
@@ -363,13 +355,6 @@ export function createCounts(state: State, plan: Plan): CreateCount[] {
       edge: "disc-edge",
       count: rows.length ? 1 : 0,
       reused: 0,
-    },
-    {
-      kind: "singles",
-      label: "Singles",
-      edge: "rg-edge",
-      count: newSingles,
-      reused: singles.length - newSingles,
     },
   ];
 }
@@ -418,7 +403,7 @@ export function runChecks(
                 at: null,
               },
     trackCount
-      ? blockedAt(plan, "tracks") || p.notSingle
+      ? blockedAt(plan, "tracks")
         ? { ok: false, text: "Fix the errors in Tracks", at: "tracks", problem: true }
         : { ok: true, text: plural(trackCount, "track"), at: null }
       : { ok: false, text: "Add at least one track", at: "tracks" },

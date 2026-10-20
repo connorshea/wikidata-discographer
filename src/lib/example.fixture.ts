@@ -30,7 +30,6 @@ export const EXAMPLE: State = {
       part: "Q61629664",
       comp: { "1": "Q140882264" },
       track: {},
-      single: {},
       tracks: tracks([
         ["After All", "4:12"],
         ["Habits of Creatures", "2:57"],
@@ -50,7 +49,6 @@ export const EXAMPLE: State = {
       part: "Q61629680",
       comp: {},
       track: {},
-      single: {},
       tracks: tracks([
         ["Never Let a Good Thing Die", "5:19"],
         ["Amalfi Coast", "2:59"],

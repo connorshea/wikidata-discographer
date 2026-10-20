@@ -303,43 +303,34 @@ describe("checkPlanQids", () => {
     expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([]);
   });
 
-  it("refuses an existing single that isn't an instance of single", async () => {
-    const state = structuredClone(EXAMPLE);
-    state.discs[0].single[2] = { date: "", qid: "Q80", discogs: "" };
-    const plan = buildPlan(state);
-    stubWiki({ classes: { Q80: ["Q7366"] } });
-    expect(await checkPlanQids(plan.ops, state)).toEqual([
-      "Disc 1 track 2 single: Q80 isn't an instance of single (Q134556). Check the QID.",
-    ]);
-    stubWiki({ classes: { Q80: ["Q134556"] } });
-    expect(await checkPlanQids(plan.ops, state)).toEqual([]);
-  });
-
   it("refuses a new item with the same label and description as a reused one", async () => {
     const state = structuredClone(EXAMPLE);
     state.album.mode = "create";
     state.album.title = "New";
-    state.discs[0].single[2] = { date: "", qid: "Q80", discogs: "" };
+    state.discs[0].comp[3] = "Q80";
     delete state.discs[0].comp[2];
     const plan = buildPlan(state);
     const comp = plan.ops.find((op) => op.op === "create" && op.key === "comp:0:2");
     if (comp?.op !== "create") throw new Error("no composition");
     const [title, desc] = [comp.labels.en, comp.descriptions.en];
-    stubWiki({ classes: { Q80: ["Q134556"] }, terms: { Q80: [title, desc] } });
+    stubWiki({ classes: { Q80: ["Q105543609"] }, terms: { Q80: [title, desc] } });
     expect(await checkPlanQids(plan.ops, state)).toEqual([
-      `The new composition “${title}” (disc 1 track 2) would have the same label and description as Q80 (Disc 1 track 2 single), “${desc}”. ` +
+      `The new composition “${title}” (disc 1 track 2) would have the same label and description as Q80 (Disc 1 track 3 composition), “${desc}”. ` +
         "Wikidata doesn't allow two items with the same label and description, so it would refuse to create it. Change the description of Q80 on Wikidata, or the composition description in Item settings.",
     ]);
     // A different description, or a different label, is fine.
-    stubWiki({ classes: { Q80: ["Q134556"] }, terms: { Q80: [title, `${desc} (single)`] } });
+    stubWiki({ classes: { Q80: ["Q105543609"] }, terms: { Q80: [title, `${desc} (song)`] } });
     expect(await checkPlanQids(plan.ops, state)).toEqual([]);
-    stubWiki({ classes: { Q80: ["Q134556"] }, terms: { Q80: [`${title} (single)`, desc] } });
+    stubWiki({ classes: { Q80: ["Q105543609"] }, terms: { Q80: [`${title} (song)`, desc] } });
     expect(await checkPlanQids(plan.ops, state)).toEqual([]);
     // With no English label, Wikidata pairs the English description with the mul label.
-    stubWiki({ classes: { Q80: ["Q134556"] }, terms: { Q80: [undefined, desc, title] } });
+    stubWiki({ classes: { Q80: ["Q105543609"] }, terms: { Q80: [undefined, desc, title] } });
     expect(await checkPlanQids(plan.ops, state)).toHaveLength(1);
     // But not when there is an English label.
-    stubWiki({ classes: { Q80: ["Q134556"] }, terms: { Q80: [`${title} (single)`, desc, title] } });
+    stubWiki({
+      classes: { Q80: ["Q105543609"] },
+      terms: { Q80: [`${title} (song)`, desc, title] },
+    });
     expect(await checkPlanQids(plan.ops, state)).toEqual([]);
   });
 

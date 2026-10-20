@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-context.ts";
-import { DISCOGS_FIELD, normalizeAlbumId } from "../lib/music.ts";
 import {
   groupId,
   removedDisc,
@@ -32,7 +31,6 @@ import {
   type Plan,
   type RowErrs,
   type Settings,
-  type SingleState,
   type Track,
 } from "../lib/plan.ts";
 import { artistsText, emptyDisc, parseArtists } from "../lib/state.ts";
@@ -53,7 +51,6 @@ import { formatTime } from "../lib/preview.ts";
 import { FieldErr, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
-import { type ItemLookup, singleProblem, singleProblems } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 
 const cls = (...names: (string | false | null | undefined)[]) =>
@@ -65,12 +62,9 @@ const newKey = () => ++lastKey;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Whether a disc has a problem to fix in its part, or in one of its rows or singles. */
-const discHasErrors = (plan: Plan, badSingles: Record<string, string>, di: number) =>
-  !!plan.fieldErrs[`part-${di}`] ||
-  [...Object.keys(plan.rowErrs), ...Object.keys(plan.singleErrs), ...Object.keys(badSingles)].some(
-    (k) => k.startsWith(`${di}:`),
-  );
+/** Whether a disc has a problem to fix in its part, or in one of its rows. */
+const discHasErrors = (plan: Plan, di: number) =>
+  !!plan.fieldErrs[`part-${di}`] || Object.keys(plan.rowErrs).some((k) => k.startsWith(`${di}:`));
 
 /**
  * The artists listed once above the cards: the album's, as entered or imported, or else
@@ -87,16 +81,12 @@ export default function DiscsSection({
   update,
   plan,
   reviews,
-  lookup,
   onRowsMoved,
 }: SectionProps & {
   reviews: TrackReview[];
-  /** The existing singles' summaries, looked up on Wikidata. */
-  lookup: Lookup;
   /** Rows were renumbered or a disc removed, so whatever's kept by disc and track number should follow. */
   onRowsMoved: (move: RowMove) => void;
 }) {
-  const badSingles = singleProblems(state, plan, lookup);
   const [tab, setTab] = useState(0);
   const di = Math.min(tab, state.discs.length - 1);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -129,7 +119,7 @@ export default function DiscsSection({
         <div role="tablist" aria-label="Discs">
           {state.discs.map((d, i) => {
             const toReview = reviews.some((r) => r.di === i && !r.reviewed);
-            const errors = discHasErrors(plan, badSingles, i);
+            const errors = discHasErrors(plan, i);
             return (
               <button
                 key={i}
@@ -191,7 +181,6 @@ export default function DiscsSection({
             key={di}
             di={di}
             reviews={reviews.filter((r) => r.di === di)}
-            lookup={lookup}
             onRenumber={(moved) => onRowsMoved(renumberedRows(di, moved))}
             onRemove={() => {
               update((s) => void s.discs.splice(di, 1));
@@ -215,7 +204,6 @@ const INTERACTIVE = "a, button, input, select, label, [role='menu'], [role='dial
 function DiscBlock({
   di,
   reviews,
-  lookup,
   onRenumber,
   onRemove,
   state,
@@ -224,7 +212,6 @@ function DiscBlock({
 }: SectionProps & {
   di: number;
   reviews: TrackReview[];
-  lookup: Lookup;
   onRenumber: (moved: Renumbered) => void;
   onRemove: () => void;
 }) {
@@ -269,15 +256,6 @@ function DiscBlock({
       else next.delete(key);
       return next;
     });
-  const singleIssue = (n: number) => {
-    const qid = d.single[n].qid.trim();
-    return [
-      plan.singleErrs[`${di}:${n}`],
-      singleProblem(qid, QID.test(qid) ? lookup(qid) : undefined),
-    ]
-      .filter(Boolean)
-      .join(" ");
-  };
 
   // The MusicBrainz row (by key) waiting on a confirmation to delete it.
   const [deleting, setDeleting] = useState<number | null>(null);
@@ -423,7 +401,7 @@ function DiscBlock({
               d.tracks.length
                 ? {
                     title: `Remove disc ${di + 1}?`,
-                    body: `This removes its ${plural(d.tracks.length, "track")}, and the items and singles linked to them. It can't be undone.`,
+                    body: `This removes its ${plural(d.tracks.length, "track")}, and the items linked to them. It can't be undone.`,
                     action: "Remove disc",
                   }
                 : null
@@ -441,9 +419,6 @@ function DiscBlock({
             const t = d.tracks[i];
             const errs: RowErrs = plan.rowErrs[`${di}:${r.n}`] ?? {};
             const title = t.title.trim();
-            const single = d.single[r.n];
-            const found =
-              single && QID.test(single.qid.trim()) ? lookup(single.qid.trim()) : undefined;
             const review = open.get(r.n);
             const isOpen = opened.has(keys[i]);
             const performers = rowPerformers({ artists: r.artists, feat: featOf(i) }, base);
@@ -455,7 +430,6 @@ function DiscBlock({
               errs.track,
               errs.lang,
               errs.recorded,
-              single ? singleIssue(r.n) : undefined,
             ].filter((e): e is string => !!e);
             // A row from MusicBrainz can't be typed back in as easily.
             const del = () => (t.mb ? setDeleting(keys[i]) : remove(i));
@@ -622,23 +596,6 @@ function DiscBlock({
                           linked={linked}
                         />
                       )}
-                      {/* Singles can't be added for now, but a form saved with one still has it. */}
-                      {single && (
-                        <div className="wide">
-                          <SinglePanel
-                            di={di}
-                            n={r.n}
-                            title={r.title}
-                            issue={singleIssue(r.n)}
-                            found={found}
-                            onRemove={() => {
-                              update((s) => void delete s.discs[di].single[r.n]);
-                              setFocusNext({ row: i, col: "title" });
-                            }}
-                            {...{ state, update }}
-                          />
-                        </div>
-                      )}
                       <div className="trk-foot">
                         {/* As the closed card's menu is, so the focus can come back here. */}
                         <button type="button" className="link danger" data-col="menu" onClick={del}>
@@ -705,7 +662,6 @@ function DiscBlock({
                             · review ↓
                           </a>
                         ),
-                        single && <SingleTag key="single" single={single} found={found} />,
                       ]}
                       issues={issues}
                     />
@@ -763,7 +719,7 @@ function DiscBlock({
 
 /**
  * A closed card's line under its title: what it links, who it credits beyond the
- * artists above, its matches and single, then what's wrong with it.
+ * artists above and its matches, then what's wrong with it.
  */
 function TrackFacts({ facts, issues }: { facts: React.ReactNode[]; issues: string[] }) {
   const id = useId();
@@ -1304,30 +1260,6 @@ function LinkFields({
   );
 }
 
-/** A track's single, in its closed card: the single it reuses, or the new one's date. */
-function SingleTag({ single: sg, found }: { single: SingleState; found: ItemLookup | undefined }) {
-  const { wikiBaseUrl } = useAuth();
-  const qid = sg.qid.trim();
-  const date = sg.date.trim();
-  return (
-    <span className="single-pill">
-      <i aria-hidden="true" />
-      {QID.test(qid) ? (
-        <span>
-          On the single <WikiLink base={wikiBaseUrl} qid={qid} />
-          {found?.status === "ok" && found.label && ` ${found.label}`}
-          {found?.status === "loading" && <span className="muted"> · looking it up…</span>}
-          {found?.status === "failed" && (
-            <span className="muted"> · couldn’t look it up on Wikidata</span>
-          )}
-        </span>
-      ) : (
-        <span>New single{date ? ` · ${date}` : ""}</span>
-      )}
-    </span>
-  );
-}
-
 /**
  * An editable cell that reads as text until it's hovered or focused. Its error
  * shows under it once it's left, rather than while it's being typed.
@@ -1602,132 +1534,6 @@ function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
   );
 }
 
-/**
- * A track's single's fields, in its open card: a release date for a new
- * single or an existing single's QID, and its Discogs master ID.
- */
-function SinglePanel({
-  di,
-  n,
-  title,
-  issue,
-  found,
-  onRemove,
-  state,
-  update,
-}: Pick<SectionProps, "state" | "update"> & {
-  di: number;
-  n: number;
-  title: string;
-  /** What's wrong with the fields, or "". */
-  issue: string;
-  found: ItemLookup | undefined;
-  onRemove: () => void;
-}) {
-  const sg = state.discs[di].single[n];
-  const qid = sg.qid.trim();
-  const date = sg.date.trim();
-  const discogs = sg.discogs.trim();
-  const ids = useId();
-  const blank = qid === "" && date === "" && discogs === "";
-  const existing = QID.test(qid);
-
-  return (
-    <div className="single-panel">
-      <div className="single-head">
-        <span className="sw" aria-hidden="true" />
-        {existing ? (
-          <span>
-            Existing single{found?.status === "ok" && found.label ? ` · ${found.label}` : ""}
-          </span>
-        ) : (
-          <span>New single{title ? ` · ${title}` : ""}</span>
-        )}
-        <span className="muted">· lists this track, taken from the album</span>
-      </div>
-      <div className="single-fields">
-        <label className="f">
-          Release date
-          <input
-            type="text"
-            data-col="single"
-            spellCheck={false}
-            placeholder={qid ? "Not for an existing single" : "YYYY-MM-DD"}
-            aria-invalid={date !== "" && !parseDate(date).ok}
-            aria-describedby={issue && !blank ? `${ids}-err` : undefined}
-            disabled={qid !== "" && date === ""}
-            value={sg.date}
-            onChange={(e) => update((s) => void (s.discs[di].single[n].date = e.target.value))}
-            onBlur={(e) =>
-              update((s) => void (s.discs[di].single[n].date = normalizeDate(e.target.value)))
-            }
-          />
-        </label>
-        <label className="f">
-          Or an existing single
-          <QidInput
-            className="qid"
-            placeholder={date ? "Clear the date to reuse one" : "Q… to reuse one"}
-            aria-invalid={(qid !== "" && !QID.test(qid)) || found?.status === "missing"}
-            aria-describedby={issue && !blank ? `${ids}-err` : undefined}
-            disabled={date !== "" && qid === ""}
-            value={sg.qid}
-            onChange={(q) => update((s) => void (s.discs[di].single[n].qid = q.trim()))}
-          />
-        </label>
-        <label className="f">
-          {DISCOGS_FIELD.label}
-          <input
-            type="text"
-            spellCheck={false}
-            placeholder="Optional, ID or URL"
-            aria-invalid={discogs !== "" && !DISCOGS_FIELD.pattern.test(discogs)}
-            value={sg.discogs}
-            onChange={(e) =>
-              update(
-                (s) =>
-                  void (s.discs[di].single[n].discogs = normalizeAlbumId(
-                    "discogs",
-                    e.target.value,
-                  )),
-              )
-            }
-          />
-        </label>
-      </div>
-      {/* Just ticked: say what to fill in rather than show an error. */}
-      {blank && (
-        <p className="single-hint muted">Enter its release date, or an existing single's QID.</p>
-      )}
-      {issue && !blank && (
-        <p className="field-err" id={`${ids}-err`} aria-live="polite">
-          {issue}
-        </p>
-      )}
-      <div className="single-foot">
-        <span className="single-note">
-          {!existing && "Uses the track's title and artists."}
-          <span className="warn-note">
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              <path
-                d="M7 3.8v3.6M7 9.6v.2"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-            Singles can only have one track for now.
-          </span>
-        </span>
-        <button type="button" className="ghost small" onClick={onRemove}>
-          Remove single
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** The facts shown as text rather than as identifiers. */
 const PLAIN_FACTS = new Set(["Duration", "Composer", "Lyricist"]);
 
@@ -1971,5 +1777,3 @@ function MbBadge({ n, title, facts }: { n: number; title: string; facts: MbFacts
     </>
   );
 }
-
-type Lookup = (qid: string) => ItemLookup | undefined;

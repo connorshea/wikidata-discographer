@@ -52,13 +52,6 @@ function ItemModel() {
           </span>{" "}
           <Kind edge="cmp-edge">Composition</Kind>
         </li>
-        <li>
-          <Kind edge="rg-edge">Single</Kind>{" "}
-          <span>
-            <Prop id="P13602">taken from</Prop> →
-          </span>{" "}
-          <Kind edge="disc-edge">Album</Kind>
-        </li>
       </ul>
     </div>
   );

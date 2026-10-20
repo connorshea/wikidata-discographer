@@ -26,9 +26,10 @@ export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] 
   // The open cards, by edit number, so Expand all and Collapse all reach every one.
   const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
   const count = (kind: PreviewKind) => edits.filter((e) => e.kind === kind).length;
-  // Singles only get a filter when there are any.
+  // Singles only get a filter when there are any, which only runs made while tracks could have
+  // them have.
   const filters = KINDS.filter((k) => k.kind !== "single" || count("single") > 0);
-  // A filter left with nothing in it, e.g. the singles were unticked, shows them all again.
+  // A filter left with nothing in it shows them all again.
   const active = filter !== "all" && count(filter) ? filter : "all";
   const list = active === "all" ? edits : edits.filter((e) => e.kind === active);
   const shown = more ? list : list.slice(0, FIRST);

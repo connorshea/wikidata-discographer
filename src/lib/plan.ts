@@ -8,7 +8,7 @@
 // statements the app writes are only ever the ones built here.
 //
 // Items created earlier in the run are referenced by key ("album",
-// "comp:0:3", "track:0:3", "single:0:3" — disc index and track number), and
+// "comp:0:3", "track:0:3" — disc index and track number), and
 // the server swaps in the new QIDs as it goes.
 import { WD_LANG_CODES } from "./languages.ts";
 import { parseLength } from "./tracks.ts";
@@ -16,7 +16,6 @@ import {
   ALBUM_ID_FIELDS,
   type AlbumIdKey,
   CLASS_KINDS,
-  DISCOGS_FIELD,
   type MusicKind,
   normalizeAlbumId,
 } from "./music.ts";
@@ -34,7 +33,6 @@ export interface Settings {
   compDesc: string;
   trackDesc: string;
   trackType: string;
-  singleDesc: string;
   albumDesc: string;
   compPerformer: boolean;
   straight: boolean;
@@ -85,13 +83,6 @@ export interface AlbumMb {
   date: MbCited | null;
   /** The album identifiers imported from MusicBrainz's links, by field. */
   ids: Partial<Record<AlbumIdKey, MbCited>>;
-}
-
-export interface SingleState {
-  date: string;
-  qid: string;
-  /** P1954 Discogs master ID, for a new or an existing single. */
-  discogs: string;
 }
 
 /**
@@ -200,10 +191,9 @@ export interface Disc {
   part: string;
   partCustom?: boolean;
   tracks: Track[];
-  /** Existing compositions, tracks and singles, by track number. */
+  /** Existing compositions and tracks, by track number. */
   comp: Record<string, string>;
   track: Record<string, string>;
-  single: Record<string, SingleState>;
 }
 
 /**
@@ -261,8 +251,8 @@ export type Op =
       target: ItemRef;
       /** What the target is, for the progress log ("album", "track 1.3"…). */
       what: string;
-      /** The row that links to a reused composition, track or single, by disc index and track number. */
-      row?: { kind: "comp" | "track" | "single"; di: number; n: number };
+      /** The row that links to a reused composition or track, by disc index and track number. */
+      row?: { kind: "comp" | "track"; di: number; n: number };
       claims: Claim[];
     };
 
@@ -284,8 +274,6 @@ export interface Plan {
   fieldErrs: Record<string, string>;
   /** Errors for the cells of a disc's rows, keyed "disc:track". */
   rowErrs: Record<string, RowErrs>;
-  /** Errors for single rows, keyed "disc:track". */
-  singleErrs: Record<string, string>;
   messages: Msg[];
   /** Where each error in `messages` is fixed, one per error, in the same order. */
   blockers: BlockerAt[];
@@ -535,7 +523,6 @@ export const PARTS = [
 ] as const;
 const KNOWN_PARTS = new Set<string>(PARTS.flatMap(([, o]) => o.map(([q]) => q)));
 
-export const SINGLE_CLASS = "Q134556";
 export const COMPOSITION_CLASS = "Q105543609";
 export const SONG_FORM = "Q7366";
 export const TRACK_UNIT = "Q7302866";
@@ -696,15 +683,12 @@ function fillDesc(tpl: string, year: string, artists: string[], type = ""): stri
 export interface DescPreviews {
   comp: string;
   track: string;
-  /** Null until a ticked single has a release date to take the year from. */
-  single: string | null;
 }
 
 /**
  * The description templates filled in for the first track with artists, so the
  * settings can show what they write. A {year} the form can't fill yet stays as
- * written. The single's preview is for the first single with a release date,
- * since each single's year comes from its own date. Null until a track has artists.
+ * written. Null until a track has artists.
  */
 export function descPreviews(state: State, plan: Plan): DescPreviews | null {
   const S = state.settings;
@@ -714,14 +698,9 @@ export function descPreviews(state: State, plan: Plan): DescPreviews | null {
   if (!artists.length) return null;
   const date = parseDate(S.date);
   const year = (date.ok && date.year) || "{year}";
-  const single = rows
-    .map(({ t, d }) => ({ t, date: parseDate(d.single[t.n]?.date ?? "") }))
-    .find(({ t, date }) => t.artists.length && date.ok && date.year);
   return {
     comp: fillDesc(S.compDesc, year, artists),
     track: fillDesc(S.trackDesc, year, artists),
-    single:
-      single && single.date.ok ? fillDesc(S.singleDesc, single.date.year, single.t.artists) : null,
   };
 }
 
@@ -830,7 +809,6 @@ interface PlanItem {
   existTrack: string | null;
   /** The QIDs of the composers and lyricists its composition gets. */
   writers: { composers: string[]; lyricists: string[] };
-  single: { date: ParsedDate; qid: string | null; discogs: string | null } | null;
 }
 
 /** Wikidata's limit on a label or description. */
@@ -842,8 +820,8 @@ const chars = (s: string) => s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "_").l
 export const MAX_TRACKS_PER_DISC = 50;
 /** Tracks per run, across all discs; a bigger release goes in several runs. */
 export const MAX_TRACKS = 100;
-/** A backstop on edits per run. At most ~3 per track (composition, track and
- * single), so MAX_TRACKS keeps runs well under it. */
+/** A backstop on edits per run. At most ~2 per track (composition and track), so
+ * MAX_TRACKS keeps runs well under it. */
 export const MAX_OPS = 500;
 
 export function buildPlan(state: State): Plan {
@@ -851,7 +829,6 @@ export function buildPlan(state: State): Plan {
   const lang = S.lang.trim();
   const fieldErrs: Record<string, string> = {};
   const rowErrs: Record<string, RowErrs> = {};
-  const singleErrs: Record<string, string> = {};
   const messages: Msg[] = [];
   const blockers: BlockerAt[] = [];
   const err = (text: string, at: BlockerAt) => {
@@ -881,12 +858,6 @@ export function buildPlan(state: State): Plan {
   fieldErrs.recDate = recDate.ok ? "" : recDate.error;
   fieldErrs.compDesc = checkTemplate(S.compDesc, date).join(" ");
   fieldErrs.trackDesc = checkTemplate(S.trackDesc, date).join(" ");
-  // {year} comes from each single's own date, which a new single must have.
-  fieldErrs.singleDesc = checkTemplate(S.singleDesc, {
-    ok: true,
-    val: { time: "", precision: 9 },
-    year: "0",
-  }).join(" ");
 
   const straighten = (s: string) =>
     S.straight ? s.replace(/[’‘]/g, "'").replace(/[“”]/g, '"') : s;
@@ -968,7 +939,6 @@ export function buildPlan(state: State): Plan {
     blocking(fieldErrs.albumDesc) ||
     ALBUM_ID_FIELDS.some((f) => !!fieldErrs[`albumId-${f.key}`]);
   const album: ItemRef = creatingAlbum ? { ref: "album" } : { id: A.qid.trim() };
-  const albumValue: Value = { type: "item", ...album };
 
   /* rows */
   const items: PlanItem[] = [];
@@ -999,24 +969,6 @@ export function buildPlan(state: State): Plan {
         else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
       }
       if (Object.keys(errs).length) rowErrs[`${di}:${r.n}`] = errs;
-      let single: PlanItem["single"] = null;
-      const sg = d.single[r.n];
-      if (sg) {
-        const sd = parseDate(sg.date ?? "");
-        const sq = (sg.qid ?? "").trim();
-        const errs: string[] = [];
-        if ((sg.date ?? "").trim() && sq)
-          errs.push("Give a release date for a new single or an existing single's QID, not both.");
-        else if (!sd.ok) errs.push(sd.error);
-        else if (!sd.val && !sq)
-          errs.push("Enter the new single's release date, or an existing single's QID to reuse.");
-        if (sq && !QID.test(sq)) errs.push(`"${sq}" isn't a QID.`);
-        const discogs = (sg.discogs ?? "").trim();
-        const discogsOk = DISCOGS_FIELD.pattern.test(discogs);
-        if (discogs && !discogsOk) errs.push(`That doesn't look like a ${DISCOGS_FIELD.label}.`);
-        if (errs.length) singleErrs[`${di}:${r.n}`] = errs.join(" ");
-        single = { date: sd, qid: QID.test(sq) ? sq : null, discogs: discogsOk ? discogs : null };
-      }
       // A reused composition only gets them with Link reused items on.
       const getsWriters = S.mbWriters && !!r.mb && (!ec || S.extendExisting);
       items.push({
@@ -1030,7 +982,6 @@ export function buildPlan(state: State): Plan {
           composers: getsWriters ? writersFor(r.mb!.composers) : [],
           lyricists: getsWriters ? writersFor(r.mb!.lyricists) : [],
         },
-        single,
       });
     }
   });
@@ -1131,17 +1082,9 @@ export function buildPlan(state: State): Plan {
       `${badRows} track${badRows === 1 ? " has" : "s have"} errors. They're marked in the track table.`,
       "tracks",
     );
-  if (Object.keys(singleErrs).length)
-    err(
-      `${Object.keys(singleErrs).length} single(s) have errors. They're marked in the disc tables.`,
-      "tracks",
-    );
-  if (items.some((it) => it.single) && blocking(fieldErrs.singleDesc))
-    err("Fix the single description template in Item settings.", "settings");
 
   const blocked = messages.some((m) => m[0] === "err");
-  if (blocked)
-    return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops: [], ready: false };
+  if (blocked) return { tracks, fieldErrs, rowErrs, messages, blockers, ops: [], ready: false };
 
   /* operations */
   const ops: Op[] = [];
@@ -1219,7 +1162,7 @@ export function buildPlan(state: State): Plan {
   const compKey = (it: PlanItem) => `comp:${it.di}:${it.r.n}`;
   const trackKey = (it: PlanItem) => `track:${it.di}:${it.r.n}`;
   const where = (it: PlanItem) => `track ${it.di + 1}.${it.r.n} “${it.r.title}”`;
-  const rowOf = (kind: "comp" | "track" | "single", it: PlanItem) => ({
+  const rowOf = (kind: "comp" | "track", it: PlanItem) => ({
     kind,
     di: it.di,
     n: it.r.n,
@@ -1373,60 +1316,6 @@ export function buildPlan(state: State): Plan {
     ],
   });
 
-  // 5. Singles, each pointing at its track and the album.
-  let made = 0;
-  let reused = 0;
-  for (const it of items) {
-    const sg = it.single;
-    if (!sg) continue;
-    const tracklist = claim("P658", trackOf(it), [
-      { property: "P1545", value: { type: "string", value: "1" } },
-    ]);
-    // One track, so one part. An existing single may already count more, such as a B-side.
-    const oneTrack = claim("P2635", { type: "quantity", amount: 1, unit: TRACK_UNIT });
-    const takenFrom = claim("P13602", albumValue);
-    const discogs = sg.discogs ? claim("P1954", { type: "string", value: sg.discogs }) : null;
-    if (sg.qid) {
-      reused++;
-      ops.push({
-        op: "addClaims",
-        target: { id: sg.qid },
-        what: `single for ${where(it)}`,
-        row: rowOf("single", it),
-        claims: [
-          // A tracklist needs a title, which an older single may not have.
-          { ...title(it.r.title), ifMissing: true },
-          tracklist,
-          { ...oneTrack, ifMissing: true },
-          takenFrom,
-          ...(S.extendExisting ? it.perf.map((p) => claim("P175", item(p))) : []),
-          // Not a second Discogs ID on a single that already has one.
-          ...(discogs ? [{ ...discogs, ifMissing: true as const }] : []),
-        ],
-      });
-    } else {
-      made++;
-      const key = `single:${it.di}:${it.r.n}`;
-      const sd = sg.date.ok ? sg.date : null;
-      ops.push({
-        op: "create",
-        key,
-        kind: "single",
-        ...labelled(it.r.title, fillDesc(S.singleDesc, sd?.year ?? "", it.r.artists)),
-        claims: [
-          claim("P31", item(SINGLE_CLASS)),
-          title(it.r.title),
-          ...it.perf.map((p) => claim("P175", item(p))),
-          ...(sd?.val ? [claim("P577", { type: "time", ...sd.val })] : []),
-          tracklist,
-          oneTrack,
-          takenFrom,
-          ...(discogs ? [discogs] : []),
-        ],
-      });
-    }
-  }
-
   // Wikidata rejects an over-long label or description, which would stop the run partway.
   const tooLong = new Set<string>();
   for (const o of ops) {
@@ -1449,7 +1338,7 @@ export function buildPlan(state: State): Plan {
         `Too long: ${[...tooLong].join(", ")}.`,
       "create",
     );
-    return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops: [], ready: false };
+    return { tracks, fieldErrs, rowErrs, messages, blockers, ops: [], ready: false };
   }
 
   if (ops.length > MAX_OPS) {
@@ -1457,7 +1346,7 @@ export function buildPlan(state: State): Plan {
       `That's ${ops.length} edits, but a run can make at most ${MAX_OPS}. Split it into smaller runs.`,
       "create",
     );
-    return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops: [], ready: false };
+    return { tracks, fieldErrs, rowErrs, messages, blockers, ops: [], ready: false };
   }
 
   const creates = (prefix: string) =>
@@ -1469,10 +1358,9 @@ export function buildPlan(state: State): Plan {
       `${creates("comp:")} composition(s) to create, ${items.length - creates("comp:")} reused`,
       `${creates("track:")} track(s) to create, ${items.length - creates("track:")} reused`,
       `${items.length} tracklist statement(s)`,
-      ...(made || reused ? [`${made} single(s) to create, ${reused} reused`] : []),
     ].join(". ") + ".",
   ]);
-  return { tracks, fieldErrs, rowErrs, singleErrs, messages, blockers, ops, ready: ops.length > 0 };
+  return { tracks, fieldErrs, rowErrs, messages, blockers, ops, ready: ops.length > 0 };
 }
 
 // ---------------------------------------------------------------------------

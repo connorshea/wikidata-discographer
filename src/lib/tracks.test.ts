@@ -38,12 +38,11 @@ describe("formatLength", () => {
 });
 
 describe("editing rows", () => {
-  /** Disc 1 of the example, with links on tracks 1 to 3. */
+  /** Disc 1 of the example, with links on tracks 1 and 2. */
   const disc = () => {
     const d = structuredClone(EXAMPLE.discs[0]);
     d.comp = { 1: "Q1" };
     d.track = { 2: "Q2" };
-    d.single = { 3: { date: "2026-01-01", qid: "", discogs: "" } };
     return d;
   };
   const titles = (d: ReturnType<typeof disc>) => d.tracks.slice(0, 4).map((t) => t.title);
@@ -56,7 +55,6 @@ describe("editing rows", () => {
     expect(d.tracks.map((t) => t.n).slice(0, 4)).toEqual([1, 2, 3, 4]);
     expect(d.comp).toEqual({ 3: "Q1" });
     expect(d.track).toEqual({ 1: "Q2" });
-    expect(Object.keys(d.single)).toEqual(["2"]);
     expect(moved.get(1)).toBe(3);
     expect(moved.get(4)).toBe(4);
   });
@@ -69,7 +67,6 @@ describe("editing rows", () => {
     expect(d.tracks.at(-1)?.n).toBe(count - 1);
     expect(d.comp).toEqual({ 1: "Q1" });
     expect(d.track).toEqual({});
-    expect(Object.keys(d.single)).toEqual(["2"]);
     expect(moved.has(2)).toBe(false);
   });
 
