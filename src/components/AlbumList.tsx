@@ -1,6 +1,6 @@
 // Every album the tool has created or added a tracklist to, newest run first,
 // a page at a time (GET /api/albums).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import type { AlbumListEntry, AlbumListResponse, AlbumRun } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
@@ -35,12 +35,18 @@ export default function AlbumList() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // The next page being loaded, if any, which a change of filter makes stale.
+  const more = useRef<AbortController | null>(null);
+
   // The first page, again whenever the filter changes.
   useEffect(() => {
     if (loading) return;
     const ctl = new AbortController();
+    // A Show more clicked while this loads used the last filter's cursor.
+    const settle = () => more.current?.abort();
     fetchAlbums(null, onlyMine, ctl.signal)
       .then((r) => {
+        settle();
         setAlbums(r.albums);
         setNext(r.next);
         setError(null);
@@ -48,22 +54,37 @@ export default function AlbumList() {
       })
       .catch((e: unknown) => {
         if (ctl.signal.aborted) return;
+        settle();
+        // The last filter's albums and cursor would let Show more mix the two.
+        setAlbums([]);
+        setNext(null);
         setError(errorText(e));
         setBusy(false);
       });
-    return () => ctl.abort();
+    return () => {
+      ctl.abort();
+      more.current?.abort();
+    };
   }, [onlyMine, loading]);
 
   const showMore = () => {
+    more.current?.abort();
+    const ctl = new AbortController();
+    more.current = ctl;
     setBusy(true);
     setError(null);
-    fetchAlbums(next, onlyMine)
+    fetchAlbums(next, onlyMine, ctl.signal)
       .then((r) => {
+        if (ctl.signal.aborted) return;
         setAlbums((prev) => [...prev, ...r.albums]);
         setNext(r.next);
+        setBusy(false);
       })
-      .catch((e: unknown) => setError(errorText(e)))
-      .finally(() => setBusy(false));
+      .catch((e: unknown) => {
+        if (ctl.signal.aborted) return;
+        setError(errorText(e));
+        setBusy(false);
+      });
   };
 
   return (
