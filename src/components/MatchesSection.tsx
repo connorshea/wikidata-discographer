@@ -8,7 +8,6 @@ import {
   isSimilarOnly,
   moveRowId,
   moveRowIds,
-  pickSingle,
   pickTrack,
   comesWithTrack,
   reviewedLine,
@@ -20,19 +19,18 @@ import {
   type TrackReview,
   withoutDismissed,
 } from "../lib/matches.ts";
-import type { Disc, SingleState } from "../lib/plan.ts";
+import type { Disc } from "../lib/plan.ts";
 import type { TrackMatch } from "../lib/api-types.ts";
 import { InfoTip, WikiLink } from "./common.tsx";
 import type { Matches, MatchStatus } from "./use-matches.ts";
 import type { SectionProps } from "./types.ts";
 
-const KINDS: Record<Slot, string> = { comp: "Composition", track: "Track", single: "Single" };
+const KINDS: Record<Slot, string> = { comp: "Composition", track: "Track" };
 
 /** A row's fields as they were before a candidate was used, to undo it. */
 interface Before {
   comp?: string;
   track?: string;
-  single?: SingleState;
 }
 
 export interface MatchesHandle {
@@ -132,12 +130,10 @@ export default function MatchesSection({
     before.current.set(c.id, {
       comp: d.comp[r.n],
       track: d.track[r.n],
-      single: d.single[r.n] && { ...d.single[r.n] },
     });
     setDisc(r, (disc) => {
       if (c.slot === "comp") disc.comp[r.n] = c.match.qid;
-      else if (c.slot === "track") pickTrack(disc, r.n, c.match as TrackMatch);
-      else pickSingle(disc, r.n, c.match.qid);
+      else pickTrack(disc, r.n, c.match as TrackMatch);
     });
   };
   const undo = (r: TrackReview, c: Candidate) => {
@@ -151,16 +147,10 @@ export default function MatchesSection({
       };
       if (!was) {
         // Used before this page loaded: clear the field it filled.
-        if (c.slot !== "single") delete disc[c.slot][r.n];
-        else if (disc.single[r.n]?.date) disc.single[r.n].qid = "";
-        else delete disc.single[r.n];
+        delete disc[c.slot][r.n];
         return;
       }
-      if (c.slot !== "comp") {
-        if (was.single) disc.single[r.n] = was.single;
-        else delete disc.single[r.n];
-      }
-      if (c.slot !== "single") put("comp", was.comp);
+      put("comp", was.comp);
       if (c.slot === "track") put("track", was.track);
     });
   };

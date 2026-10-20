@@ -988,17 +988,8 @@ button.trk-title {
 .link-fields .f {
   flex: 1 1 200px;
 }
-.trk-single label.c {
-  font-size: 14px;
-  font-weight: 500;
-}
-.trk-single label.c input {
-  accent-color: var(--rg-edge);
-  width: 16px;
-  height: 16px;
-}
-.trk-single .single-panel {
-  margin: 4px 0 0;
+.trk-fields .single-panel {
+  margin: 0;
 }
 .trk-foot {
   display: flex;

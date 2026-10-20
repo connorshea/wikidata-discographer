@@ -8,7 +8,6 @@ import {
   isStrong,
   NO_ARTIST,
   otherArtists,
-  pickSingle,
   pickTrack,
   moveRowIds,
   removedDisc,
@@ -39,20 +38,16 @@ const track = (qid: string, composition: string | null, singles: string[] = []):
 });
 const rm = (m: Partial<RowMatches>): RowMatches => ({ comp: [], track: [], single: [], ...m });
 
-describe("pickTrack and pickSingle", () => {
-  it("fills the track's composition, and its single where empty", () => {
+describe("pickTrack", () => {
+  it("fills the track's composition, and leaves its single alone", () => {
     const disc = emptyDisc();
     disc.single[1] = { date: "", qid: "", discogs: "" };
     pickTrack(disc, 1, track("Q10", "Q20", ["Q30"]));
     expect([disc.track[1], disc.comp[1], disc.single[1]]).toEqual([
       "Q10",
       "Q20",
-      { date: "", qid: "Q30", discogs: "" },
+      { date: "", qid: "", discogs: "" },
     ]);
-    // A single with a release date is a new one, so it isn't filled.
-    disc.single[5] = { date: "2026", qid: "", discogs: "" };
-    pickTrack(disc, 5, track("Q15", "Q25", ["Q35"]));
-    expect(disc.single[5]).toEqual({ date: "2026", qid: "", discogs: "" });
     // The track's own composition replaces another, which would be a second P2550.
     disc.comp[2] = "Q99";
     pickTrack(disc, 2, track("Q11", "Q21"));
@@ -61,20 +56,11 @@ describe("pickTrack and pickSingle", () => {
     disc.comp[4] = "Q98";
     pickTrack(disc, 4, track("Q14", null));
     expect(disc.comp[4]).toBe("Q98");
-    pickSingle(disc, 3, "Q31");
-    expect(disc.single[3]).toEqual({ date: "", qid: "Q31", discogs: "" });
-    // Picking a single replaces a release date: it's one or the other.
-    pickSingle(disc, 5, "Q36");
-    expect(disc.single[5]).toEqual({ date: "", qid: "Q36", discogs: "" });
-    // A Discogs ID can go on a reused single too, so it stays.
-    disc.single[6] = { date: "2026", qid: "", discogs: "123" };
-    pickSingle(disc, 6, "Q37");
-    expect(disc.single[6]).toEqual({ date: "", qid: "Q37", discogs: "123" });
   });
 });
 
 describe("fillUnambiguous", () => {
-  it("fills single matches on this disc, and leaves ambiguous ones", () => {
+  it("fills matches on this disc, and leaves ambiguous ones and singles", () => {
     const disc = emptyDisc();
     disc.single[1] = { date: "", qid: "", discogs: "" };
     const rows = {
@@ -82,14 +68,14 @@ describe("fillUnambiguous", () => {
       "0:1": rm({ track: [track("Q10", "Q20", ["Q30"])], comp: [match("Q20"), match("Q21")] }),
       // Two tracks: only the composition is certain.
       "0:2": rm({ track: [track("Q11", null), track("Q12", null)], comp: [match("Q22")] }),
-      // A single for a track not marked as having one isn't added.
+      // Singles aren't matched for now.
       "0:3": rm({ single: [match("Q33")] }),
       "1:1": rm({ comp: [match("Q99")] }),
     };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(4);
+    expect(fillUnambiguous(disc, 0, rows)).toBe(3);
     expect(disc.track).toEqual({ 1: "Q10" });
     expect(disc.comp).toEqual({ 1: "Q20", 2: "Q22" });
-    expect(disc.single).toEqual({ 1: { date: "", qid: "Q30", discogs: "" } });
+    expect(disc.single).toEqual({ 1: { date: "", qid: "", discogs: "" } });
     expect(fillUnambiguous(disc, 0, rows)).toBe(0);
   });
 
@@ -123,12 +109,10 @@ describe("fillUnambiguous with guesses", () => {
   it("doesn't fill a match that is only a same-title item with no artist", () => {
     const guess = <M extends Match>(m: M): M => ({ ...m, reasons: ["same title", NO_ARTIST] });
     const disc = emptyDisc();
-    disc.single[1] = { date: "", qid: "", discogs: "" };
     const rows = {
       "0:1": rm({
         track: [guess(track("Q10", null))],
         comp: [guess(match("Q20"))],
-        single: [guess(match("Q30"))],
       }),
       // Linked to a credited track, it's no longer a guess.
       "0:2": rm({
@@ -138,7 +122,6 @@ describe("fillUnambiguous with guesses", () => {
     expect(fillUnambiguous(disc, 0, rows)).toBe(1);
     expect(disc.track).toEqual({});
     expect(disc.comp).toEqual({ 2: "Q21" });
-    expect(disc.single[1].qid).toBe("");
   });
 });
 
@@ -149,19 +132,16 @@ describe("fillUnambiguous with similar titles", () => {
       reasons: ["similar title", ...more],
     });
     const disc = emptyDisc();
-    disc.single[1] = { date: "", qid: "", discogs: "" };
     const rows = {
       "0:1": rm({
         track: [similar(track("Q10", "Q20"), "same performer")],
         comp: [{ ...match("Q20"), reasons: ["recorded as Q10", "similar title"] }],
-        single: [similar(match("Q30"), "same performer")],
       }),
       "0:2": rm({ comp: [{ ...match("Q21"), reasons: ["same title", "same performer"] }] }),
     };
     expect(fillUnambiguous(disc, 0, rows)).toBe(1);
     expect(disc.track).toEqual({});
     expect(disc.comp).toEqual({ 2: "Q21" });
-    expect(disc.single[1].qid).toBe("");
   });
 
   it("fills a same-title match that a similar title sits beside", () => {
@@ -310,7 +290,8 @@ describe("reviewTracks", () => {
   it("lists each track's candidates, open until every one is settled", () => {
     const disc = emptyDisc();
     const [t1, t2] = reviewTracks([disc], parsed, rows, new Set());
-    expect(t1.candidates.map((c) => c.id)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
+    // Singles aren't suggested for now.
+    expect(t1.candidates.map((c) => c.id)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2"]);
     expect(t1.reviewed).toBe(false);
     expect(t2.candidates[0].others).toEqual(["B"]);
     disc.comp[1] = "Q2";
@@ -318,21 +299,8 @@ describe("reviewTracks", () => {
     expect(used.candidates.map((c) => [c.used, c.taken])).toEqual([
       [false, true],
       [true, false],
-      [false, false],
     ]);
-    // The single is still to decide on.
-    expect(used.reviewed).toBe(false);
-    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
-    expect(reviewTracks([disc], parsed, rows, new Set())[0].reviewed).toBe(true);
-  });
-
-  it("keeps a reused single open until its composition is used or dismissed", () => {
-    const disc = emptyDisc();
-    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
-    const [t1] = reviewTracks([disc], parsed, rows, new Set());
-    expect(t1.reviewed).toBe(false);
-    const dismissed = new Set([candidateId(0, 1, "comp", "Q1"), candidateId(0, 1, "comp", "Q2")]);
-    expect(reviewTracks([disc], parsed, rows, dismissed)[0].reviewed).toBe(true);
+    expect(used.reviewed).toBe(true);
   });
 
   it("keeps a used track open until its own composition is used or dismissed", () => {
@@ -348,10 +316,10 @@ describe("reviewTracks", () => {
 
   it("counts a track reviewed once every candidate is dismissed or its field filled", () => {
     const disc = emptyDisc();
-    const dismissed = new Set([candidateId(0, 1, "comp", "Q1"), candidateId(0, 1, "comp", "Q2")]);
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q1")]);
     const [t1] = reviewTracks([disc], parsed, rows, dismissed);
-    expect([t1.candidates.length, t1.dismissed, t1.reviewed]).toEqual([1, 2, false]);
-    disc.single[1] = { date: "", qid: "Q9", discogs: "" };
+    expect([t1.candidates.length, t1.dismissed, t1.reviewed]).toEqual([1, 1, false]);
+    disc.comp[1] = "Q9";
     expect(reviewTracks([disc], parsed, rows, dismissed)[0].reviewed).toBe(true);
     dismissed.add(candidateId(0, 2, "comp", "Q4"));
     expect(reviewTracks([emptyDisc()], parsed, rows, dismissed)[1]).toMatchObject({
@@ -370,12 +338,12 @@ describe("reviewTracks", () => {
   it("dismisses every candidate left but a used one with Dismiss all", () => {
     const disc = emptyDisc();
     const [t1] = reviewTracks([disc], parsed, rows, new Set());
-    expect(dismissAllIds(t1)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2", "0:1:single:Q3"]);
+    expect(dismissAllIds(t1)).toEqual(["0:1:comp:Q1", "0:1:comp:Q2"]);
     disc.comp[1] = "Q2";
     const dismissed = new Set(dismissAllIds(reviewTracks([disc], parsed, rows, new Set())[0]));
-    expect([...dismissed]).toEqual(["0:1:comp:Q1", "0:1:single:Q3"]);
+    expect([...dismissed]).toEqual(["0:1:comp:Q1"]);
     expect(reviewTracks([disc], parsed, rows, dismissed)[0]).toMatchObject({
-      dismissed: 2,
+      dismissed: 1,
       reviewed: true,
     });
   });
@@ -383,16 +351,12 @@ describe("reviewTracks", () => {
   it("sums up the review across tracks", () => {
     const disc = emptyDisc();
     disc.comp[1] = "Q1";
-    const dismissed = new Set([
-      candidateId(0, 1, "comp", "Q2"),
-      candidateId(0, 1, "single", "Q3"),
-      candidateId(0, 2, "comp", "Q4"),
-    ]);
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q2"), candidateId(0, 2, "comp", "Q4")]);
     expect(reviewSummary(reviewTracks([disc], parsed, rows, dismissed))).toEqual({
       tracks: 2,
       reviewed: 2,
       reused: 1,
-      dismissed: 3,
+      dismissed: 2,
     });
     expect(reviewSummary([])).toEqual({ tracks: 0, reviewed: 0, reused: 0, dismissed: 0 });
   });
@@ -412,35 +376,30 @@ describe("reviewedLine and summaryLine", () => {
 
   it("names the one item used, with its QID", () => {
     const disc = emptyDisc();
-    disc.single[1] = { date: "", qid: "Q70", discogs: "" };
-    const dismissed = new Set([
-      candidateId(0, 1, "track", "Q50"),
-      candidateId(0, 1, "comp", "Q60"),
-    ]);
-    expect(reviewedLine(review(disc, dismissed))).toBe("Using the single, Q70, 2 dismissed");
+    disc.comp[1] = "Q60";
+    const dismissed = new Set([candidateId(0, 1, "track", "Q50")]);
+    expect(reviewedLine(review(disc, dismissed))).toBe("Using the composition, Q60, 1 dismissed");
   });
 
   it("names every kind used, the track first", () => {
     const disc = emptyDisc();
     pickTrack(disc, 1, rows["0:1"].track[0]);
-    disc.single[1] = { date: "", qid: "Q70", discogs: "" };
     const r = review(disc);
-    expect(reviewedLine(r)).toBe("Using the track, composition and single");
-    expect(r.candidates.map((c) => comesWithTrack(r, c))).toEqual([true, false, true]);
+    expect(reviewedLine(r)).toBe("Using the track and composition");
+    expect(r.candidates.map((c) => comesWithTrack(r, c))).toEqual([true, false]);
   });
 
   it("says a track whose candidates were all dismissed is created new", () => {
     const all = new Set(dismissAllIds(review()));
-    expect(reviewedLine(review(emptyDisc(), all))).toBe("3 dismissed, creating new");
+    expect(reviewedLine(review(emptyDisc(), all))).toBe("2 dismissed, creating new");
   });
 
   it("says when other QIDs are filled in instead", () => {
     const disc = emptyDisc();
     disc.track[1] = "Q1";
     disc.comp[1] = "Q2";
-    const dismissed = new Set([candidateId(0, 1, "single", "Q70")]);
+    const dismissed = new Set([candidateId(0, 1, "comp", "Q60")]);
     expect(reviewedLine(review(disc, dismissed))).toBe("1 dismissed, other QIDs filled in");
-    disc.single[1] = { date: "", qid: "Q3", discogs: "" };
     expect(reviewedLine(review(disc))).toBe("Other QIDs are filled in");
   });
 

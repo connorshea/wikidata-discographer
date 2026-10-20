@@ -1,6 +1,6 @@
 // Filling a disc's "existing" fields from the mirror's matches
-// (POST /api/items/matches). A track brings its composition and single along,
-// so a reused track keeps the composition it already records.
+// (POST /api/items/matches). A track brings its composition along, so a
+// reused track keeps the composition it already records.
 import type {
   Match,
   MatchesRequest,
@@ -68,29 +68,16 @@ export function stillValid(
 /**
  * Use `t` as track `n`'s existing track, with the composition it records (in
  * place of any other: the run links a reused track to the composition field,
- * so a different one would give it a second P2550), and its single where neither
- * a QID nor a release date (which means a new single) is filled in.
+ * so a different one would give it a second P2550).
  */
 export function pickTrack(disc: Disc, n: number, t: TrackMatch): void {
   disc.track[n] = t.qid;
   if (t.composition) disc.comp[n] = t.composition;
-  const sg = disc.single[n];
-  if (sg && !sg.qid.trim() && !sg.date.trim() && t.singles.length === 1) sg.qid = t.singles[0];
-}
-
-/**
- * Use `qid` as track `n`'s single, adding the single if it has none. Any
- * release date goes, since a single is either reused or dated, but a Discogs
- * ID stays.
- */
-export function pickSingle(disc: Disc, n: number, qid: string): void {
-  disc.single[n] = { date: "", qid, discogs: disc.single[n]?.discogs ?? "" };
 }
 
 /**
  * Fill every empty field of disc `di` that has exactly one match, and return
- * how many were filled. A single is only filled in for a track already marked
- * as having one: an existing single isn't reason enough to add it to the run.
+ * how many were filled.
  *
  * A reused track is linked to the composition field (P2550), so the two must
  * agree: a track is left out when it records a different composition than the
@@ -114,7 +101,6 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     const m = {
       track: all.track.filter((t) => !isSimilarOnly(t)),
       comp: all.comp.filter((c) => !isSimilarOnly(c)),
-      single: all.single.filter((sg) => !isSimilarOnly(sg)),
     };
     if (!disc.track[n] && m.track.length === 1 && !isGuess(m.track[0])) {
       const t = m.track[0];
@@ -127,23 +113,12 @@ export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, Row
     if (track?.composition) set(disc.comp, n, track.composition);
     const compFree = !disc.track[n] || (track !== undefined && !track.composition);
     if (compFree && m.comp.length === 1 && !isGuess(m.comp[0])) set(disc.comp, n, m.comp[0].qid);
-    const sg = disc.single[n];
-    if (sg && !sg.qid.trim() && !sg.date.trim()) {
-      const qid = track?.singles.length === 1 ? track.singles[0] : m.single[0]?.qid;
-      if (
-        qid &&
-        (track?.singles.length === 1 || (m.single.length === 1 && !isGuess(m.single[0])))
-      ) {
-        sg.qid = qid;
-        filled++;
-      }
-    }
   }
   return filled;
 }
 
-/** A field a candidate fills: the row's existing composition, track or single. */
-export type Slot = keyof RowMatches;
+/** A field a candidate fills: the row's existing composition or track. */
+export type Slot = "comp" | "track";
 
 /** Identifies a candidate for dismissing it, e.g. "0:3:comp:Q42". */
 export const candidateId = (di: number, n: number, slot: Slot, qid: string) =>
@@ -154,7 +129,7 @@ export const groupId = (di: number, n: number) => `match-${di}-${n}`;
 
 /** What's in a row's field for `slot`, or "" when it's empty. */
 export function slotValue(disc: Disc, n: number, slot: Slot): string {
-  return (slot === "single" ? disc.single[n]?.qid : disc[slot][n])?.trim() ?? "";
+  return disc[slot][n]?.trim() ?? "";
 }
 
 /**
@@ -348,7 +323,7 @@ export interface TrackReview {
 /**
  * Each track's candidates and whether it's been reviewed: every candidate is
  * used, dismissed or has its field filled with something else. Using one
- * doesn't settle the rest, so a reused single still leaves its composition open.
+ * doesn't settle the rest, so a reused composition still leaves its track open.
  */
 export function reviewTracks(
   discs: readonly Disc[],
@@ -363,7 +338,7 @@ export function reviewTracks(
     for (const r of discTracks) {
       const m = rows[`${di}:${r.n}`];
       if (!m) continue;
-      const all = (["comp", "track", "single"] as const).flatMap((slot) =>
+      const all = (["comp", "track"] as const).flatMap((slot) =>
         m[slot].map((match): Candidate => {
           const value = slotValue(disc, r.n, slot);
           return {
@@ -405,7 +380,7 @@ export function withoutDismissed(
     out[key] = {
       comp: keep("comp", m.comp),
       track: keep("track", m.track),
-      single: keep("single", m.single),
+      single: m.single,
     };
   }
   return out;
@@ -483,7 +458,6 @@ const andList = (xs: string[]) =>
 const SLOT_NAMES: [Slot, string][] = [
   ["track", "track"],
   ["comp", "composition"],
-  ["single", "single"],
 ];
 
 /**
@@ -495,12 +469,12 @@ export function comesWithTrack(r: TrackReview, c: Candidate): boolean {
   return r.candidates.some((t) => {
     if (t.slot !== "track" || !t.used) return false;
     const m = t.match as TrackMatch;
-    return c.slot === "comp" ? m.composition === c.match.qid : m.singles.includes(c.match.qid);
+    return m.composition === c.match.qid;
   });
 }
 
 /**
- * A reviewed track's outcome in a line, e.g. "Using the single, Q3962408" or
+ * A reviewed track's outcome in a line, e.g. "Using the track, Q3962408" or
  * "1 dismissed, creating new".
  */
 export function reviewedLine(r: TrackReview): string {

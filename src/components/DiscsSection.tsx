@@ -37,7 +37,7 @@ import {
   rowPerformers,
   type Renumbered,
 } from "../lib/tracks.ts";
-import { FieldErr, InfoTip, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
+import { FieldErr, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import { type ItemLookup, singleProblem, singleProblems } from "./use-item-summaries.ts";
@@ -543,44 +543,23 @@ function DiscBlock({
                         review={review}
                         setDisc={setDisc}
                       />
-                      <div className="f wide trk-single">
-                        <span className="with-badge">
-                          <label className="c">
-                            <input
-                              type="checkbox"
-                              checked={!!single}
-                              onChange={(e) => {
-                                const ticked = e.target.checked;
-                                update((s) => {
-                                  const disc = s.discs[di];
-                                  if (ticked) disc.single[r.n] = { date: "", qid: "", discogs: "" };
-                                  else delete disc.single[r.n];
-                                });
-                                if (ticked) setFocusNext({ row: i, col: "single" });
-                              }}
-                            />
-                            Also released as a single
-                          </label>
-                          <InfoTip id={`disc${di}-single-${r.n}`} label="About singles">
-                            Tick a track that was also released as a single. The single becomes its
-                            own item, an instance of single (Q134556) with the track’s title and
-                            artists, that lists the track and is taken from the album. Set the new
-                            single’s release date, or an existing single’s QID to link that one
-                            instead, and its Discogs master ID. Currently, you can only create
-                            singles with one track.
-                          </InfoTip>
-                        </span>
-                        {single && (
+                      {/* Singles can't be added for now, but a form saved with one still has it. */}
+                      {single && (
+                        <div className="wide">
                           <SinglePanel
                             di={di}
                             n={r.n}
                             title={r.title}
                             issue={singleIssue(r.n)}
                             found={found}
+                            onRemove={() => {
+                              update((s) => void delete s.discs[di].single[r.n]);
+                              setFocusNext({ row: i, col: "title" });
+                            }}
                             {...{ state, update }}
                           />
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <div className="trk-foot">
                         {/* As the closed card's menu is, so the focus can come back here. */}
                         <button type="button" className="link danger" data-col="menu" onClick={del}>
@@ -1139,6 +1118,7 @@ function SinglePanel({
   title,
   issue,
   found,
+  onRemove,
   state,
   update,
 }: Pick<SectionProps, "state" | "update"> & {
@@ -1148,6 +1128,7 @@ function SinglePanel({
   /** What's wrong with the fields, or "". */
   issue: string;
   found: ItemLookup | undefined;
+  onRemove: () => void;
 }) {
   const sg = state.discs[di].single[n];
   const qid = sg.qid.trim();
@@ -1245,6 +1226,9 @@ function SinglePanel({
             Singles can only have one track for now.
           </span>
         </span>
+        <button type="button" className="ghost small" onClick={onRemove}>
+          Remove single
+        </button>
       </div>
     </div>
   );
