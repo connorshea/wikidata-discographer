@@ -313,10 +313,13 @@ function Form() {
   }, [search, navigate]);
   // Clear also starts the import afresh, without the last load's summary.
   const [clears, setClears] = useState(0);
-  // Clear and a MusicBrainz import start a new form.
+  // Candidates dismissed in the Possible matches card, by candidateId.
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  // Clear and a MusicBrainz import start a new form, with nothing dismissed in it.
   const replace = useCallback(
     (next: State) => {
       setState(next);
+      setDismissed(new Set());
       renewFormId();
     },
     [renewFormId],
@@ -378,8 +381,6 @@ function Form() {
   }, [fromArtist]);
   const matchesRef = useRef<MatchesHandle>(null);
   const { matches, status } = useMatches(state, plan);
-  // Candidates dismissed in the Possible matches card, by candidateId.
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
   const reviews = reviewTracks(state.discs, plan.tracks, matches, dismissed);
   const props = { state, update, plan };
   const { user } = useAuth();
