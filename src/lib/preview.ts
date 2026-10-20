@@ -20,6 +20,7 @@ import {
   MUSICBRAINZ,
   SONG_FORM,
   type State,
+  REC_TYPES,
   TRACK_TYPES,
   TRACK_UNIT,
   type Value,
@@ -39,6 +40,7 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   P1545: "series ordinal",
   P2047: "duration",
   P10135: "recording date",
+  P1552: "has characteristic",
   P1243: "ISRC",
   P248: "stated in",
   P813: "retrieved",
@@ -175,6 +177,7 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
     ...ALBUM_TYPES,
     ...ALBUM_FORMS,
     ...TRACK_TYPES,
+    ...REC_TYPES,
     ...LANGS,
     ...PARTS.flatMap(([, options]): (readonly [string, string])[] => [...options]),
   ];

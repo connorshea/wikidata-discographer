@@ -944,6 +944,11 @@ button.trk-title {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Done fills the height of the title field next to it. */
+.trk.open .trk-side {
+  align-self: stretch;
+  align-items: stretch;
+}
 .trk-facts {
   grid-column: 2 / -1;
   display: flex;
@@ -1044,6 +1049,40 @@ button.trk-title {
 .fact-tag .mb-badge {
   font-size: 9.5px;
   padding: 0 4px;
+}
+/* Recording types to pick from: a pill each, checked while it's on. */
+.rt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.rt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rt-chip:hover {
+  background: var(--hover);
+}
+.rt-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--trk-ink);
+}
+.rt-chip[aria-pressed="true"]::before {
+  content: "✓";
+  font-size: 12px;
 }
 /* A track with possible matches to review. */
 a.match-tag {

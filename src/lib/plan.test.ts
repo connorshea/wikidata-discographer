@@ -373,6 +373,87 @@ describe("buildPlan", () => {
     });
   });
 
+  describe("recording types", () => {
+    const REC = "519d8f15-518b-479c-af8d-664fb3ae455a";
+    const typesOf = (state: typeof EXAMPLE, key: string) => {
+      const op = buildPlan(state).ops.find((o) => (o.op === "create" ? o.key : o.what) === key) as {
+        claims: Claim[];
+      };
+      return op.claims.filter((c) => c.property === "P1552");
+    };
+    const ids = (c: Claim[]) => c.map((x) => (x.value as { id: string }).id);
+    const liveCover = (state: typeof EXAMPLE) => {
+      state.discs[0].tracks[1].mb = {
+        recording: REC,
+        work: "",
+        recordingName: "",
+        workName: "",
+        iswcs: [],
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        deezer: [],
+        tidal: [],
+        composers: [],
+        lyricists: [],
+        attributes: ["live", "cover"],
+        source: { recording: REC, retrieved: "2026-10-04" },
+      };
+      return state;
+    };
+
+    it("adds the album's to every track, unless a track has its own", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recTypes = ["Q15975575"];
+      state.discs[0].tracks[1].recTypes = ["Q214272", "Q60566516"];
+      state.discs[0].tracks[2].recTypes = [];
+      expect(ids(typesOf(state, "track:0:2"))).toEqual(["Q214272", "Q60566516"]);
+      expect(typesOf(state, "track:0:3")).toEqual([]);
+      expect(typesOf(state, "track:0:4")).toEqual([
+        { property: "P1552", value: { type: "item", id: "Q15975575" } },
+      ]);
+    });
+
+    it("adds what MusicBrainz says, cited to the recording, with live in place of studio", () => {
+      const state = liveCover(structuredClone(EXAMPLE));
+      state.settings.recTypes = ["Q15975575", "Q25203386"];
+      const claims = typesOf(state, "track:0:2");
+      expect(ids(claims)).toEqual(["Q56123235", "Q155171", "Q25203386"]);
+      expect(claims.find((c) => ids([c])[0] === "Q155171")?.references).toBeDefined();
+      expect(claims.find((c) => ids([c])[0] === "Q25203386")?.references).toBeUndefined();
+      state.settings.mbDetails = false;
+      expect(ids(typesOf(state, "track:0:2"))).toEqual(["Q15975575", "Q25203386"]);
+    });
+
+    it("cites MusicBrainz for what it says, even when the album or the track says it too", () => {
+      const state = liveCover(structuredClone(EXAMPLE));
+      state.settings.recTypes = ["Q56123235"];
+      const cited = () =>
+        typesOf(state, "track:0:2")
+          .filter((c) => c.references)
+          .map((c) => ids([c])[0]);
+      expect(cited()).toEqual(["Q56123235", "Q155171"]);
+      state.discs[0].tracks[1].recTypes = ["Q56123235", "Q155171", "Q60566516"];
+      expect(cited()).toEqual(["Q56123235", "Q155171"]);
+    });
+
+    it("doesn't make an instrumental recording an instrumental version", () => {
+      const state = liveCover(structuredClone(EXAMPLE));
+      state.discs[0].tracks[1].mb!.attributes = ["instrumental"];
+      expect(typesOf(state, "track:0:2")).toEqual([]);
+    });
+
+    it("adds them to an existing track only if it has none", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recTypes = ["Q15975575"];
+      state.discs[0].track[2] = "Q123";
+      const where = `track 1.2 “${state.discs[0].tracks[1].title}”`;
+      expect(typesOf(state, where)).toEqual([
+        { property: "P1552", value: { type: "item", id: "Q15975575" }, ifMissing: true },
+      ]);
+    });
+  });
+
   describe("identifiers from a MusicBrainz import", () => {
     const ids = {
       recording: "519d8f15-518b-479c-af8d-664fb3ae455a",

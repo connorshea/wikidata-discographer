@@ -21,8 +21,11 @@ import {
   partLabel,
   QID,
   TRACK_TYPES,
+  REC_TYPES,
+  recTypeName,
   trackLangOf,
   trackRecordedOf,
+  trackRecTypesOf,
   trackTypeOf,
   WITHOUT_LYRICS,
   type Disc,
@@ -590,6 +593,19 @@ function DiscBlock({
                           })
                         }
                       />
+                      <RecTypes
+                        n={r.n}
+                        track={t}
+                        settings={state.settings}
+                        linkedTrack={linkedTo("track", r.n)}
+                        onChange={(qids) =>
+                          setDisc((disc) => {
+                            const row = disc.tracks[i];
+                            if (qids) row.recTypes = qids;
+                            else delete row.recTypes;
+                          })
+                        }
+                      />
                       <LinkFields
                         di={di}
                         n={r.n}
@@ -672,8 +688,9 @@ function DiscBlock({
                           )),
                         !linkedTo("track", r.n) && typeTag(t, state.settings),
                         !linkedTo("comp", r.n) && langTag(t, state.settings),
-                        !(linkedTo("track", r.n) && !state.settings.extendExisting) &&
-                          recordedFact(t, state.settings),
+                        ...(linkedTo("track", r.n) && !state.settings.extendExisting
+                          ? []
+                          : [recTypesFact(t, state.settings), recordedFact(t, state.settings)]),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -1131,6 +1148,78 @@ function Recorded({
       <FieldErr id={id} msg={error} />
     </div>
   );
+}
+
+/**
+ * What kind of recording a track is, which it takes from the album and MusicBrainz unless
+ * it has its own. Changing one makes them all its own, until they're the same again.
+ */
+function RecTypes({
+  n,
+  track,
+  settings,
+  linkedTrack,
+  onChange,
+}: {
+  n: number;
+  track: Track;
+  settings: Settings;
+  linkedTrack: boolean;
+  onChange: (qids: string[] | null) => void;
+}) {
+  const { qids, fromMb } = trackRecTypesOf(settings, track);
+  const fallback = trackRecTypesOf(settings, { mb: track.mb }).qids;
+  const toggle = (q: string) => {
+    const next = qids.includes(q) ? qids.filter((x) => x !== q) : [...qids, q];
+    const same = next.length === fallback.length && next.every((x) => fallback.includes(x));
+    onChange(same ? null : next);
+  };
+  const note =
+    linkedTrack && !settings.extendExisting
+      ? "Not added, as the track is an existing one and Link reused items is off."
+      : linkedTrack
+        ? "Added to the existing track only if it has none."
+        : track.recTypes
+          ? "Its own, rather than the album's."
+          : "The album's, from Item settings, with what MusicBrainz says.";
+  return (
+    <div className="f wide" role="group" aria-label={`Track ${n} recording type`}>
+      <span>Recording type</span>
+      <div className="rt-chips">
+        {REC_TYPES.map(([q, l]) => (
+          <button
+            key={q}
+            type="button"
+            className="rt-chip"
+            data-col={q === REC_TYPES[0][0] ? "rectype" : undefined}
+            aria-pressed={qids.includes(q)}
+            onClick={() => toggle(q)}
+          >
+            {fromMb.includes(q) && <span className="mb-badge">MB</span>}
+            {capitalized(l)}
+          </button>
+        ))}
+      </div>
+      <span className="sub">
+        {note}
+        {track.recTypes && !(linkedTrack && !settings.extendExisting) && (
+          <>
+            {" "}
+            <button type="button" className="link" onClick={() => onChange(null)}>
+              Use the album's
+            </button>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** A closed card's "Studio recording", or null for a track with no recording type. */
+function recTypesFact(track: Track, settings: Settings) {
+  const { qids } = trackRecTypesOf(settings, track);
+  if (!qids.length) return null;
+  return <span key="rectypes">{capitalized(qids.map(recTypeName).join(", "))}</span>;
 }
 
 /** A closed card's "Recorded Nov 2025", or null for a track with no recording date. */

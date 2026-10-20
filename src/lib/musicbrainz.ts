@@ -9,12 +9,14 @@ import {
   ALBUM_FORMS,
   ALBUM_TYPES,
   EP_CLASS,
+  LIVE_RECORDING,
   MB_ATTRIBUTES,
   type MbAttribute,
   NO_LINGUISTIC_CONTENT,
   PARTS,
   parseDate,
   STUDIO_ALBUM,
+  STUDIO_RECORDING,
 } from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, MbWriter, State, Track } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
@@ -347,6 +349,8 @@ export interface MbForm {
   discs: Disc[];
   date: string;
   p407: string;
+  /** The recording types its tracks start with, of `REC_TYPES`. */
+  recTypes: string[];
   report: MbReport;
 }
 
@@ -816,6 +820,13 @@ export function releaseToForm(
     discs: discs.length ? discs : [emptyDisc()],
     date,
     p407,
+    // A live album is live, even when it's also a compilation, and a studio album is
+    // studio. The rest may be either.
+    recTypes: secondary.includes("Live")
+      ? [LIVE_RECORDING]
+      : form === STUDIO_ALBUM
+        ? [STUDIO_RECORDING]
+        : [],
     report,
   };
 }
@@ -869,7 +880,10 @@ export function reportCounts(r: MbReport) {
   };
 }
 
-/** The form filled from `form`, keeping the settings other than the album's dates and language. */
+/**
+ * The form filled from `form`, keeping the settings other than the album's dates, language
+ * and recording type.
+ */
 export function applyMbForm(state: State, form: MbForm): State {
   return coerceState({
     start: "mb",
@@ -880,6 +894,7 @@ export function applyMbForm(state: State, form: MbForm): State {
       p407Custom: false,
       // The last album's recording date isn't this one's.
       recDate: "",
+      recTypes: form.recTypes,
     },
     album: form.album,
     artists: form.artists,

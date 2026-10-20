@@ -45,6 +45,8 @@ export interface Settings {
   mbDetails: boolean;
   /** The P10135 recording date of tracks with none of their own or from MusicBrainz. */
   recDate: string;
+  /** The P1552 recording types, of `REC_TYPES`, of tracks with none of their own. */
+  recTypes: string[];
 }
 
 export interface AlbumState {
@@ -190,6 +192,8 @@ export interface Track {
   p407Custom?: boolean;
   /** Its P10135 recording date as typed, when it's not the one `trackRecordedOf` gives it. */
   recorded?: string;
+  /** Its P1552 recording types, of `REC_TYPES`, when they're not the ones `trackRecTypesOf` gives it. */
+  recTypes?: string[];
 }
 
 export interface Disc {
@@ -328,9 +332,63 @@ export const TRACK_TYPES = [
 export const WITH_VOCALS = "Q55850593";
 export const WITHOUT_LYRICS = "Q55850643";
 
+/**
+ * What kind of recording a track is, as P1552 (has characteristic) values: the ones
+ * music tracks on Wikidata use most.
+ */
+export const REC_TYPES = [
+  ["Q15975575", "studio recording"],
+  ["Q56123235", "live recording"],
+  ["Q155171", "cover version"],
+  ["Q25203386", "re-recording"],
+  ["Q214272", "remix"],
+  ["Q56612794", "instrumental version"],
+  ["Q60566516", "acoustic version"],
+  ["Q13582719", "medley"],
+] as const;
+export const STUDIO_RECORDING = "Q15975575";
+export const LIVE_RECORDING = "Q56123235";
+/** A recording type's name in a sentence, e.g. "live recording". */
+export const recTypeName = (qid: string) => REC_TYPES.find(([q]) => q === qid)?.[1] ?? qid;
+
+/** Only the recording types the form lists, each once, in its order. */
+export const knownRecTypes = (qids: readonly unknown[]): string[] =>
+  REC_TYPES.map(([q]) => q).filter((q) => qids.includes(q));
+
 /** The attributes of a performance relation on MusicBrainz that the form reads. */
-export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley", "demo"] as const;
+export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley"] as const;
 export type MbAttribute = (typeof MB_ATTRIBUTES)[number];
+
+/**
+ * The recording type each MusicBrainz attribute says, for those that say one. Instrumental
+ * makes a track without lyrics instead, as an instrumental version is one of a song with words.
+ */
+const MB_REC_TYPES: Partial<Record<MbAttribute, string>> = {
+  live: LIVE_RECORDING,
+  cover: "Q155171",
+  medley: "Q13582719",
+};
+
+/**
+ * A track's P1552 recording types: its own, or else the album's with those MusicBrainz's
+ * attributes say. A live recording isn't a studio one, so it takes that one's place.
+ * `fromMb` lists the ones MusicBrainz gave.
+ */
+export function trackRecTypesOf(
+  S: Settings,
+  t: Pick<Track, "mb" | "recTypes">,
+): { qids: string[]; fromMb: string[] } {
+  const mb = S.mbDetails ? (t.mb?.attributes ?? []).flatMap((a) => MB_REC_TYPES[a] ?? []) : [];
+  // A track's own types that MusicBrainz says too are still cited to it.
+  if (t.recTypes) {
+    const qids = knownRecTypes(t.recTypes);
+    return { qids, fromMb: qids.filter((q) => mb.includes(q)) };
+  }
+  const base = mb.includes(LIVE_RECORDING)
+    ? S.recTypes.filter((q) => q !== STUDIO_RECORDING)
+    : S.recTypes;
+  return { qids: knownRecTypes([...base, ...mb]), fromMb: knownRecTypes(mb) };
+}
 
 /**
  * A track's P31: its own, or else without lyrics when MusicBrainz says the recording is
@@ -1134,6 +1192,14 @@ export function buildPlan(state: State): Plan {
       },
     ];
   };
+  // P1552, cited to the recording when MusicBrainz says it.
+  const recTypeClaims = (it: PlanItem): Claim[] => {
+    const { qids, fromMb } = trackRecTypesOf(S, it.r);
+    return qids.map((q) => ({
+      ...claim("P1552", item(q)),
+      ...(fromMb.includes(q) ? mbRef(it.r.mb) : {}),
+    }));
+  };
   // A language from MusicBrainz is cited to the work, as the writers are.
   const langClaims = (it: PlanItem): Claim[] => {
     const { qids, from } = trackLangOf(S, it.r);
@@ -1247,6 +1313,7 @@ export function buildPlan(state: State): Plan {
             claim("P2550", compOf(it)),
             ...perf,
             ...recordedClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
+            ...recTypeClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
             // Not a second recording ID, as with a composition's work ID.
             ...(it.r.mb?.recording
               ? [
@@ -1281,6 +1348,7 @@ export function buildPlan(state: State): Plan {
             ]
           : []),
         ...recordedClaims(it),
+        ...recTypeClaims(it),
         ...trackIds(it.r.mb),
       ],
     });
