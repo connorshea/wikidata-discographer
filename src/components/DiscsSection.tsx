@@ -884,10 +884,14 @@ function TrackType({
 }) {
   const id = useId();
   const fallback = trackTypeOf(settings, { mb: track.mb });
+  // A track's own type that's the one it would get anyway reads as that one, not twice.
+  const value = track.type && track.type !== fallback.qid ? track.type : "";
   const note = linkedTrack
     ? "Not used, as the track is an existing one."
-    : !track.type && fallback.fromMb
-      ? "MusicBrainz says the recording is instrumental."
+    : !value && fallback.fromMb
+      ? track.mb?.attributes?.includes("instrumental")
+        ? "MusicBrainz says the recording is instrumental."
+        : "MusicBrainz says the work has no linguistic content."
       : "";
   return (
     <div className="f">
@@ -897,13 +901,13 @@ function TrackType({
         data-col="type"
         aria-label={`Track ${n} type`}
         disabled={linkedTrack}
-        value={track.type ?? ""}
+        value={value}
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">
           {`${capitalized(typeName(fallback.qid))} (${fallback.fromMb ? "from MusicBrainz" : "default for album"})`}
         </option>
-        {TRACK_TYPES.map(([q, l]) => (
+        {TRACK_TYPES.filter(([q]) => q !== fallback.qid).map(([q, l]) => (
           <option key={q} value={q}>
             {capitalized(l)}
           </option>
@@ -955,12 +959,12 @@ function TrackLang({
 }) {
   const id = useId();
   const fallback = trackLangOf(settings, { ...track, p407: undefined });
-  const value =
-    track.p407 === undefined
-      ? ""
-      : isCustomTrackLang(track)
-        ? "other"
-        : track.p407.trim() || "none";
+  // As with the type, a track's own language that's the one it would get anyway isn't listed
+  // again, and reads as that one.
+  const same = fallback.qids.length === 1 ? fallback.qids[0] : fallback.qids.length ? null : "";
+  const own =
+    track.p407 === undefined ? undefined : isCustomTrackLang(track) ? "other" : track.p407.trim();
+  const value = own === undefined || own === same ? "" : own || "none";
   const note = linkedComp
     ? "Not used, as the composition is an existing one."
     : value === "" && fallback.from === "mb"
@@ -985,17 +989,19 @@ function TrackLang({
         }}
       >
         <option value="">{`${langNames(fallback.qids)} (${LANG_SOURCES[fallback.from ?? "album"]})`}</option>
-        <option value="none">None</option>
+        {same !== "" && <option value="none">None</option>}
         <optgroup label="Languages">
-          {LANGS.map(([q, l]) => (
+          {LANGS.filter(([q]) => q !== same).map(([q, l]) => (
             <option key={q} value={q}>
               {l}
             </option>
           ))}
         </optgroup>
-        <optgroup label="Instrumental">
-          <option value={NO_LINGUISTIC_CONTENT}>No linguistic content</option>
-        </optgroup>
+        {same !== NO_LINGUISTIC_CONTENT && (
+          <optgroup label="Instrumental">
+            <option value={NO_LINGUISTIC_CONTENT}>No linguistic content</option>
+          </optgroup>
+        )}
         <option value="other">Other QID…</option>
       </select>
       {value === "other" && (

@@ -894,6 +894,16 @@ describe("applyMbForm", () => {
     expect(next.discs[0].comp).toEqual({});
   });
 
+  it("makes an instrumental release's tracks without lyrics, and another's not", () => {
+    const wordless = release();
+    wordless["text-representation"] = { language: "zxx" };
+    const next = applyMbForm(EXAMPLE, releaseToForm(wordless, NONE));
+    expect(next.settings).toMatchObject({ p407: "Q22282939", trackType: "Q55850643" });
+    expect(applyMbForm(next, releaseToForm(RELEASE, NONE)).settings.trackType).toBe("Q55850593");
+    const audio = { ...EXAMPLE, settings: { ...EXAMPLE.settings, trackType: "Q7302866" } };
+    expect(applyMbForm(audio, releaseToForm(RELEASE, NONE)).settings.trackType).toBe("Q7302866");
+  });
+
   it("starts a studio album's tracks as studio recordings, and a live album's as live ones", () => {
     const studio = applyMbForm(EXAMPLE, releaseToForm(RELEASE, NONE));
     expect(studio.settings.recTypes).toEqual(["Q15975575"]);

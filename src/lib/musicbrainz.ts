@@ -17,6 +17,8 @@ import {
   parseDate,
   STUDIO_ALBUM,
   STUDIO_RECORDING,
+  WITH_VOCALS,
+  WITHOUT_LYRICS,
 } from "./plan.ts";
 import type { AlbumMb, AlbumState, Disc, MbRowIds, MbWriter, State, Track } from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
@@ -881,8 +883,8 @@ export function reportCounts(r: MbReport) {
 }
 
 /**
- * The form filled from `form`, keeping the settings other than the album's dates, language
- * and recording type.
+ * The form filled from `form`, keeping the settings other than the album's dates, language,
+ * recording type and, when the language says, track type.
  */
 export function applyMbForm(state: State, form: MbForm): State {
   return coerceState({
@@ -895,6 +897,14 @@ export function applyMbForm(state: State, form: MbForm): State {
       // The last album's recording date isn't this one's.
       recDate: "",
       recTypes: form.recTypes,
+      // A release with no linguistic content has tracks without lyrics, and one with a
+      // language doesn't keep the last one's.
+      trackType:
+        form.p407 === NO_LINGUISTIC_CONTENT
+          ? WITHOUT_LYRICS
+          : state.settings.trackType === WITHOUT_LYRICS
+            ? WITH_VOCALS
+            : state.settings.trackType,
     },
     album: form.album,
     artists: form.artists,

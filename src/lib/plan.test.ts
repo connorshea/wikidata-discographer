@@ -176,6 +176,15 @@ describe("buildPlan", () => {
       expect(p31()).not.toHaveProperty("references");
     });
 
+    it("makes a recording of a work with no linguistic content a track without lyrics", () => {
+      const state = instrumental(structuredClone(EXAMPLE));
+      state.discs[0].tracks[1].mb!.attributes = [];
+      state.discs[0].tracks[1].mb!.languages = ["Q22282939"];
+      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850643" });
+      state.discs[0].tracks[1].mb!.languages = ["Q22282939", "Q1860"];
+      expect(typeOf(state, "track:0:2")).toEqual({ type: "item", id: "Q55850593" });
+    });
+
     it("leaves the album's type with the MusicBrainz details off", () => {
       const state = instrumental(structuredClone(EXAMPLE));
       state.settings.mbDetails = false;
@@ -270,6 +279,22 @@ describe("buildPlan", () => {
       expect(langsOf(state, "comp:0:2")).toEqual([]);
       expect(langsOf(state, "comp:0:3").map((c) => c.value)).toEqual([
         { type: "item", id: "Q22282939" },
+      ]);
+    });
+
+    it("gives a work with no linguistic content on MusicBrainz none, not the album's", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].mb = ids({ languages: ["Q22282939"] });
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q22282939" },
+      ]);
+    });
+
+    it("gives an instrumental version of a song the album's language", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].mb = ids({ attributes: ["instrumental"] });
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1860" },
       ]);
     });
 
@@ -625,9 +650,57 @@ describe("buildPlan", () => {
         ]);
       });
 
-      it("don't block it when one of them reuses a composition", () => {
+      it("block it when one of them reuses a composition, which would get the work ID too", () => {
         const state = shared();
         state.discs[0].comp[5] = "Q42";
+        expect(buildPlan(state).ready).toBe(false);
+        state.discs[0].comp[2] = "Q43";
+        expect(buildPlan(state).ready).toBe(false);
+      });
+
+      it("don't block it when both reuse the same composition", () => {
+        const state = shared();
+        state.discs[0].comp[2] = "Q42";
+        state.discs[0].comp[5] = "Q42";
+        expect(buildPlan(state).ready).toBe(true);
+      });
+
+      it("don't block it when a reused composition won't get the work ID", () => {
+        const state = shared();
+        state.discs[0].comp[5] = "Q42";
+        state.settings.extendExisting = false;
+        expect(buildPlan(state).ready).toBe(true);
+      });
+    });
+
+    describe("of one recording on two tracks", () => {
+      const shared = () => {
+        const state = withIds();
+        state.discs[0].tracks[4].mb = { ...ids, work: "" };
+        state.discs[0].tracks[1].mb = { ...ids, work: "" };
+        return state;
+      };
+
+      it("block the run", () => {
+        const plan = buildPlan(shared());
+        expect(plan.ready).toBe(false);
+        expect(plan.messages).toContainEqual([
+          "err",
+          "Tracks 1.2 and 1.5 are the same MusicBrainz recording. " +
+            "Discographer can't create this album for now.",
+        ]);
+      });
+
+      it("block it when one of them reuses a track, which would get the recording ID too", () => {
+        const state = shared();
+        state.discs[0].track[5] = "Q42";
+        expect(buildPlan(state).ready).toBe(false);
+      });
+
+      it("don't block it when both reuse the same track", () => {
+        const state = shared();
+        state.discs[0].track[2] = "Q42";
+        state.discs[0].track[5] = "Q42";
         expect(buildPlan(state).ready).toBe(true);
       });
     });
