@@ -70,6 +70,7 @@ export const EMPTY: State = {
       allmusic: "",
       discogs: "",
     },
+    release: "",
     mb: null,
   },
   artists: {},
@@ -374,9 +375,12 @@ export function coerceState(raw: unknown): State {
       allmusic: str(ids.allmusic),
       discogs: str(ids.discogs),
     },
+    release: "",
     mb: coerceAlbumMb(a.mb),
   };
   if (album.form && !/^Q\d+$/.test(album.form)) album.form = "";
+  // A form saved before the release was kept on its own has it only in a new album's references.
+  album.release = matching(a.release, MBID_PATTERN) || (album.mb?.release ?? "");
   const discs = (Array.isArray(r.discs) ? r.discs : []).filter(isObj).map((disc): Disc => ({
     part: str(disc.part),
     partCustom: bool(disc.partCustom, false),

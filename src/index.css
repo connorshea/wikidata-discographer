@@ -2894,14 +2894,17 @@ button.link.start-change {
   text-decoration: none;
   min-height: 44px;
 }
-/* The release a MusicBrainz load came from. */
+/* The kicker, and beside it the release a MusicBrainz load came from. */
+.start-bar-from {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 12px;
+}
 a.start-link {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   text-decoration: none;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
 }
 a.start-link:hover {
   text-decoration: underline;

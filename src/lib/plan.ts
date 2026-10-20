@@ -56,6 +56,11 @@ export interface AlbumState {
   type: string;
   form: string;
   ids: Record<AlbumIdKey, string>;
+  /**
+   * The MusicBrainz release the form was loaded from, for an album already on Wikidata
+   * as well as a new one. Empty without an import.
+   */
+  release: string;
   /** Where a MusicBrainz import's album details came from. Null without an import. */
   mb: AlbumMb | null;
 }
