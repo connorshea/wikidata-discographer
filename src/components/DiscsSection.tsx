@@ -1145,7 +1145,7 @@ function RecTypes({
             <>
               {" "}
               <button type="button" className="link" onClick={() => onChange(null)}>
-                Use the album's
+                Use the album default
               </button>
             </>
           )}
