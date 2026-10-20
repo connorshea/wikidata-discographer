@@ -56,8 +56,7 @@ export function performerNames(state: State, plan: Plan): string[] {
 
 /**
  * The composers and lyricists the compositions get, by name, with how many songs each
- * wrote: those of every imported track, with the setting on, unless the row reuses a
- * composition and Link reused items is off.
+ * wrote: those of every imported track, with the setting on.
  */
 export function writers(
   state: State,
@@ -65,10 +64,9 @@ export function writers(
 ): Map<string, { composer: boolean; lyricist: boolean; songs: number }> {
   const out = new Map<string, { composer: boolean; lyricist: boolean; songs: number }>();
   if (!state.settings.mbWriters) return out;
-  plan.tracks.forEach((rows, di) => {
+  plan.tracks.forEach((rows) => {
     for (const t of rows) {
       if (!t.mb) continue;
-      if ((state.discs[di]?.comp[t.n] ?? "").trim() && !state.settings.extendExisting) continue;
       const names = new Set<string>();
       for (const [role, ws] of [
         ["composer", t.mb.composers],
@@ -192,13 +190,7 @@ const labelLangName = (S: Settings) =>
   LABEL_LANGS.find(([c]) => c === S.lang.trim())?.[1] ?? S.lang.trim();
 
 /** The options Item settings lists as checkboxes. */
-export const SETTING_FLAGS = [
-  "compPerformer",
-  "extendExisting",
-  "straight",
-  "mbWriters",
-  "mbDetails",
-] as const;
+export const SETTING_FLAGS = ["compPerformer", "straight", "mbWriters", "mbDetails"] as const;
 
 /** Item settings in a few pills, for when the section is collapsed. */
 export function settingsPills(S: Settings): string[] {
@@ -331,9 +323,7 @@ export function createCounts(state: State, plan: Plan): CreateCount[] {
     plan.ops.filter((o) => o.op === "create" && o.key.startsWith(prefix)).length;
   const fromOps = plan.ops.length > 0;
   const tracks = fromOps ? creates("track:") : rows.filter(({ t, d }) => !has(d.track[t.n])).length;
-  const comps = fromOps
-    ? creates("comp:")
-    : rows.filter(({ t, d }) => !has(d.comp[t.n]) && !has(d.track[t.n])).length;
+  const comps = fromOps ? creates("comp:") : rows.filter(({ t, d }) => !has(d.comp[t.n])).length;
   return [
     {
       kind: "tracks",

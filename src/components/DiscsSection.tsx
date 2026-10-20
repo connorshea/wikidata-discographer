@@ -237,7 +237,6 @@ function DiscBlock({
       d.tracks[i],
       linkedTo("comp", rows[i].n),
       linkedTo("track", rows[i].n),
-      state.settings.extendExisting,
       state.settings.mbWriters,
     );
 
@@ -590,12 +589,7 @@ function DiscBlock({
                         setDisc={setDisc}
                       />
                       {state.settings.mbWriters && (
-                        <Writers
-                          track={t}
-                          linkedComp={linkedTo("comp", r.n)}
-                          extendExisting={state.settings.extendExisting}
-                          linked={linked}
-                        />
+                        <Writers track={t} linkedComp={linkedTo("comp", r.n)} linked={linked} />
                       )}
                       <div className="trk-foot">
                         {/* As the closed card's menu is, so the focus can come back here. */}
@@ -646,9 +640,8 @@ function DiscBlock({
                           )),
                         !linkedTo("track", r.n) && typeTag(t, state.settings),
                         !linkedTo("comp", r.n) && langTag(t, state.settings),
-                        ...(linkedTo("track", r.n) && !state.settings.extendExisting
-                          ? []
-                          : [recTypesFact(t, state.settings), recordedFact(t, state.settings)]),
+                        recTypesFact(t, state.settings),
+                        recordedFact(t, state.settings),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -812,12 +805,10 @@ function ArtistsField({
 function Writers({
   track,
   linkedComp,
-  extendExisting,
   linked,
 }: {
   track: Track;
   linkedComp: boolean;
-  extendExisting: boolean;
   linked: (name: string) => boolean;
 }) {
   const groups = [
@@ -825,12 +816,9 @@ function Writers({
     ["Lyricists", track.mb?.lyricists ?? []],
   ] as const;
   if (groups.every(([, ws]) => !ws.length)) return null;
-  // As the plan has it: a reused composition only gets them with Link reused items on.
   const note = !linkedComp
     ? "Added to the new composition. Writers that aren't linked in People are left off."
-    : extendExisting
-      ? "The linked composition only gets the ones it doesn't have yet."
-      : "Not added, as the composition is an existing one and Link reused items is off.";
+    : "The linked composition only gets the ones it doesn't have yet.";
   return (
     <div className="f wide">
       <span className="with-badge">
@@ -1062,22 +1050,19 @@ function Recorded({
   const fallback = trackRecordedOf(settings, { mb: track.mb });
   const own = track.recorded !== undefined;
   const mb = settings.mbDetails ? track.mb?.recorded : undefined;
-  const unused = linkedTrack && !settings.extendExisting;
   const range =
     mb?.end && !own ? `MusicBrainz has ${mb.begin} to ${mb.end}. Using the first date.` : "";
-  const note = unused
-    ? "Not added, as the track is an existing one and Link reused items is off."
-    : linkedTrack
-      ? `Added to the existing track only if it has none.${range && ` ${range}`}`
-      : range
-        ? range
-        : mb && !own
-          ? "From the recording on MusicBrainz"
-          : mb
-            ? `MusicBrainz has ${mb.begin}${mb.end ? ` to ${mb.end}` : ""}`
-            : fallback.date && !own
-              ? "Default from Item settings"
-              : "";
+  const note = linkedTrack
+    ? `Added to the existing track only if it has none.${range && ` ${range}`}`
+    : range
+      ? range
+      : mb && !own
+        ? "From the recording on MusicBrainz"
+        : mb
+          ? `MusicBrainz has ${mb.begin}${mb.end ? ` to ${mb.end}` : ""}`
+          : fallback.date && !own
+            ? "Default from Item settings"
+            : "";
   return (
     <div className="f">
       <label htmlFor={id}>Recording date</label>
@@ -1088,8 +1073,7 @@ function Recorded({
         data-col="recorded"
         spellCheck={false}
         aria-label={`Track ${n} recording date`}
-        disabled={unused}
-        placeholder={unused ? "" : fallback.date || "YYYY, YYYY-MM or YYYY-MM-DD"}
+        placeholder={fallback.date || "YYYY, YYYY-MM or YYYY-MM-DD"}
         value={track.recorded ?? ""}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-err`}
@@ -1131,14 +1115,11 @@ function RecTypes({
     const same = next.length === fallback.length && next.every((x) => fallback.includes(x));
     onChange(same ? null : next);
   };
-  const note =
-    linkedTrack && !settings.extendExisting
-      ? "Not added, as the track is an existing one and Link reused items is off."
-      : linkedTrack
-        ? "Added to the existing track only if it has none."
-        : track.recTypes
-          ? "Overriding the album default."
-          : null;
+  const note = linkedTrack
+    ? "Added to the existing track only if it has none."
+    : track.recTypes
+      ? "Overriding the album default."
+      : null;
   return (
     <div className="f wide" role="group" aria-label={`Track ${n} recording type`}>
       <span>Recording type</span>
@@ -1160,7 +1141,7 @@ function RecTypes({
       {note && (
         <span className="sub">
           {note}
-          {track.recTypes && !(linkedTrack && !settings.extendExisting) && (
+          {track.recTypes && (
             <>
               {" "}
               <button type="button" className="link" onClick={() => onChange(null)}>
@@ -1546,7 +1527,7 @@ interface MbFacts {
   comp: [string, string][];
   /** Why a section adds less: the row links an existing item. */
   linked: { track: boolean; comp: boolean };
-  /** What a linked item still gets: its MusicBrainz ID and writers, with Link reused items on. */
+  /** What a linked item still gets: its MusicBrainz ID and writers. */
   extend: { track: [string, string][]; comp: [string, string][] };
   /** Whether the values get a MusicBrainz reference. */
   cited: boolean;
@@ -1562,7 +1543,6 @@ function mbFacts(
   raw: Track,
   linkedComp: boolean,
   linkedTrack: boolean,
-  extendExisting: boolean,
   /** The Composers and lyricists setting. */
   withWriters: boolean,
 ): MbFacts | null {
@@ -1598,9 +1578,7 @@ function mbFacts(
     track,
     comp,
     linked: { track: linkedTrack, comp: linkedComp },
-    extend: extendExisting
-      ? { track: recording, comp: [...work, ...writers] }
-      : { track: [], comp: [] },
+    extend: { track: recording, comp: [...work, ...writers] },
     cited: !!ids.source,
     recording: ids.recording || ids.source?.recording || "",
   };

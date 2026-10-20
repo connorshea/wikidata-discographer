@@ -387,13 +387,10 @@ describe("buildPlan", () => {
       expect(plan.blockers).toContain("settings");
     });
 
-    it("doesn't check a date an existing track won't get", () => {
+    it("checks the date of an existing track, which gets it if it has none", () => {
       const state = structuredClone(EXAMPLE);
       state.discs[0].tracks[1].recorded = "2025-13";
       state.discs[0].track[2] = "Q123";
-      state.settings.extendExisting = false;
-      expect(buildPlan(state).rowErrs["0:2"]?.recorded).toBeUndefined();
-      state.settings.extendExisting = true;
       expect(buildPlan(state).rowErrs["0:2"].recorded).toBe("13 isn't a month (01–12).");
     });
   });
@@ -623,13 +620,6 @@ describe("buildPlan", () => {
         expect(added(state, "Q101")?.map((c) => c.property)).not.toContain("P4404");
         expect(added(state, "Q102")).toBeUndefined();
       });
-
-      it("add neither with Link reused items off", () => {
-        const state = reused();
-        state.settings.extendExisting = false;
-        expect(added(state, "Q101")).toBeUndefined();
-        expect(added(state, "Q102")).toBeUndefined();
-      });
     });
 
     describe("of one work on two tracks", () => {
@@ -662,13 +652,6 @@ describe("buildPlan", () => {
         const state = shared();
         state.discs[0].comp[2] = "Q42";
         state.discs[0].comp[5] = "Q42";
-        expect(buildPlan(state).ready).toBe(true);
-      });
-
-      it("don't block it when a reused composition won't get the work ID", () => {
-        const state = shared();
-        state.discs[0].comp[5] = "Q42";
-        state.settings.extendExisting = false;
         expect(buildPlan(state).ready).toBe(true);
       });
     });
@@ -860,7 +843,7 @@ describe("buildPlan", () => {
       expect(writersOf(find(plan.ops, "comp:0:2"))).toEqual([]);
     });
 
-    it("go on a reused composition only with Link reused items on", () => {
+    it("go on a reused composition", () => {
       const state = withWriters();
       state.discs[0].comp[2] = "Q102";
       expect(writersOf(update(buildPlan(state).ops, "Q102"))).toEqual([
@@ -868,8 +851,6 @@ describe("buildPlan", () => {
         ["P86", "Q7146018"],
         ["P676", "Q52583"],
       ]);
-      state.settings.extendExisting = false;
-      expect(update(buildPlan(state).ops, "Q102")).toBeUndefined();
     });
 
     it("go uncited without the work they came from", () => {
@@ -1002,6 +983,29 @@ describe("buildPlan", () => {
     expect(track?.op === "create" && track.claims).toEqual(
       expect.arrayContaining([{ property: "P2550", value: { type: "item", ref: "comp:0:2" } }]),
     );
+  });
+
+  it("links a reused track to the composition it creates", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].track[2] = "Q999";
+    const { ops, ready } = buildPlan(state);
+    expect(ready).toBe(true);
+    expect(find(ops, "comp:0:2")).toBeDefined();
+    const reused = ops.find(
+      (o) => o.op === "addClaims" && "id" in o.target && o.target.id === "Q999",
+    );
+    expect(reused?.claims).toContainEqual({
+      property: "P2550",
+      value: { type: "item", ref: "comp:0:2" },
+    });
+  });
+
+  it("adds a performer once when two names link the same item", () => {
+    const state = structuredClone(EXAMPLE);
+    state.discs[0].tracks[1].artists = ["Carly Rae Jepsen", "CRJ"];
+    state.artists.CRJ = "Q52583";
+    const track = find(buildPlan(state).ops, "track:0:2");
+    expect(track?.claims.filter((c) => c.property === "P175")).toHaveLength(1);
   });
 
   it("puts the disc and position on each tracklist statement", () => {
