@@ -80,7 +80,19 @@ export default function AlbumSection({
           <div className={`album-card${problem || albumTracklist ? " bad" : ""}`}>
             <div className="album-card-text">
               <div className="album-card-title">
-                {qid && <span className="qid-chip mono">{qid}</span>}
+                {QID.test(qid) ? (
+                  <a
+                    className="qid-chip mono"
+                    href={`${wikiBaseUrl}/wiki/${qid}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open on Wikidata"
+                  >
+                    {qid}
+                  </a>
+                ) : (
+                  qid && <span className="qid-chip mono">{qid}</span>
+                )}
                 <b>{ok?.label ?? (found?.status === "loading" ? "Loading…" : "")}</b>
               </div>
               {ok?.description && <div className="muted">{ok.description}</div>}
@@ -95,20 +107,12 @@ export default function AlbumSection({
               <div className="album-card-actions">
                 <button
                   type="button"
-                  className="link album-card-link"
+                  className="ghost album-card-reload"
                   disabled={reloading}
                   onClick={onReload}
                 >
                   {reloading ? "Reloading…" : "Reload from Wikidata"}
                 </button>
-                <a
-                  className="album-card-link"
-                  href={`${wikiBaseUrl}/wiki/${qid}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open on Wikidata ↗
-                </a>
               </div>
             )}
           </div>
