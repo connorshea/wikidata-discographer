@@ -3999,3 +3999,36 @@ table.artist-albums {
   margin: 14px 0 0;
   max-width: 90ch;
 }
+/* The artist's singles, a block of their own under the albums' one. */
+.singles-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  margin-bottom: 12px;
+}
+.singles-head h3 {
+  margin: 0;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.singles-head .sw {
+  background: var(--rg-edge);
+}
+.singles-head .muted {
+  font-size: 13px;
+}
+.artist button.show-all {
+  margin-top: 12px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.artist button.show-all:hover {
+  text-decoration: underline;
+}

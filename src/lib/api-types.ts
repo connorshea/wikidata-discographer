@@ -233,12 +233,27 @@ export interface ArtistAlbum {
   run: Pick<AlbumRun, "id" | "status" | "mine" | "createdAt" | "editGroupUrl"> | null;
 }
 
-/** GET /api/artists/:qid: the artist and its albums and EPs, oldest first. */
+/** One of an artist's singles, as of the mirror. */
+export interface ArtistSingle {
+  qid: string;
+  label: string | null;
+  /** The earliest publication date: "YYYY", "YYYY-MM" or "YYYY-MM-DD". */
+  released: string | null;
+  /** How many tracks its tracklist (P658) lists. */
+  tracks: number;
+  /** The albums it's taken from (P13602), by label. Not always the artist's. */
+  takenFrom: { qid: string; label: string | null }[];
+}
+
+/** GET /api/artists/:qid: the artist and its albums, EPs and singles, oldest first. */
 export interface ArtistResponse {
   artist: { qid: string; label: string | null; description: string | null };
   albums: ArtistAlbum[];
   /** Whether there were more albums than the server sends. */
   truncated: boolean;
+  singles: ArtistSingle[];
+  /** Whether there were more singles than the server sends. */
+  singlesTruncated: boolean;
 }
 
 /** Body of POST /api/items/matches: the tracklist rows to find existing items for. */

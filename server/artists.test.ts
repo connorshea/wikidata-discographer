@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { type AlbumRow, artistAlbums, queryQid, rankArtists } from "./artists.ts";
+import {
+  type AlbumRow,
+  artistAlbums,
+  artistSingles,
+  queryQid,
+  rankArtists,
+  type SingleRow,
+} from "./artists.ts";
 import { albumType } from "../src/lib/music.ts";
 
 describe("queryQid", () => {
@@ -103,6 +110,86 @@ describe("artistAlbums", () => {
         editGroupUrl: "https://editgroups.toolforge.org/b/CB/g9/",
       },
     });
+  });
+});
+
+describe("artistSingles", () => {
+  const single = (qid: number, label: string, released: string | null): SingleRow => ({
+    qid,
+    label,
+    released,
+  });
+  const none = { tracks: new Map(), takenFrom: new Map(), labels: new Map() };
+
+  it("sorts like albums: oldest first, undated last, and same dates by title", () => {
+    const rows = [
+      single(1, "Good Time", "2012-06-26"),
+      single(2, "Untitled", null),
+      single(3, "Vanilla Twilight", "2009-11-03"),
+      single(4, "Fireflies", "2009-11-03"),
+    ];
+    expect(artistSingles(rows, none).map((s) => s.label)).toEqual([
+      "Fireflies",
+      "Vanilla Twilight",
+      "Good Time",
+      "Untitled",
+    ]);
+  });
+
+  it("counts its tracks", () => {
+    const [s] = artistSingles([single(1, "Fireflies", "2009")], {
+      ...none,
+      tracks: new Map([[1, 2]]),
+    });
+    expect(s).toEqual({
+      qid: "Q1",
+      label: "Fireflies",
+      released: "2009",
+      tracks: 2,
+      takenFrom: [],
+    });
+  });
+
+  it("resolves the albums it's taken from, by label", () => {
+    const singles = artistSingles(
+      [
+        single(1, "Standalone", "2014"),
+        single(2, "Fireflies", "2009"),
+        single(3, "Good Time", "2012"),
+      ],
+      {
+        ...none,
+        takenFrom: new Map([
+          [2, [40]],
+          // The artist's album, and a compilation that isn't the artist's.
+          [3, [41, 50]],
+        ]),
+        labels: new Map([
+          [40, "Ocean Eyes"],
+          [41, "The Midsummer Station"],
+          [50, "Now That's What I Call Music! 44"],
+        ]),
+      },
+    );
+    expect(singles.map((s) => [s.label, s.takenFrom])).toEqual([
+      ["Fireflies", [{ qid: "Q40", label: "Ocean Eyes" }]],
+      [
+        "Good Time",
+        [
+          { qid: "Q50", label: "Now That's What I Call Music! 44" },
+          { qid: "Q41", label: "The Midsummer Station" },
+        ],
+      ],
+      ["Standalone", []],
+    ]);
+  });
+
+  it("has no label for an album that isn't in the mirror", () => {
+    const [s] = artistSingles([single(1, "Fireflies", "2009")], {
+      ...none,
+      takenFrom: new Map([[1, [99]]]),
+    });
+    expect(s.takenFrom).toEqual([{ qid: "Q99", label: null }]);
   });
 });
 

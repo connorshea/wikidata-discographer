@@ -2,7 +2,7 @@
 // discography one album at a time:
 //
 //   GET /api/artists/search?q=…   artists by name (exact, then prefix), or by QID or Wikidata URL
-//   GET /api/artists/:qid         the artist and its albums and EPs, oldest first
+//   GET /api/artists/:qid         the artist and its albums, EPs and singles, oldest first
 import { Hono } from "hono";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./db.ts";
@@ -20,6 +20,7 @@ import type {
   ArtistResponse,
   ArtistResult,
   ArtistSearchResponse,
+  ArtistSingle,
   SubmissionStatus,
 } from "../src/lib/api-types.ts";
 
@@ -28,10 +29,13 @@ export const artistRoutes = new Hono<AuthEnv>();
 const P175 = propertyNumber("P175");
 const P436 = propertyNumber("P436");
 const P658 = propertyNumber("P658");
+const P13602 = propertyNumber("P13602");
 const ALBUM_KINDS: MusicKind[] = ["album", "ep"];
 
 /** The most albums an artist page lists: the oldest ones, if it has more. */
 export const MAX_ARTIST_ALBUMS = 500;
+/** The most singles an artist page lists: the oldest ones, if it has more. */
+export const MAX_ARTIST_SINGLES = 500;
 
 /** The query's QID, if it's one or a Wikidata URL. */
 export function queryQid(q: string): string | null {
@@ -195,12 +199,82 @@ export function artistAlbums(
           : null,
       };
     })
-    .sort(
-      (a, b) =>
-        (a.released === null ? 1 : 0) - (b.released === null ? 1 : 0) ||
-        (a.released ?? "").localeCompare(b.released ?? "") ||
-        (a.label ?? a.qid).localeCompare(b.label ?? b.qid),
-    );
+    .sort(byRelease);
+}
+
+/** Oldest first, undated last, and ones released the same day by title. */
+function byRelease(
+  a: { qid: string; label: string | null; released: string | null },
+  b: { qid: string; label: string | null; released: string | null },
+): number {
+  return (
+    (a.released === null ? 1 : 0) - (b.released === null ? 1 : 0) ||
+    (a.released ?? "").localeCompare(b.released ?? "") ||
+    (a.label ?? a.qid).localeCompare(b.label ?? b.qid)
+  );
+}
+
+/** A single row, as read from the database. */
+export interface SingleRow {
+  qid: number;
+  label: string | null;
+  released: string | null;
+}
+
+/**
+ * The artist's singles, sorted like its albums, each with the albums it's
+ * taken from (P13602) by label. An album missing from `labels` (not in the
+ * mirror) has no label.
+ */
+export function artistSingles(
+  rows: SingleRow[],
+  facts: {
+    tracks: ReadonlyMap<number, number>;
+    takenFrom: ReadonlyMap<number, number[]>;
+    labels: ReadonlyMap<number, string | null>;
+  },
+): ArtistSingle[] {
+  return rows
+    .map((r): ArtistSingle => ({
+      qid: toQid(r.qid),
+      label: r.label,
+      released: r.released,
+      tracks: facts.tracks.get(r.qid) ?? 0,
+      takenFrom: (facts.takenFrom.get(r.qid) ?? [])
+        .map((n) => ({ qid: toQid(n), label: facts.labels.get(n) ?? null }))
+        .sort((a, b) => (a.label ?? a.qid).localeCompare(b.label ?? b.qid)),
+    }))
+    .sort(byRelease);
+}
+
+/**
+ * The items of these kinds with the artist as performer, at most `max` (plus
+ * one, to tell when there are more), oldest first, as the page lists them.
+ */
+function performedBy(artist: number, kinds: MusicKind[], max: number) {
+  return (
+    db
+      .select({
+        qid: musicItems.qid,
+        kind: musicItems.kind,
+        label: musicItems.label,
+        instanceOf: musicItems.instanceOf,
+        released: musicItems.released,
+        parts: musicItems.parts,
+      })
+      .from(musicLinks)
+      .innerJoin(musicItems, eq(musicItems.qid, musicLinks.qid))
+      .where(
+        and(
+          eq(musicLinks.target, artist),
+          eq(musicLinks.property, P175),
+          inArray(musicItems.kind, kinds),
+        ),
+      )
+      // In the page's order, so a long discography keeps its oldest items.
+      .orderBy(isNull(musicItems.released), asc(musicItems.released), asc(musicItems.qid))
+      .limit(max + 1)
+  );
 }
 
 artistRoutes.get("/:qid", async (c) => {
@@ -215,42 +289,42 @@ artistRoutes.get("/:qid", async (c) => {
   }
   if (!artist) return c.json({ error: `${qid} isn't an artist on Wikidata` }, 404);
 
-  const rows = await db
-    .select({
-      qid: musicItems.qid,
-      kind: musicItems.kind,
-      label: musicItems.label,
-      instanceOf: musicItems.instanceOf,
-      released: musicItems.released,
-      parts: musicItems.parts,
-    })
-    .from(musicLinks)
-    .innerJoin(musicItems, eq(musicItems.qid, musicLinks.qid))
-    .where(
-      and(
-        eq(musicLinks.target, qidNumber(qid)),
-        eq(musicLinks.property, P175),
-        inArray(musicItems.kind, ALBUM_KINDS),
-      ),
-    )
-    // In the page's order, so a long discography keeps its oldest albums.
-    .orderBy(isNull(musicItems.released), asc(musicItems.released), asc(musicItems.qid))
-    .limit(MAX_ARTIST_ALBUMS + 1);
+  const [rows, singleRows] = await Promise.all([
+    performedBy(qidNumber(qid), ALBUM_KINDS, MAX_ARTIST_ALBUMS),
+    performedBy(qidNumber(qid), ["single"], MAX_ARTIST_SINGLES),
+  ]);
   const truncated = rows.length > MAX_ARTIST_ALBUMS;
   const albums = rows.slice(0, MAX_ARTIST_ALBUMS);
+  const singles = singleRows.slice(0, MAX_ARTIST_SINGLES);
   const qids = albums.map((r) => r.qid);
-  const [tracks, ids, runs] = qids.length
-    ? await Promise.all([
-        db
+  const singleQids = singles.map((r) => r.qid);
+  const [tracks, fromLinks, ids, runs] = await Promise.all([
+    qids.length || singleQids.length
+      ? db
           .select({ qid: musicLinks.qid, n: count() })
           .from(musicLinks)
-          .where(and(inArray(musicLinks.qid, qids), eq(musicLinks.property, P658)))
-          .groupBy(musicLinks.qid),
-        db
+          .where(
+            and(inArray(musicLinks.qid, [...qids, ...singleQids]), eq(musicLinks.property, P658)),
+          )
+          .groupBy(musicLinks.qid)
+      : [],
+    // Not just the artist's albums: a single can be taken from a compilation
+    // or another artist's album.
+    singleQids.length
+      ? db
+          .select({ qid: musicLinks.qid, target: musicLinks.target, label: musicItems.label })
+          .from(musicLinks)
+          .leftJoin(musicItems, eq(musicItems.qid, musicLinks.target))
+          .where(and(inArray(musicLinks.qid, singleQids), eq(musicLinks.property, P13602)))
+      : [],
+    qids.length
+      ? db
           .select({ qid: musicExternalIds.qid, value: musicExternalIds.value })
           .from(musicExternalIds)
-          .where(and(inArray(musicExternalIds.qid, qids), eq(musicExternalIds.property, P436))),
-        db
+          .where(and(inArray(musicExternalIds.qid, qids), eq(musicExternalIds.property, P436)))
+      : [],
+    qids.length
+      ? db
           .select({
             id: submissions.id,
             albumQid: submissions.albumQid,
@@ -260,11 +334,14 @@ artistRoutes.get("/:qid", async (c) => {
             createdAt: submissions.createdAt,
           })
           .from(submissions)
-          .where(inArray(submissions.albumQid, qids)),
-      ])
-    : [[], [], []];
+          .where(inArray(submissions.albumQid, qids))
+      : [],
+  ]);
   const releaseGroups = new Map<number, string[]>();
   for (const r of ids) releaseGroups.set(r.qid, [...(releaseGroups.get(r.qid) ?? []), r.value]);
+  const takenFrom = new Map<number, number[]>();
+  for (const r of fromLinks) takenFrom.set(r.qid, [...(takenFrom.get(r.qid) ?? []), r.target]);
+  const trackCounts = new Map(tracks.map((r) => [r.qid, r.n]));
 
   c.header("Cache-Control", "no-store");
   return c.json({
@@ -273,12 +350,18 @@ artistRoutes.get("/:qid", async (c) => {
       albums,
       {
         parts: new Map(albums.map((r) => [r.qid, r.parts])),
-        tracks: new Map(tracks.map((r) => [r.qid, r.n])),
+        tracks: trackCounts,
         releaseGroups,
         runs: runs.map((r) => ({ ...r, albumQid: r.albumQid! })),
       },
       c.get("user")?.id ?? null,
     ),
     truncated,
+    singles: artistSingles(singles, {
+      tracks: trackCounts,
+      takenFrom,
+      labels: new Map(fromLinks.map((r) => [r.target, r.label])),
+    }),
+    singlesTruncated: singleRows.length > MAX_ARTIST_SINGLES,
   } satisfies ArtistResponse);
 });
