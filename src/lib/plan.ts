@@ -41,6 +41,8 @@ export interface Settings {
   extendExisting: boolean;
   /** Add the composers and lyricists a MusicBrainz import found to the compositions. */
   mbWriters: boolean;
+  /** Use what MusicBrainz says about each recording, such as being instrumental, for its track. */
+  mbDetails: boolean;
 }
 
 export interface AlbumState {
@@ -132,6 +134,11 @@ export interface MbRowIds {
   composers: MbWriter[];
   lyricists: MbWriter[];
   /**
+   * What the recording's performance relation to its work says about it, of those in
+   * `MB_ATTRIBUTES`. Left out when it says none.
+   */
+  attributes?: MbAttribute[];
+  /**
    * The recording, work and day the import came from, for the references on the
    * duration, identifiers and writers. Kept even when an item already has the recording
    * or work ID. `work` is left out when the track has no work.
@@ -160,6 +167,8 @@ export interface Track {
   length?: string;
   /** Null for a track from a form saved before tracks had identifiers of their own. */
   mb: MbRowIds | null;
+  /** Its P31, one of `TRACK_TYPES`, when it's not the one `trackTypeOf` gives it. */
+  type?: string;
 }
 
 export interface Disc {
@@ -293,6 +302,22 @@ export const TRACK_TYPES = [
   ["Q55850643", "music track without lyrics"],
   ["Q7302866", "audio track"],
 ] as const;
+export const WITHOUT_LYRICS = "Q55850643";
+
+/** The attributes of a performance relation on MusicBrainz that the form reads. */
+export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley", "demo"] as const;
+export type MbAttribute = (typeof MB_ATTRIBUTES)[number];
+
+/**
+ * A track's P31: its own, or else without lyrics when MusicBrainz says the recording is
+ * instrumental, or else the album's. `fromMb` says it's the one MusicBrainz gave.
+ */
+export function trackTypeOf(S: Settings, t: Pick<Track, "type" | "mb">) {
+  if (t.type) return { qid: t.type, fromMb: false };
+  if (S.mbDetails && t.mb?.attributes?.includes("instrumental"))
+    return { qid: WITHOUT_LYRICS, fromMb: true };
+  return { qid: S.trackType, fromMb: false };
+}
 
 export const LANGS = [
   ["Q13955", "Arabic"],
@@ -1133,13 +1158,14 @@ export function buildPlan(state: State): Plan {
         });
       continue;
     }
+    const type = trackTypeOf(S, it.r);
     ops.push({
       op: "create",
       key: trackKey(it),
       kind: "track",
       ...labelled(it.r.title, fillDesc(S.trackDesc, year, it.r.artists)),
       claims: [
-        claim("P31", item(S.trackType)),
+        { ...claim("P31", item(type.qid)), ...(type.fromMb ? mbRef(it.r.mb) : {}) },
         title(it.r.title),
         ...perf,
         claim("P2550", compOf(it)),

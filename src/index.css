@@ -973,7 +973,8 @@ button.trk-title {
   font-size: 12.5px;
   font-weight: 600;
 }
-.trk-fields input {
+.trk-fields input,
+.trk-fields select {
   font-weight: 400;
 }
 .trk-fields .wide,
@@ -1019,6 +1020,22 @@ button.trk-title {
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
+}
+/* Something about a track that isn't the album's, such as its type. */
+.fact-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tint);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.fact-tag .mb-badge {
+  font-size: 9.5px;
+  padding: 0 4px;
 }
 /* A track with possible matches to review. */
 a.match-tag {
