@@ -178,6 +178,19 @@ describe("coerceState", () => {
     expect(coerceState({ album: {} }).album.mb).toBeNull();
   });
 
+  it("keeps the release the form was loaded from", () => {
+    const release = "6d42c8a3-69c3-458c-9f18-f8a503780607";
+    expect(coerceState({ album: { release } }).album.release).toBe(release);
+    expect(coerceState({ album: { release: "x" } }).album.release).toBe("");
+    // A form saved before it was kept on its own has it in a new album's references.
+    const mb = {
+      releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
+      release,
+      retrieved: "2026-10-04",
+    };
+    expect(coerceState({ album: { mb } }).album.release).toBe(release);
+  });
+
   it("keeps featured artists that are among the row's artists", () => {
     const track = (feat: unknown) =>
       coerceState({ discs: [{ tracks: [{ n: 1, title: "Song", artists: ["A", "B"], feat }] }] })

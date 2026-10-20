@@ -814,6 +814,7 @@ export function releaseToForm(
       type: type ?? "Q482994",
       form,
       ids,
+      release: release.id,
       // Only a new album gets references, so an album already on Wikidata keeps
       // none, even if it's switched to a new one, as the summary says.
       mb: albumQid ? null : albumMb,

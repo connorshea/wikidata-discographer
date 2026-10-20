@@ -1118,7 +1118,7 @@ function RecTypes({
   const note = linkedTrack
     ? "Added to the existing track only if it has none."
     : track.recTypes
-      ? "Its own, rather than the album's."
+      ? "Overriding the album default."
       : null;
   return (
     <div className="f wide" role="group" aria-label={`Track ${n} recording type`}>
