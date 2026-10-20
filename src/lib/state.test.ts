@@ -110,6 +110,23 @@ describe("coerceState", () => {
     expect(sameDay.mb?.recorded).toEqual({ begin: "2025-11", end: "" });
   });
 
+  it("keeps only the recording types the form lists", () => {
+    const s = coerceState({
+      settings: { recTypes: ["Q56123235", "Q1", "Q15975575"] },
+      discs: [
+        {
+          tracks: [
+            { n: 1, title: "A", recTypes: ["Q5"] },
+            { n: 2, title: "B" },
+          ],
+        },
+      ],
+    });
+    expect(s.settings.recTypes).toEqual(["Q15975575", "Q56123235"]);
+    expect(s.discs[0].tracks[0].recTypes).toEqual([]);
+    expect(s.discs[0].tracks[1]).not.toHaveProperty("recTypes");
+  });
+
   it("drops mistyped values", () => {
     const s = coerceState({
       album: { mode: "delete", type: "Q1", form: "nope", ids: { spotify: 5 } },

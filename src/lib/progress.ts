@@ -8,6 +8,7 @@ import {
   NO_LINGUISTIC_CONTENT,
   type Plan,
   QID,
+  REC_TYPES,
   type Settings,
   type StartingPoint,
   type State,
@@ -212,6 +213,9 @@ export function settingsPills(S: Settings): string[] {
     ...(p407 ? [`Language of work: ${work ? `${work} (${p407})` : p407}`] : []),
     S.date.trim() ? `Published ${S.date.trim()}` : "No publication date",
     ...(S.recDate.trim() ? [`Recorded ${S.recDate.trim()}`] : []),
+    ...(S.recTypes.length
+      ? [S.recTypes.map((q) => REC_TYPES.find(([r]) => r === q)?.[1] ?? q).join(", ")]
+      : []),
     on ? plural(on, "option") + " on" : "No options on",
   ];
 }

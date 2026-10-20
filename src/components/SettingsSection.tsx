@@ -4,11 +4,13 @@ import {
   descPreviews,
   isCustomLabelLang,
   isCustomLang,
+  knownRecTypes,
   LABEL_LANGS,
   LANGS,
   NO_LINGUISTIC_CONTENT,
   normalizeDate,
   normalizeQid,
+  REC_TYPES,
   type Settings,
   TRACK_TYPES,
 } from "../lib/plan.ts";
@@ -47,8 +49,8 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
       ],
       [
         "mbDetails",
-        "Track type, language and recording date",
-        "Use each work's language and each recording's date, and make recordings marked instrumental music tracks without lyrics",
+        "Language, date and recording type",
+        "Use each work's language and each recording's date, and mark recordings tagged live, cover, instrumental, demo or medley",
       ],
     ],
   ],
@@ -290,6 +292,34 @@ export default function SettingsSection({
             </select>
             <span className="sub">The default for every track. Change it per track in Tracks</span>
           </label>
+
+          <div className="f" role="group" aria-labelledby="recTypes-label">
+            <span id="recTypes-label">Recording type (has characteristic)</span>
+            <div className="rt-chips">
+              {REC_TYPES.map(([q, l]) => (
+                <button
+                  key={q}
+                  type="button"
+                  className="rt-chip"
+                  aria-pressed={S.recTypes.includes(q)}
+                  onClick={() =>
+                    set(
+                      "recTypes",
+                      S.recTypes.includes(q)
+                        ? S.recTypes.filter((x) => x !== q)
+                        : knownRecTypes([...S.recTypes, q]),
+                    )
+                  }
+                >
+                  {l.charAt(0).toUpperCase() + l.slice(1)}
+                </button>
+              ))}
+            </div>
+            <span className="sub">
+              The default for every track. A MusicBrainz import starts a live album with live
+              recording and a studio album with studio recording. Change it per track in Tracks
+            </span>
+          </div>
 
           <div className="option-groups">
             {OPTION_GROUPS.map(([group, opts]) => (

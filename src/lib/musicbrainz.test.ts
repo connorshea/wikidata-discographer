@@ -894,6 +894,19 @@ describe("applyMbForm", () => {
     expect(next.discs[0].comp).toEqual({});
   });
 
+  it("starts a studio album's tracks as studio recordings, and a live album's as live ones", () => {
+    const studio = applyMbForm(EXAMPLE, releaseToForm(RELEASE, NONE));
+    expect(studio.settings.recTypes).toEqual(["Q15975575"]);
+    const live = release();
+    live["release-group"]["secondary-types"] = ["Live"];
+    expect(applyMbForm(EXAMPLE, releaseToForm(live, NONE)).settings.recTypes).toEqual([
+      "Q56123235",
+    ]);
+    const compilation = release();
+    compilation["release-group"]["secondary-types"] = ["Compilation"];
+    expect(applyMbForm(EXAMPLE, releaseToForm(compilation, NONE)).settings.recTypes).toEqual([]);
+  });
+
   it("keeps the tracks", () => {
     const next = applyMbForm(EMPTY, releaseToForm(RELEASE, { ...NONE, albumQid: "Q1" }));
     expect(next.discs[0].tracks[0]).toMatchObject({ n: 1, title: "After All", seconds: 252 });

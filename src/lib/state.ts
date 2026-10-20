@@ -1,6 +1,7 @@
 // The default form state, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
 import {
+  knownRecTypes,
   MB_ATTRIBUTES,
   parseDate,
   TRACK_TYPES,
@@ -42,6 +43,7 @@ const DEFAULT_SETTINGS: Settings = {
   mbWriters: true,
   mbDetails: true,
   recDate: "",
+  recTypes: [],
 };
 
 export const emptyDisc = (): Disc => ({
@@ -168,6 +170,7 @@ function coerceTrack(t: Obj): Track | null {
     ...(typeof t.p407 === "string" ? { p407: t.p407 } : {}),
     ...(t.p407Custom === true ? { p407Custom: true } : {}),
     ...(typeof t.recorded === "string" && t.recorded.trim() ? { recorded: t.recorded } : {}),
+    ...(Array.isArray(t.recTypes) ? { recTypes: knownRecTypes(t.recTypes) } : {}),
   };
 }
 
@@ -348,6 +351,7 @@ export function coerceState(raw: unknown): State {
     mbWriters: bool(s.mbWriters, d.mbWriters),
     mbDetails: bool(s.mbDetails, d.mbDetails),
     recDate: str(s.recDate),
+    recTypes: Array.isArray(s.recTypes) ? knownRecTypes(s.recTypes) : [],
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};
