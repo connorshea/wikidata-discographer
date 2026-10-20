@@ -344,7 +344,6 @@ export const REC_TYPES = [
   ["Q214272", "remix"],
   ["Q56612794", "instrumental version"],
   ["Q60566516", "acoustic version"],
-  ["Q220935", "demo"],
   ["Q13582719", "medley"],
 ] as const;
 export const STUDIO_RECORDING = "Q15975575";
@@ -354,7 +353,7 @@ export const knownRecTypes = (qids: readonly unknown[]): string[] =>
   REC_TYPES.map(([q]) => q).filter((q) => qids.includes(q));
 
 /** The attributes of a performance relation on MusicBrainz that the form reads. */
-export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley", "demo"] as const;
+export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley"] as const;
 export type MbAttribute = (typeof MB_ATTRIBUTES)[number];
 
 /** The recording type each MusicBrainz attribute says, for those that say one. */
@@ -362,7 +361,6 @@ const MB_REC_TYPES: Partial<Record<MbAttribute, string>> = {
   live: LIVE_RECORDING,
   cover: "Q155171",
   instrumental: "Q56612794",
-  demo: "Q220935",
   medley: "Q13582719",
 };
 
@@ -374,8 +372,8 @@ const MB_REC_TYPES: Partial<Record<MbAttribute, string>> = {
 export function trackRecTypesOf(
   S: Settings,
   t: Pick<Track, "mb" | "recTypes">,
-): { qids: string[]; fromMb: string[]; own: boolean } {
-  if (t.recTypes) return { qids: knownRecTypes(t.recTypes), fromMb: [], own: true };
+): { qids: string[]; fromMb: string[] } {
+  if (t.recTypes) return { qids: knownRecTypes(t.recTypes), fromMb: [] };
   const mb = S.mbDetails ? (t.mb?.attributes ?? []).flatMap((a) => MB_REC_TYPES[a] ?? []) : [];
   const base = mb.includes(LIVE_RECORDING)
     ? S.recTypes.filter((q) => q !== STUDIO_RECORDING)
@@ -383,7 +381,6 @@ export function trackRecTypesOf(
   return {
     qids: knownRecTypes([...base, ...mb]),
     fromMb: knownRecTypes(mb.filter((q) => !base.includes(q))),
-    own: false,
   };
 }
 

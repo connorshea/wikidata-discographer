@@ -50,7 +50,7 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
       [
         "mbDetails",
         "Language, date and recording type",
-        "Use each work's language and each recording's date, and mark recordings tagged live, cover, instrumental, demo or medley",
+        "Use each work's language and each recording's date, and mark recordings tagged live, cover, instrumental or medley",
       ],
     ],
   ],

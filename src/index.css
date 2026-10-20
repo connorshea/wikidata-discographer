@@ -944,6 +944,11 @@ button.trk-title {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Done fills the height of the title field next to it. */
+.trk.open .trk-side {
+  align-self: stretch;
+  align-items: stretch;
+}
 .trk-facts {
   grid-column: 2 / -1;
   display: flex;
