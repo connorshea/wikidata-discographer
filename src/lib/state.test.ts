@@ -116,15 +116,18 @@ describe("coerceState", () => {
       discs: [
         {
           tracks: [
-            { n: 1, title: "A", recTypes: ["Q5"] },
-            { n: 2, title: "B" },
+            { n: 1, title: "A", recTypes: ["Q5", "Q155171"] },
+            { n: 2, title: "B", recTypes: ["Q5"] },
+            { n: 3, title: "C", recTypes: [] },
           ],
         },
       ],
     });
     expect(s.settings.recTypes).toEqual(["Q15975575", "Q56123235"]);
-    expect(s.discs[0].tracks[0].recTypes).toEqual([]);
+    expect(s.discs[0].tracks[0].recTypes).toEqual(["Q155171"]);
+    // Only types it doesn't know aren't a choice of none, so the album's apply.
     expect(s.discs[0].tracks[1]).not.toHaveProperty("recTypes");
+    expect(s.discs[0].tracks[2].recTypes).toEqual([]);
   });
 
   it("drops mistyped values", () => {

@@ -425,6 +425,24 @@ describe("buildPlan", () => {
       expect(ids(typesOf(state, "track:0:2"))).toEqual(["Q15975575", "Q25203386"]);
     });
 
+    it("cites MusicBrainz for what it says, even when the album or the track says it too", () => {
+      const state = liveCover(structuredClone(EXAMPLE));
+      state.settings.recTypes = ["Q56123235"];
+      const cited = () =>
+        typesOf(state, "track:0:2")
+          .filter((c) => c.references)
+          .map((c) => ids([c])[0]);
+      expect(cited()).toEqual(["Q56123235", "Q155171"]);
+      state.discs[0].tracks[1].recTypes = ["Q56123235", "Q155171", "Q60566516"];
+      expect(cited()).toEqual(["Q56123235", "Q155171"]);
+    });
+
+    it("doesn't make an instrumental recording an instrumental version", () => {
+      const state = liveCover(structuredClone(EXAMPLE));
+      state.discs[0].tracks[1].mb!.attributes = ["instrumental"];
+      expect(typesOf(state, "track:0:2")).toEqual([]);
+    });
+
     it("adds them to an existing track only if it has none", () => {
       const state = structuredClone(EXAMPLE);
       state.settings.recTypes = ["Q15975575"];

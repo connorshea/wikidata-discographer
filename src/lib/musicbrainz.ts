@@ -349,6 +349,8 @@ export interface MbForm {
   discs: Disc[];
   date: string;
   p407: string;
+  /** The recording types its tracks start with, of `REC_TYPES`. */
+  recTypes: string[];
   report: MbReport;
 }
 
@@ -818,6 +820,13 @@ export function releaseToForm(
     discs: discs.length ? discs : [emptyDisc()],
     date,
     p407,
+    // A live album is live, even when it's also a compilation, and a studio album is
+    // studio. The rest may be either.
+    recTypes: secondary.includes("Live")
+      ? [LIVE_RECORDING]
+      : form === STUDIO_ALBUM
+        ? [STUDIO_RECORDING]
+        : [],
     report,
   };
 }
@@ -872,17 +881,6 @@ export function reportCounts(r: MbReport) {
 }
 
 /**
- * The recording type a release's tracks start with: live for a live album, studio for a
- * studio album, and none for the rest, which may be either.
- */
-const albumRecTypes = (form: string) =>
-  form === SECONDARY_FORMS.Live
-    ? [LIVE_RECORDING]
-    : form === STUDIO_ALBUM
-      ? [STUDIO_RECORDING]
-      : [];
-
-/**
  * The form filled from `form`, keeping the settings other than the album's dates, language
  * and recording type.
  */
@@ -896,7 +894,7 @@ export function applyMbForm(state: State, form: MbForm): State {
       p407Custom: false,
       // The last album's recording date isn't this one's.
       recDate: "",
-      recTypes: albumRecTypes(form.album.form),
+      recTypes: form.recTypes,
     },
     album: form.album,
     artists: form.artists,

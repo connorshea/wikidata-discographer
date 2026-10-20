@@ -49,8 +49,8 @@ const OPTION_GROUPS: [string, [FlagKey, string, string][]][] = [
       ],
       [
         "mbDetails",
-        "Language, date and recording type",
-        "Use each work's language and each recording's date, and mark recordings tagged live, cover, instrumental or medley",
+        "Track type, language, date and recording type",
+        "Use each work's language and each recording's date, make recordings tagged instrumental tracks without lyrics, and mark those tagged live, cover or medley",
       ],
     ],
   ],

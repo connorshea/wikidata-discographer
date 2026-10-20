@@ -22,6 +22,7 @@ import {
   QID,
   TRACK_TYPES,
   REC_TYPES,
+  recTypeName,
   trackLangOf,
   trackRecordedOf,
   trackRecTypesOf,
@@ -1149,8 +1150,6 @@ function Recorded({
   );
 }
 
-const recTypeName = (qid: string) => REC_TYPES.find(([q]) => q === qid)?.[1] ?? qid;
-
 /**
  * What kind of recording a track is, which it takes from the album and MusicBrainz unless
  * it has its own. Changing one makes them all its own, until they're the same again.
@@ -1203,7 +1202,7 @@ function RecTypes({
       </div>
       <span className="sub">
         {note}
-        {track.recTypes && !linkedTrack && (
+        {track.recTypes && !(linkedTrack && !settings.extendExisting) && (
           <>
             {" "}
             <button type="button" className="link" onClick={() => onChange(null)}>

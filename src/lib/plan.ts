@@ -348,6 +348,9 @@ export const REC_TYPES = [
 ] as const;
 export const STUDIO_RECORDING = "Q15975575";
 export const LIVE_RECORDING = "Q56123235";
+/** A recording type's name in a sentence, e.g. "live recording". */
+export const recTypeName = (qid: string) => REC_TYPES.find(([q]) => q === qid)?.[1] ?? qid;
+
 /** Only the recording types the form lists, each once, in its order. */
 export const knownRecTypes = (qids: readonly unknown[]): string[] =>
   REC_TYPES.map(([q]) => q).filter((q) => qids.includes(q));
@@ -356,11 +359,13 @@ export const knownRecTypes = (qids: readonly unknown[]): string[] =>
 export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley"] as const;
 export type MbAttribute = (typeof MB_ATTRIBUTES)[number];
 
-/** The recording type each MusicBrainz attribute says, for those that say one. */
+/**
+ * The recording type each MusicBrainz attribute says, for those that say one. Instrumental
+ * makes a track without lyrics instead, as an instrumental version is one of a song with words.
+ */
 const MB_REC_TYPES: Partial<Record<MbAttribute, string>> = {
   live: LIVE_RECORDING,
   cover: "Q155171",
-  instrumental: "Q56612794",
   medley: "Q13582719",
 };
 
@@ -373,15 +378,16 @@ export function trackRecTypesOf(
   S: Settings,
   t: Pick<Track, "mb" | "recTypes">,
 ): { qids: string[]; fromMb: string[] } {
-  if (t.recTypes) return { qids: knownRecTypes(t.recTypes), fromMb: [] };
   const mb = S.mbDetails ? (t.mb?.attributes ?? []).flatMap((a) => MB_REC_TYPES[a] ?? []) : [];
+  // A track's own types that MusicBrainz says too are still cited to it.
+  if (t.recTypes) {
+    const qids = knownRecTypes(t.recTypes);
+    return { qids, fromMb: qids.filter((q) => mb.includes(q)) };
+  }
   const base = mb.includes(LIVE_RECORDING)
     ? S.recTypes.filter((q) => q !== STUDIO_RECORDING)
     : S.recTypes;
-  return {
-    qids: knownRecTypes([...base, ...mb]),
-    fromMb: knownRecTypes(mb.filter((q) => !base.includes(q))),
-  };
+  return { qids: knownRecTypes([...base, ...mb]), fromMb: knownRecTypes(mb) };
 }
 
 /**

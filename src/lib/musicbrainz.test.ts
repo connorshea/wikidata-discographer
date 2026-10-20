@@ -905,6 +905,10 @@ describe("applyMbForm", () => {
     const compilation = release();
     compilation["release-group"]["secondary-types"] = ["Compilation"];
     expect(applyMbForm(EXAMPLE, releaseToForm(compilation, NONE)).settings.recTypes).toEqual([]);
+    compilation["release-group"]["secondary-types"] = ["Compilation", "Live"];
+    expect(applyMbForm(EXAMPLE, releaseToForm(compilation, NONE)).settings.recTypes).toEqual([
+      "Q56123235",
+    ]);
   });
 
   it("keeps the tracks", () => {

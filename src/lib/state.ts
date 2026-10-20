@@ -170,7 +170,10 @@ function coerceTrack(t: Obj): Track | null {
     ...(typeof t.p407 === "string" ? { p407: t.p407 } : {}),
     ...(t.p407Custom === true ? { p407Custom: true } : {}),
     ...(typeof t.recorded === "string" && t.recorded.trim() ? { recorded: t.recorded } : {}),
-    ...(Array.isArray(t.recTypes) ? { recTypes: knownRecTypes(t.recTypes) } : {}),
+    // A set of only types the form doesn't know isn't one of none, so the album's applies.
+    ...(Array.isArray(t.recTypes) && (!t.recTypes.length || knownRecTypes(t.recTypes).length)
+      ? { recTypes: knownRecTypes(t.recTypes) }
+      : {}),
   };
 }
 
