@@ -169,6 +169,7 @@ describe("releaseToForm", () => {
         allmusic: "",
         discogs: "4348311",
       },
+      release: RELEASE.id,
       mb: {
         releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
         release: RELEASE.id,
@@ -604,7 +605,13 @@ describe("releaseToForm", () => {
       // Items found by an ID have it.
       taken: [rec, work],
     });
-    expect(form.album).toMatchObject({ mode: "existing", qid: "Q140316456" });
+    expect(form.album).toMatchObject({
+      mode: "existing",
+      qid: "Q140316456",
+      // Kept for the link to it, though an existing album gets no references.
+      release: RELEASE.id,
+      mb: null,
+    });
     expect(form.artists).toEqual({ "Carly Rae Jepsen": "Q52583" });
     expect(form.discs[0].track).toEqual({ "2": "Q10" });
     expect(form.discs[1].comp).toEqual({ "1": "Q20" });
