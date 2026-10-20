@@ -125,18 +125,27 @@ export function runProgress(
     edits,
     kinds,
     next: run.status === "running" ? (edits?.[done] ?? null) : null,
-    secondsLeft: edits
-      ? left.reduce((s, e) => s + (e.creates ? CREATE_SECONDS : EDIT_SECONDS), 0)
-      : Math.max(run.total - done, 0) * EDIT_SECONDS,
+    secondsLeft: edits ? runSeconds(left) : Math.max(run.total - done, 0) * EDIT_SECONDS,
   };
 }
 
-/** "About a minute left.", rounded so it doesn't jump about between polls. */
+/** Roughly how long making these edits takes. */
+export function runSeconds(edits: readonly PreviewEdit[]): number {
+  return edits.reduce((s, e) => s + (e.creates ? CREATE_SECONDS : EDIT_SECONDS), 0);
+}
+
+/** "about a minute", rounded so it doesn't jump about between polls. */
+export function roughly(seconds: number): string {
+  if (seconds < 45) return "less than a minute";
+  if (seconds < 90) return "about a minute";
+  return `about ${Math.round(seconds / 60)} minutes`;
+}
+
+/** "About a minute left." */
 export function timeLeft(seconds: number): string {
   if (seconds <= 0) return "Finishing up.";
-  if (seconds < 45) return "Less than a minute left.";
-  if (seconds < 90) return "About a minute left.";
-  return `About ${Math.round(seconds / 60)} minutes left.`;
+  const text = roughly(seconds);
+  return `${text[0].toUpperCase()}${text.slice(1)} left.`;
 }
 
 /** A log entry's kind from what the server logged, for runs whose plan can't be rebuilt. */
