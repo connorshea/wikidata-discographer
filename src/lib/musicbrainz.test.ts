@@ -962,6 +962,15 @@ describe("releaseToForm", () => {
     expect(form.discs).toHaveLength(2);
     expect(form.report.notes[0]).toBe("1 medium has no tracks on MusicBrainz and was left out.");
   });
+
+  it("gives each disc the part of its place on the release, after a medium left out", () => {
+    const r = release();
+    r.media[0].tracks = [];
+    expect(releaseToForm(r, NONE).discs.map((d) => d.part)).toEqual(["Q61629680"]);
+    r.media = [release().media[0], { position: 2, format: "CD", tracks: [] }, release().media[1]];
+    r.media[2].position = 3;
+    expect(releaseToForm(r, NONE).discs.map((d) => d.part)).toEqual(["Q61629664", "Q61747994"]);
+  });
 });
 
 describe("applyMbForm", () => {

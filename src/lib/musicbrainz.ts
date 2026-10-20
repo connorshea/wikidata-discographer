@@ -648,9 +648,12 @@ export function releaseToForm(
   const toExtend = { recordings: 0, works: 0 };
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
-    if (media.length > 1) {
-      disc.part = parts[i] ?? "";
-      if (!disc.part) notes.push(`Disc ${i + 1} has no part. Choose one under Discs.`);
+    // By its place on the release, so a medium left out for having no tracks doesn't shift
+    // the parts of those after it.
+    if (release.media.length > 1) {
+      const at = m.position || i + 1;
+      disc.part = parts[at - 1] ?? "";
+      if (!disc.part) notes.push(`Disc ${at} has no part. Choose one under Discs.`);
     }
     disc.tracks = m.tracks!.map((t): Track => {
       addCredit(t["artist-credit"]);
