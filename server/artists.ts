@@ -27,6 +27,7 @@ import type {
 export const artistRoutes = new Hono<AuthEnv>();
 
 const P175 = propertyNumber("P175");
+const P434 = propertyNumber("P434");
 const P436 = propertyNumber("P436");
 const P658 = propertyNumber("P658");
 const P13602 = propertyNumber("P13602");
@@ -36,6 +37,15 @@ const ALBUM_KINDS: MusicKind[] = ["album", "ep"];
 export const MAX_ARTIST_ALBUMS = 500;
 /** The most singles an artist page lists: the oldest ones, if it has more. */
 export const MAX_ARTIST_SINGLES = 500;
+
+/**
+ * Performers the artist page won't open, by QID, with the name its error
+ * gives. "Various artists" (Q3108914) isn't a real artist, and is the
+ * performer of so many compilations that its page would list all of them.
+ */
+export const BLOCKED_ARTISTS: ReadonlyMap<string, string> = new Map([
+  ["Q3108914", "Various artists"],
+]);
 
 /** The query's QID, if it's one or a Wikidata URL. */
 export function queryQid(q: string): string | null {
@@ -82,7 +92,9 @@ export function rankArtists(
  * name them as performer, so one of those counts if something in the mirror
  * does. Null if it isn't an artist, or doesn't exist.
  */
-async function findArtist(qid: string): Promise<ArtistResponse["artist"] | null> {
+async function findArtist(
+  qid: string,
+): Promise<Omit<ArtistResponse["artist"], "musicBrainzIds"> | null> {
   const [row] = await db
     .select({ kind: musicItems.kind, label: musicItems.label, description: musicItems.description })
     .from(musicItems)
@@ -107,6 +119,7 @@ artistRoutes.get("/search", async (c) => {
   const q = c.req.query("q")?.trim() ?? "";
   const qid = queryQid(q);
   if (qid) {
+    if (BLOCKED_ARTISTS.has(qid)) return c.json({ artists: [] } satisfies ArtistSearchResponse);
     let artist;
     try {
       artist = await findArtist(qid);
@@ -121,7 +134,9 @@ artistRoutes.get("/search", async (c) => {
         : [],
     } satisfies ArtistSearchResponse);
   }
-  const rows = await searchLabels(q, ["artist"]);
+  const rows = (await searchLabels(q, ["artist"])).filter(
+    (r) => !BLOCKED_ARTISTS.has(toQid(r.qid)),
+  );
   const albums = await albumCounts(rows.map((r) => r.qid));
   const byQid = new Map(rows.map((r) => [r.qid, r]));
   const key = labelSearchKey(q);
@@ -280,6 +295,8 @@ function performedBy(artist: number, kinds: MusicKind[], max: number) {
 artistRoutes.get("/:qid", async (c) => {
   const qid = c.req.param("qid").toUpperCase();
   if (!QID.test(qid)) return c.json({ error: "Not a QID" }, 400);
+  const blocked = BLOCKED_ARTISTS.get(qid);
+  if (blocked) return c.json({ error: `${blocked} can't be opened on the artist page` }, 404);
   let artist;
   try {
     artist = await findArtist(qid);
@@ -289,9 +306,14 @@ artistRoutes.get("/:qid", async (c) => {
   }
   if (!artist) return c.json({ error: `${qid} isn't an artist on Wikidata` }, 404);
 
-  const [rows, singleRows] = await Promise.all([
+  const [rows, singleRows, mbids] = await Promise.all([
     performedBy(qidNumber(qid), ALBUM_KINDS, MAX_ARTIST_ALBUMS),
     performedBy(qidNumber(qid), ["single"], MAX_ARTIST_SINGLES),
+    // None for an artist that isn't in the mirror, which findArtist read from Wikidata.
+    db
+      .select({ value: musicExternalIds.value })
+      .from(musicExternalIds)
+      .where(and(eq(musicExternalIds.qid, qidNumber(qid)), eq(musicExternalIds.property, P434))),
   ]);
   const truncated = rows.length > MAX_ARTIST_ALBUMS;
   const albums = rows.slice(0, MAX_ARTIST_ALBUMS);
@@ -345,7 +367,7 @@ artistRoutes.get("/:qid", async (c) => {
 
   c.header("Cache-Control", "no-store");
   return c.json({
-    artist,
+    artist: { ...artist, musicBrainzIds: mbids.map((r) => r.value) },
     albums: artistAlbums(
       albums,
       {

@@ -196,6 +196,8 @@ function ArtistAlbums({ qid }: { qid: string }) {
 
   const { artist, albums } = data;
   const name = artist.label ?? artist.qid;
+  // More than one is usually a mistake on the item: like the albums' release groups, link none.
+  const mbid = artist.musicBrainzIds.length === 1 ? artist.musicBrainzIds[0] : null;
   const listed = albums.filter(FILTERS.find((f) => f.id === filter)!.keep);
   /** Show the album's row, under All so a filter can't hide it, and scroll to it. */
   const jumpTo = (qid: string) => {
@@ -221,9 +223,23 @@ function ArtistAlbums({ qid }: { qid: string }) {
             </h2>
             {artist.description && <span className="muted">{artist.description}</span>}
           </div>
-          <a href={`${wikiBaseUrl}/wiki/${artist.qid}`} target="_blank" rel="noreferrer">
-            Open on Wikidata ↗
-          </a>
+          <div className="artist-links">
+            <a href={`${wikiBaseUrl}/wiki/${artist.qid}`} target="_blank" rel="noreferrer">
+              Open on Wikidata ↗
+            </a>
+            {mbid && (
+              <a
+                href={`https://musicbrainz.org/artist/${encodeURIComponent(mbid)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="mb-badge" aria-hidden="true">
+                  MB
+                </span>
+                Open on MusicBrainz ↗
+              </a>
+            )}
+          </div>
         </div>
         {albums.length === 0 ? (
           <p className="search-state">
