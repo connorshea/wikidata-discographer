@@ -652,8 +652,14 @@ export async function runPlan(
         // Skip statements the item already has, so re-running a run, or
         // reusing existing items, doesn't add duplicates.
         const entity = (await getEntities([qid])).get(qid);
-        if (!entity)
-          throw new WikidataEditError("missing", `${qid} doesn't exist (or is a redirect)`);
+        if (!entity) throw new WikidataEditError("missing", `${qid} doesn't exist`);
+        // A redirect comes back as its target. Merged since the check before the run, so
+        // stop rather than edit the redirect with the target's revision.
+        if (entity.id !== qid)
+          throw new WikidataEditError(
+            "redirect",
+            `${qid} was merged into ${entity.id} during the run. Use ${entity.id} instead.`,
+          );
         const fresh = freshStatements(entity.claims ?? {}, op.claims, resolve);
         const skipped = op.claims.length - fresh.length;
         if (fresh.length === 0) {
