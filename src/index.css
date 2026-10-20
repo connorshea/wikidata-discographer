@@ -2169,6 +2169,15 @@ button.perf-add {
 }
 .auth-bar .user {
   font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.auth-bar .user:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.auth-bar button.ghost:hover:not(:disabled) {
+  background: var(--use-hover);
 }
 .top-nav {
   display: flex;
