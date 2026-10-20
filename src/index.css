@@ -1047,7 +1047,7 @@ button.trk-done:hover {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--warn-edge);
+  background: var(--warn);
 }
 .f span.match-hint a {
   font-weight: 600;

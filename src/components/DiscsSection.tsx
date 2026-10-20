@@ -1237,7 +1237,9 @@ function LinkFields({
               value={disc[k][n] ?? ""}
               onChange={(q) => set(k, q)}
             />
-            {found > 0 ? (
+            {errs[k] ? (
+              <CellErr id={`${ids}-${k}-err`}>{errs[k]}</CellErr>
+            ) : found > 0 ? (
               <span className="sub match-hint">
                 <i className="match-dot" aria-hidden="true" />
                 {plural(found, "possible match", "possible matches")}
@@ -1248,7 +1250,6 @@ function LinkFields({
                 <span className="sub">{`Leave empty to create a new ${lower}.`}</span>
               )
             )}
-            {errs[k] && <CellErr id={`${ids}-${k}-err`}>{errs[k]}</CellErr>}
           </div>
         );
       })}
