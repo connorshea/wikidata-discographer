@@ -380,14 +380,21 @@ export function trackRecTypesOf(
 
 /**
  * A track's P31: its own, or else without lyrics when MusicBrainz says the recording is
- * instrumental, or else the album's. `fromMb` says it's the one MusicBrainz gave.
+ * instrumental or the work has no linguistic content, or else the album's. `fromMb` says
+ * it's the one MusicBrainz gave.
  */
 export function trackTypeOf(S: Settings, t: Pick<Track, "type" | "mb">) {
   if (t.type) return { qid: t.type, fromMb: false };
-  if (S.mbDetails && t.mb?.attributes?.includes("instrumental"))
+  if (S.mbDetails && (t.mb?.attributes?.includes("instrumental") || wordlessWork(t)))
     return { qid: WITHOUT_LYRICS, fromMb: true };
   return { qid: S.trackType, fromMb: false };
 }
+
+/** Whether the work's only language on MusicBrainz is no linguistic content. */
+const wordlessWork = (t: Pick<Track, "mb">) => {
+  const langs = t.mb?.languages ?? [];
+  return langs.length > 0 && langs.every((q) => q.trim() === NO_LINGUISTIC_CONTENT);
+};
 
 export const LANGS = [
   ["Q13955", "Arabic"],
@@ -425,7 +432,9 @@ export type LangSource = "album" | "mb" | "type" | "vocals";
  * A track's composition's P407 values: its own, or else the work's on MusicBrainz, or else
  * the album's. A track's type wins over a language that says otherwise: one without lyrics
  * on an album with a language has no linguistic content, and one with vocals doesn't take
- * no linguistic content from MusicBrainz or the album. Values that aren't QIDs are left out.
+ * no linguistic content from MusicBrainz or the album. An instrumental recording on
+ * MusicBrainz is a version of a song with words, so its composition keeps the album's
+ * language. Values that aren't QIDs are left out.
  */
 export function trackLangOf(
   S: Settings,
@@ -433,13 +442,13 @@ export function trackLangOf(
 ): { qids: string[]; from: LangSource | null } {
   const valid = (qs: string[]) => qs.map((q) => q.trim()).filter((q) => QID.test(q));
   if (t.p407 !== undefined) return { qids: valid([t.p407]), from: null };
-  const type = trackTypeOf(S, t).qid;
+  const { qid: type, fromMb } = trackTypeOf(S, t);
   const mb = S.mbDetails ? valid(t.mb?.languages ?? []) : [];
   if (mb.length && !(type === WITH_VOCALS && mb.includes(NO_LINGUISTIC_CONTENT)))
     return { qids: mb, from: "mb" };
   const album = valid([S.p407]);
   const wordless = album.includes(NO_LINGUISTIC_CONTENT);
-  if (type === WITHOUT_LYRICS && album.length && !wordless)
+  if (type === WITHOUT_LYRICS && !fromMb && album.length && !wordless)
     return { qids: [NO_LINGUISTIC_CONTENT], from: "type" };
   if (type === WITH_VOCALS && wordless) return { qids: [], from: "vocals" };
   return { qids: album, from: "album" };
@@ -994,14 +1003,33 @@ export function buildPlan(state: State): Plan {
     seen.add(k);
   }
 
-  // Tracks of one MusicBrainz work would each get a new composition with the same P435.
-  const byWork = new Map<string, string[]>();
-  for (const it of items) {
-    const work = it.r.mb?.work;
-    if (!work || it.existComp) continue;
-    byWork.set(work, [...(byWork.get(work) ?? []), `${it.di + 1}.${it.r.n}`]);
-  }
-  const sharedWorks = [...byWork.values()].filter((at) => at.length > 1);
+  // Tracks of one MusicBrainz work or recording would each give their own item the same P435
+  // or P4404. A reused item gets it too with Link reused items on, so it counts, but tracks
+  // reusing the same item give it to that one item.
+  const sharedIds = (
+    idOf: (it: PlanItem) => string | undefined,
+    exist: (it: PlanItem) => string | null,
+  ) => {
+    const byId = new Map<string, { at: string[]; items: Set<string> }>();
+    for (const it of items) {
+      const id = idOf(it);
+      const reused = exist(it);
+      if (!id || (reused && !S.extendExisting)) continue;
+      const shared = byId.get(id) ?? { at: [], items: new Set() };
+      shared.at.push(`${it.di + 1}.${it.r.n}`);
+      shared.items.add(reused ?? `${it.di}:${it.r.n}`);
+      byId.set(id, shared);
+    }
+    return [...byId.values()].filter((s) => s.items.size > 1).map((s) => s.at);
+  };
+  const sharedWorks = sharedIds(
+    (it) => it.r.mb?.work,
+    (it) => it.existComp,
+  );
+  const sharedRecordings = sharedIds(
+    (it) => it.r.mb?.recording,
+    (it) => it.existTrack,
+  );
 
   // With several discs, the tracklist tells them apart only by their parts: each needs its own.
   const listed = state.discs.flatMap((d, di) => (tracks[di].length ? [{ d, di }] : []));
@@ -1044,6 +1072,12 @@ export function buildPlan(state: State): Plan {
   for (const at of sharedWorks)
     err(
       `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are performances of the same MusicBrainz work. ` +
+        "Discographer can't create this album for now.",
+      "tracks",
+    );
+  for (const at of sharedRecordings)
+    err(
+      `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are the same MusicBrainz recording. ` +
         "Discographer can't create this album for now.",
       "tracks",
     );
