@@ -583,9 +583,19 @@ describe("releaseToForm", () => {
       expect(form.discs[0].tracks[0].mb!.isrcs).toEqual([]);
       expect(form.discs[0].tracks[1].mb!.isrcs).toEqual([]);
       expect(form.report.notes).toContain(
-        `1 identifier is on more than one recording or work on MusicBrainz, so no new item gets it: ISRC USUM72604366 (${first.title} and ${second.title}).`,
+        `1 identifier is on more than one recording or work on MusicBrainz, so no new item gets it: ISRC USUM72604366 (1.${first.position} “${first.title}” and 1.${second.position} “${second.title}”).`,
       );
       expect(form.report.added.tracks).toContainEqual({ label: "ISRCs", n: 4 });
+    });
+
+    it("name each track by its row when they share a title", () => {
+      const r = release();
+      r.media[0].tracks![1].title = first.title;
+      r.media[0].tracks![1].recording.isrcs = ["USUM72604366"];
+      const form = releaseToForm(r, NONE);
+      expect(form.report.notes.join(" ")).toContain(
+        `(1.${first.position} “${first.title}” and 1.${second.position} “${first.title}”)`,
+      );
     });
 
     it("go on neither composition when two works have the same ISWC", () => {

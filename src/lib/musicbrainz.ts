@@ -611,19 +611,24 @@ export function releaseToForm(
     string,
     { label: string; value: string; of: Set<string>; at: string[] }
   >();
-  const hold = (label: string, value: string, of: string, t: MbTrack) => {
+  // Each track is named by its disc and row as well as its title, as two recordings that
+  // share an identifier often share a title too.
+  const hold = (label: string, value: string, of: string, at: string) => {
     const h = holders.get(`${label}:${value}`) ?? { label, value, of: new Set(), at: [] };
     h.of.add(of);
-    h.at.push(t.title.trim());
+    h.at.push(at);
     holders.set(`${label}:${value}`, h);
   };
-  for (const t of media.flatMap((m) => m.tracks!)) {
-    for (const v of isrcsOf(t)) hold("ISRC", v, t.recording.id, t);
-    for (const key of Object.keys(TRACK_LINKS) as TrackLinkKey[])
-      for (const v of trackLinkOf(t, key)) hold(TRACK_LINKS[key].label, v, t.recording.id, t);
-    const work = workOf(t);
-    if (work) for (const v of iswcsOf(t)) hold("ISWC", v, work, t);
-  }
+  media.forEach((m, di) => {
+    for (const t of m.tracks!) {
+      const at = `${di + 1}.${t.position} “${t.title.trim()}”`;
+      for (const v of isrcsOf(t)) hold("ISRC", v, t.recording.id, at);
+      for (const key of Object.keys(TRACK_LINKS) as TrackLinkKey[])
+        for (const v of trackLinkOf(t, key)) hold(TRACK_LINKS[key].label, v, t.recording.id, at);
+      const work = workOf(t);
+      if (work) for (const v of iswcsOf(t)) hold("ISWC", v, work, at);
+    }
+  });
   const shared = [...holders.values()].filter((h) => h.of.size > 1);
   const sharedKeys = new Set(shared.map((h) => `${h.label}:${h.value}`));
   const keep = (label: string) => (v: string) => !taken.has(v) && !sharedKeys.has(`${label}:${v}`);
