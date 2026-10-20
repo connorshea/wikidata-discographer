@@ -17,6 +17,7 @@ import {
   reviewTracks,
   stillValid,
   summaryLine,
+  takenLine,
   ties,
   withoutDismissed,
 } from "./matches.ts";
@@ -294,6 +295,7 @@ describe("reviewTracks", () => {
       [true, false],
     ]);
     expect(used.reviewed).toBe(true);
+    expect(takenLine(used)).toBe("1 other composition");
   });
 
   it("keeps a used track open until its own composition is used or dismissed", () => {
@@ -419,5 +421,25 @@ describe("moveRowIds", () => {
   it("moves the discs after a removed one down and drops its own", () => {
     const ids = ["0:1:comp:Q1", "1:4:comp:Q9", "2:3", "2:3:track:Q2"];
     expect([...moveRowIds(ids, removedDisc(1))]).toEqual(["0:1:comp:Q1", "1:3", "1:3:track:Q2"]);
+  });
+});
+
+describe("takenLine", () => {
+  const row: Track = { n: 1, title: "T1", artists: ["A"], seconds: 0, mb: null };
+  const rows = {
+    "0:1": rm({ comp: [match("Q1"), match("Q2"), match("Q3")], track: [track("Q50", "Q1")] }),
+  };
+
+  it("counts the candidates another QID keeps out, compositions first", () => {
+    const disc = emptyDisc();
+    expect(takenLine(reviewTracks([disc], [[row]], rows, new Set())[0])).toBe("");
+    disc.comp[1] = "Q1";
+    expect(takenLine(reviewTracks([disc], [[row]], rows, new Set())[0])).toBe(
+      "2 other compositions",
+    );
+    disc.track[1] = "Q9";
+    expect(takenLine(reviewTracks([disc], [[row]], rows, new Set())[0])).toBe(
+      "2 other compositions and 1 other track",
+    );
   });
 });

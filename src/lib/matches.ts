@@ -461,6 +461,20 @@ const SLOT_NAMES: [Slot, string][] = [
 ];
 
 /**
+ * The candidates whose field already holds another QID, in a line, e.g. "4 other
+ * compositions" or "2 other compositions and 1 other track". They can't be used as
+ * they are, so a track's group folds them away until asked.
+ */
+export function takenLine(r: TrackReview): string {
+  return andList(
+    (["comp", "track"] as const).flatMap((slot) => {
+      const n = r.candidates.filter((c) => c.slot === slot && c.taken).length;
+      return n ? [plural(n, `other ${slot === "comp" ? "composition" : "track"}`)] : [];
+    }),
+  );
+}
+
+/**
  * Whether a used candidate was filled in by using the track that records it,
  * so it's undone with the track rather than on its own.
  */

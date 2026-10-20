@@ -1597,6 +1597,19 @@ button.link.match-toggle {
 .candidates li + li {
   border-top: 1px solid var(--tint);
 }
+/* The candidates another QID keeps out, folded into a line under the text column. */
+.candidates li.match-taken {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  padding-left: calc(16px + 100px + 12px);
+  font-size: 13px;
+}
+.match-taken button.link {
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 4px;
+}
 .match-kind {
   font-size: 13px;
   font-weight: 600;
@@ -1703,6 +1716,10 @@ button.quiet:hover {
   .candidates li {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
+  }
+  .candidates li.match-taken {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-left: 16px;
   }
 }
 .warn-note {
