@@ -1306,10 +1306,6 @@ button.row-menu-button circle {
   align-items: center;
   gap: 8px;
 }
-.add-track .sub {
-  font-size: 13px;
-  color: var(--muted);
-}
 .tablewrap {
   /* Holds the visually hidden headings in, so they can't widen the page. */
   position: relative;
