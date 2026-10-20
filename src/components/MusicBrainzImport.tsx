@@ -85,6 +85,13 @@ export default function MusicBrainzImport({
   // The latest request. The album's suggestion can start one while another
   // is loading, and only the latest may change the form.
   const latest = useRef(0);
+  // Clearing the form remounts this, and a load still going mustn't fill the cleared form.
+  useEffect(
+    () => () => {
+      latest.current++;
+    },
+    [],
+  );
 
   const run = async (what: string, fn: (current: () => boolean) => Promise<void>) => {
     const id = ++latest.current;
