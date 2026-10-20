@@ -15,6 +15,7 @@ import {
   type RowMove,
   type Slot,
   summaryLine,
+  takenLine,
   ties,
   type TrackReview,
   withoutDismissed,
@@ -78,6 +79,8 @@ export default function MatchesSection({
   const [kept, setKept] = useState(false);
   // Reviewed tracks fold into a line under Reviewed, and Change opens one there again.
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  // Groups showing the candidates another QID keeps out, which are hidden at first.
+  const [showTaken, setShowTaken] = useState<ReadonlySet<string>>(new Set());
   useImperativeHandle(ref, () => ({
     moveRows: (move) => {
       const moved = new Map<string, Before>();
@@ -87,6 +90,7 @@ export default function MatchesSection({
       }
       before.current = moved;
       setOpened((prev) => moveRowIds(prev, move));
+      setShowTaken((prev) => moveRowIds(prev, move));
     },
   }));
   // The control that takes the place of the one just clicked, to keep focus on.
@@ -303,6 +307,9 @@ export default function MatchesSection({
 
   function group(r: TrackReview) {
     const rest = dismissAllIds(r);
+    const taken = takenLine(r);
+    const showingTaken = showTaken.has(keyOf(r));
+    const shown = showingTaken ? r.candidates : r.candidates.filter((c) => !c.taken);
     return (
       <div className="match-group" id={groupId(r.di, r.n)} key={`${r.di}:${r.n}`}>
         <div className="match-head">
@@ -318,7 +325,7 @@ export default function MatchesSection({
               {r.dismissed} dismissed · Restore
             </button>
           )}
-          {!r.reviewed && rest.length > 1 && (
+          {!r.reviewed && shown.filter((c) => !c.used).length > 1 && (
             <button type="button" className="link" onClick={() => dismiss(r, rest)}>
               Dismiss all
             </button>
@@ -336,7 +343,7 @@ export default function MatchesSection({
         </div>
         {r.candidates.length > 0 && (
           <ul className="candidates">
-            {r.candidates.map((c) => (
+            {shown.map((c) => (
               <CandidateItem
                 key={c.id}
                 c={c}
@@ -347,6 +354,26 @@ export default function MatchesSection({
                 onDismiss={() => dismiss(r, [c.id])}
               />
             ))}
+            {taken && (
+              <li className="match-taken">
+                <span className="muted">{taken} · Another QID is filled in</span>
+                <button
+                  type="button"
+                  className="link"
+                  aria-expanded={showingTaken}
+                  onClick={() =>
+                    setShowTaken((prev) => {
+                      const next = new Set(prev);
+                      if (showingTaken) next.delete(keyOf(r));
+                      else next.add(keyOf(r));
+                      return next;
+                    })
+                  }
+                >
+                  {showingTaken ? "Hide" : "Show"}
+                </button>
+              </li>
+            )}
           </ul>
         )}
       </div>
