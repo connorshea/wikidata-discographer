@@ -151,8 +151,8 @@ function coerceTrack(t: Obj): Track | null {
     ...(typeof t.length === "string" ? { length: t.length } : {}),
     mb: isObj(t.mb) ? coerceMbIds(t.mb) : null,
     ...(isTrackType(t.type) ? { type: t.type } : {}),
-    ...(typeof t.lang === "string" ? { lang: t.lang } : {}),
-    ...(t.langCustom === true ? { langCustom: true } : {}),
+    ...(typeof t.p407 === "string" ? { p407: t.p407 } : {}),
+    ...(t.p407Custom === true ? { p407Custom: true } : {}),
   };
 }
 

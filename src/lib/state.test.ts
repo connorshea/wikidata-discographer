@@ -68,17 +68,17 @@ describe("coerceState", () => {
       discs: [
         {
           tracks: [
-            { n: 1, title: "A", lang: "Q5287", mb: { languages: ["Q1860", "eng", 5] } },
-            { n: 2, title: "B", lang: "Q", langCustom: true },
-            { n: 3, title: "C", lang: 4, langCustom: "yes" },
+            { n: 1, title: "A", p407: "Q5287", mb: { languages: ["Q1860", "eng", 5] } },
+            { n: 2, title: "B", p407: "Q", p407Custom: true },
+            { n: 3, title: "C", p407: 4, p407Custom: "yes" },
           ],
         },
       ],
     }).discs[0].tracks;
-    expect(own).toMatchObject({ lang: "Q5287", mb: { languages: ["Q1860"] } });
-    expect(typed).toMatchObject({ lang: "Q", langCustom: true });
-    expect(none).not.toHaveProperty("lang");
-    expect(none).not.toHaveProperty("langCustom");
+    expect(own).toMatchObject({ p407: "Q5287", mb: { languages: ["Q1860"] } });
+    expect(typed).toMatchObject({ p407: "Q", p407Custom: true });
+    expect(none).not.toHaveProperty("p407");
+    expect(none).not.toHaveProperty("p407Custom");
   });
 
   it("drops mistyped values", () => {

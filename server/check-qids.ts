@@ -107,7 +107,10 @@ function formSources(state: State): Map<string, string[]> {
     for (const [n, qid] of Object.entries(d.comp)) add(qid, `${disc} track ${n} composition`);
     for (const [n, qid] of Object.entries(d.track)) add(qid, `${disc} track ${n} track`);
     for (const [n, s] of Object.entries(d.single)) add(s.qid, `${disc} track ${n} single`);
-    for (const t of d.tracks) if (t.lang) add(t.lang, `${disc} track ${t.n} language`);
+    // An existing composition keeps its language, so a track's own one isn't used.
+    for (const t of d.tracks)
+      if (t.p407 && !QID.test((d.comp[t.n] ?? "").trim()))
+        add(t.p407, `${disc} track ${t.n} language`);
   });
   return out;
 }

@@ -424,10 +424,14 @@ function performances(t: MbTrack) {
   );
 }
 
-/** A track's work's languages, as P407 values, or none if MusicBrainz has one the form doesn't list. */
+/**
+ * A track's work's languages, as P407 values, or none if MusicBrainz has one the form doesn't
+ * list. A work with words in some language has linguistic content, whatever else it says.
+ */
 function languagesOf(t: MbTrack): string[] {
   const codes = (theWork(t)?.languages ?? []).filter((c) => c !== "mul");
-  const qids = codes.map((c) => LANGUAGES[c]);
+  const spoken = codes.some((c) => c !== "zxx") ? codes.filter((c) => c !== "zxx") : codes;
+  const qids = spoken.map((c) => LANGUAGES[c]);
   return qids.every(Boolean) ? [...new Set(qids)] : [];
 }
 

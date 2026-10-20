@@ -176,10 +176,10 @@ export interface Track {
   type?: string;
   /**
    * Its composition's P407, when it's not the one `trackLangOf` gives it. Empty for none.
-   * `langCustom` is set while it's a QID typed in, which may not be valid yet.
+   * `p407Custom` is set while it's a QID typed in, which may not be valid yet.
    */
-  lang?: string;
-  langCustom?: boolean;
+  p407?: string;
+  p407Custom?: boolean;
 }
 
 export interface Disc {
@@ -315,6 +315,7 @@ export const TRACK_TYPES = [
   ["Q55850643", "music track without lyrics"],
   ["Q7302866", "audio track"],
 ] as const;
+export const WITH_VOCALS = "Q55850593";
 export const WITHOUT_LYRICS = "Q55850643";
 
 /** The attributes of a performance relation on MusicBrainz that the form reads. */
@@ -361,28 +362,36 @@ export const NO_LINGUISTIC_CONTENT = "Q22282939";
 const KNOWN_LANGS = new Set<string>([...LANGS.map(([q]) => q), NO_LINGUISTIC_CONTENT]);
 
 /** Where a track's language comes from, when it isn't its own. */
-export type LangSource = "album" | "mb" | "type";
+/** "type" is no linguistic content for a track without lyrics, "vocals" none for one with. */
+export type LangSource = "album" | "mb" | "type" | "vocals";
 
 /**
  * A track's composition's P407 values: its own, or else the work's on MusicBrainz, or else
- * no linguistic content for a track without lyrics on an album with lyrics, or else the album's.
- * Values that aren't QIDs are left out.
+ * the album's. A track's type wins over a language that says otherwise: one without lyrics
+ * on an album with a language has no linguistic content, and one with vocals doesn't take
+ * no linguistic content from MusicBrainz or the album. Values that aren't QIDs are left out.
  */
 export function trackLangOf(
   S: Settings,
-  t: Pick<Track, "type" | "mb" | "lang">,
+  t: Pick<Track, "type" | "mb" | "p407">,
 ): { qids: string[]; from: LangSource | null } {
   const valid = (qs: string[]) => qs.map((q) => q.trim()).filter((q) => QID.test(q));
-  if (t.lang !== undefined) return { qids: valid([t.lang]), from: null };
-  if (S.mbDetails && t.mb?.languages?.length) return { qids: valid(t.mb.languages), from: "mb" };
-  if (trackTypeOf(S, t).qid === WITHOUT_LYRICS && S.trackType !== WITHOUT_LYRICS)
+  if (t.p407 !== undefined) return { qids: valid([t.p407]), from: null };
+  const type = trackTypeOf(S, t).qid;
+  const mb = S.mbDetails ? valid(t.mb?.languages ?? []) : [];
+  if (mb.length && !(type === WITH_VOCALS && mb.includes(NO_LINGUISTIC_CONTENT)))
+    return { qids: mb, from: "mb" };
+  const album = valid([S.p407]);
+  const wordless = album.includes(NO_LINGUISTIC_CONTENT);
+  if (type === WITHOUT_LYRICS && album.length && !wordless)
     return { qids: [NO_LINGUISTIC_CONTENT], from: "type" };
-  return { qids: valid([S.p407]), from: "album" };
+  if (type === WITH_VOCALS && wordless) return { qids: [], from: "vocals" };
+  return { qids: album, from: "album" };
 }
 
 /** Whether a track's own language is a QID typed in, rather than one the form lists. */
-export const isCustomTrackLang = (t: Pick<Track, "lang" | "langCustom">) =>
-  !!t.langCustom || (!!t.lang?.trim() && !KNOWN_LANGS.has(t.lang.trim()));
+export const isCustomTrackLang = (t: Pick<Track, "p407" | "p407Custom">) =>
+  !!t.p407Custom || (!!t.p407?.trim() && !KNOWN_LANGS.has(t.p407.trim()));
 
 export const LABEL_LANGS = [
   ["ar", "Arabic"],
@@ -897,8 +906,8 @@ export function buildPlan(state: State): Plan {
       if (ec && !QID.test(ec)) errs.comp = `"${ec}" isn't a QID.`;
       if (et && !QID.test(et)) errs.track = `"${et}" isn't a QID.`;
       // An existing composition keeps its language, so what's typed for it doesn't matter.
-      const ownLang = r.lang?.trim() ?? "";
-      if (isCustomTrackLang(r) && !ec) {
+      const ownLang = r.p407?.trim() ?? "";
+      if (isCustomTrackLang(r) && !QID.test(ec)) {
         if (!ownLang) errs.lang = "Enter a QID, or choose another language.";
         else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
       }

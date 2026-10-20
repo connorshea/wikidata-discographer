@@ -211,8 +211,8 @@ describe("buildPlan", () => {
 
     it("gives a composition its track's own language, or none", () => {
       const state = structuredClone(EXAMPLE);
-      state.discs[0].tracks[1].lang = "Q5287";
-      state.discs[0].tracks[2].lang = "";
+      state.discs[0].tracks[1].p407 = "Q5287";
+      state.discs[0].tracks[2].p407 = "";
       expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
         { type: "item", id: "Q5287" },
       ]);
@@ -252,10 +252,31 @@ describe("buildPlan", () => {
       ]);
     });
 
+    it("leaves a track without lyrics with no language when the album has none", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.p407 = "";
+      state.discs[0].tracks[1].type = "Q55850643";
+      expect(langsOf(state, "comp:0:2")).toEqual([]);
+    });
+
+    it("doesn't give a track with vocals no linguistic content", () => {
+      const state = structuredClone(EXAMPLE);
+      state.discs[0].tracks[1].type = "Q55850593";
+      state.discs[0].tracks[1].mb = ids({ languages: ["Q22282939"] });
+      expect(langsOf(state, "comp:0:2").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q1860" },
+      ]);
+      Object.assign(state.settings, { p407: "Q22282939", trackType: "Q55850643" });
+      expect(langsOf(state, "comp:0:2")).toEqual([]);
+      expect(langsOf(state, "comp:0:3").map((c) => c.value)).toEqual([
+        { type: "item", id: "Q22282939" },
+      ]);
+    });
+
     it("needs a QID for a language typed in", () => {
       const state = structuredClone(EXAMPLE);
-      Object.assign(state.discs[0].tracks[1], { lang: "", langCustom: true });
-      Object.assign(state.discs[0].tracks[2], { lang: "Finnish", langCustom: true });
+      Object.assign(state.discs[0].tracks[1], { p407: "", p407Custom: true });
+      Object.assign(state.discs[0].tracks[2], { p407: "Finnish", p407Custom: true });
       const plan = buildPlan(state);
       expect(plan.rowErrs["0:2"].lang).toBe("Enter a QID, or choose another language.");
       expect(plan.rowErrs["0:3"].lang).toBe(`"Finnish" isn't a QID (e.g. Q1860).`);

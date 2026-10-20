@@ -271,6 +271,8 @@ describe("releaseToForm", () => {
     expect(a.mb?.languages).toEqual(["Q1321", "Q1860"]);
     expect(b.mb?.languages).toEqual(["Q22282939"]);
     expect(c.mb).not.toHaveProperty("languages");
+    work(0).languages = ["zxx", "eng"];
+    expect(releaseToForm(r, NONE).discs[0].tracks[0].mb?.languages).toEqual(["Q1860"]);
   });
 
   describe("composers and lyricists", () => {

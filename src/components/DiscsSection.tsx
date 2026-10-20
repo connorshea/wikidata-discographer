@@ -566,10 +566,10 @@ function DiscBlock({
                         onChange={(lang, custom) =>
                           setDisc((disc) => {
                             const row = disc.tracks[i];
-                            if (lang === undefined) delete row.lang;
-                            else row.lang = lang;
-                            if (custom) row.langCustom = true;
-                            else delete row.langCustom;
+                            if (lang === undefined) delete row.p407;
+                            else row.p407 = lang;
+                            if (custom) row.p407Custom = true;
+                            else delete row.p407Custom;
                           })
                         }
                       />
@@ -939,6 +939,7 @@ const LANG_SOURCES = {
   album: "default for album",
   mb: "from MusicBrainz",
   type: "as it's without lyrics",
+  vocals: "as it has vocals",
 } as const;
 
 /**
@@ -961,13 +962,13 @@ function TrackLang({
   onChange: (lang: string | undefined, custom: boolean) => void;
 }) {
   const id = useId();
-  const fallback = trackLangOf(settings, { ...track, lang: undefined });
+  const fallback = trackLangOf(settings, { ...track, p407: undefined });
   const value =
-    track.lang === undefined
+    track.p407 === undefined
       ? ""
       : isCustomTrackLang(track)
         ? "other"
-        : track.lang.trim() || "none";
+        : track.p407.trim() || "none";
   const note = linkedComp
     ? "Not used, as the composition is an existing one."
     : value === "" && fallback.from === "mb"
@@ -1011,7 +1012,7 @@ function TrackLang({
           aria-label={`Track ${n} language QID`}
           aria-invalid={error ? true : undefined}
           aria-describedby={`${id}-err`}
-          value={track.lang ?? ""}
+          value={track.p407 ?? ""}
           onChange={(v) => onChange(v, true)}
         />
       )}
@@ -1033,7 +1034,9 @@ function TrackLang({
 function langTag(track: Track, settings: Settings) {
   const { qids, from } = trackLangOf(settings, track);
   const album = trackLangOf(settings, { mb: null }).qids;
-  if (from === "type" || qids.join() === album.join()) return null;
+  // A language typed in that isn't a QID yet has an error to show instead.
+  if (from === "type" || from === "vocals" || qids.join() === album.join()) return null;
+  if (isCustomTrackLang(track) && !qids.length) return null;
   return (
     <span key="lang" className="fact-tag with-badge">
       {langNames(qids)}
