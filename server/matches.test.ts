@@ -193,16 +193,21 @@ describe("assembleMatches", () => {
       return {
         track: rows["0:1"].track.map((m) => m.qid),
         comp: rows["0:1"].comp.map((m) => [m.qid, m.reasons]),
+        unknown: rows["0:1"].track.filter((m) => m.recordingUnknown).map((m) => m.qid),
       };
     };
+    // One that doesn't say is still suggested, but may be a studio recording.
     expect(matches([LIVE])).toEqual({
       track: ["Q11", "Q12"],
       comp: [["Q20", ["recorded as Q10", "same title", "same composer or lyricist"]]],
+      unknown: ["Q12"],
     });
     expect(matches([STUDIO]).track).toEqual(["Q10", "Q12", "Q13"]);
+    expect(matches([STUDIO]).unknown).toEqual([]);
     // Neither, or not saying: every track.
     expect(matches([]).track).toEqual(["Q10", "Q11", "Q12", "Q13"]);
     // On the album, it's this album's track whatever it says.
     expect(matches([LIVE], ["Q13"]).track).toEqual(["Q13", "Q11", "Q12"]);
+    expect(matches([LIVE], ["Q12"]).unknown).toEqual([]);
   });
 });

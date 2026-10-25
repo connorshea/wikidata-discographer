@@ -20,7 +20,9 @@
 //
 // A studio recording isn't a live one (P1552), so a track of the other kind is
 // never suggested either, unless it's on the album. It still records the same
-// song, so its composition is.
+// song, so its composition is. Most studio tracks don't say they're studio
+// ones, so a track that says neither is still suggested for a live row, but
+// flagged as possibly a studio recording.
 import { and, eq, exists, inArray, lte, notExists, or, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
@@ -125,6 +127,11 @@ export function assembleMatches(
       const its = liveOrStudio(targets(it, "P1552"));
       return recording !== null && its !== null && its !== recording && !albumTracks.has(it.qid);
     };
+    // A track that doesn't say, for a live row: it may be a studio one.
+    const recordingUnknown = (it: ItemFacts) =>
+      recording === "live" &&
+      liveOrStudio(targets(it, "P1552")) === null &&
+      !albumTracks.has(it.qid);
     const found: Record<Slot, Map<string, Match>> = {
       comp: new Map(),
       track: new Map(),
@@ -160,6 +167,7 @@ export function assembleMatches(
         ...base,
         composition: targets(it, "P2550").find((q) => items.get(q)?.kind === "work") ?? null,
         singles: singlesOf(it),
+        ...(recordingUnknown(it) && { recordingUnknown: true as const }),
       };
       found.track.set(qid, track);
     };
