@@ -28,6 +28,7 @@ import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
 import { propertyNumber, qidNumber, toQid } from "./ids.ts";
 import { checkPlanQids } from "./check-qids.ts";
+import { checkPlanIds } from "./check-ids.ts";
 import { editPacer } from "./edit-pace.ts";
 import { findCreated, waitForCreated } from "./recover.ts";
 import {
@@ -222,6 +223,22 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
     );
   }
   if (problems.length > 0) return c.json({ error: problems.join(" ") }, 422);
+
+  // The mirror can be a week behind, so ask Wikidata live whether an item
+  // already has an identifier a new item would get.
+  let taken: string[];
+  try {
+    taken = await checkPlanIds(plan.ops);
+  } catch (err) {
+    console.warn("checking the identifiers failed", err);
+    return c.json(
+      {
+        error: `Couldn't check identifiers on Wikidata (${err instanceof Error ? err.message : String(err)}). Try again in a few minutes.`,
+      },
+      503,
+    );
+  }
+  if (taken.length > 0) return c.json({ error: taken.join(" ") }, 409);
 
   const editGroup = randomBytes(8).toString("hex");
   const [res] = await db.insert(submissions).values({
