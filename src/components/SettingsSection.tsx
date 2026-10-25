@@ -15,7 +15,7 @@ import {
   TRACK_TYPES,
 } from "../lib/plan.ts";
 import { SETTING_FLAGS, settingsPills } from "../lib/progress.ts";
-import { FieldErr, Lock } from "./common.tsx";
+import { FieldErr, Lock, QidInput } from "./common.tsx";
 import type { SectionProps } from "./types.ts";
 
 type TextKey = "compDesc" | "trackDesc";
@@ -67,6 +67,7 @@ export default function SettingsSection({
   const labelLang = isCustomLabelLang(S) ? "other" : S.lang.trim() || "en";
   const workLang = isCustomLang(S) ? "other" : S.p407.trim();
   const previews = descPreviews(state, plan);
+  const places = Object.entries(state.places);
 
   const template = (k: TextKey, kind: string, edge: string, preview: string | null) => (
     <div className="desc-row">
@@ -213,6 +214,20 @@ export default function SettingsSection({
               </span>
               <FieldErr id="recDate" msg={errs.recDate} />
             </label>
+            <label className="f">
+              Recorded at
+              <QidInput
+                className="mono"
+                placeholder="Q…"
+                value={S.recAt}
+                aria-invalid={errs.recAt ? true : undefined}
+                onChange={(v) => set("recAt", v)}
+              />
+              <span className="sub">
+                Optional. The studio or venue of tracks with none of their own or from MusicBrainz
+              </span>
+              <FieldErr id="recAt" msg={errs.recAt} />
+            </label>
             <div className="f">
               <label htmlFor="p407Sel">Language of work</label>
               <select
@@ -253,6 +268,51 @@ export default function SettingsSection({
               <FieldErr id="p407" msg={errs.p407} />
             </div>
           </div>
+
+          {places.length > 0 && (
+            <div className="places">
+              <h3 className="kicker">Places on MusicBrainz</h3>
+              <p className="desc-vars">Where MusicBrainz says the tracks were recorded.</p>
+              <div className="grid">
+                {places.map(([id, p]) => (
+                  <label key={id} className="f">
+                    {p.name}
+                    <QidInput
+                      className="mono"
+                      placeholder="Q…"
+                      value={p.qid}
+                      aria-invalid={errs[`place-${id}`] ? true : undefined}
+                      onChange={(v) => update((s) => void (s.places[id].qid = v))}
+                    />
+                    <span className="sub">
+                      {p.qid.trim() ? (
+                        <a
+                          href={`https://musicbrainz.org/place/${id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          On MusicBrainz ↗
+                        </a>
+                      ) : (
+                        <>
+                          No Wikidata link on{" "}
+                          <a
+                            href={`https://musicbrainz.org/place/${id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            MusicBrainz ↗
+                          </a>
+                          . Enter its QID, or its tracks won't say where they were recorded.
+                        </>
+                      )}
+                    </span>
+                    <FieldErr id={`place-${id}`} msg={errs[`place-${id}`]} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="descs">
             <h3 className="kicker">Descriptions</h3>

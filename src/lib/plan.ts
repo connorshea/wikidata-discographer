@@ -42,6 +42,8 @@ export interface Settings {
   recDate: string;
   /** The P1552 recording types, of `REC_TYPES`, of tracks with none of their own. */
   recTypes: string[];
+  /** The P483 place, a QID, tracks were recorded at when they have none of their own or from MusicBrainz. */
+  recAt: string;
 }
 
 export interface AlbumState {
@@ -147,6 +149,11 @@ export interface MbRowIds {
    */
   recorded?: { begin: string; end: string };
   /**
+   * The places the recording was recorded at on MusicBrainz, by place ID, each a key of
+   * `State.places`. Left out when it has none.
+   */
+  places?: string[];
+  /**
    * The recording, work and day the import came from, for the references on the
    * duration, identifiers and writers. Kept even when an item already has the recording
    * or work ID. `work` is left out when the track has no work.
@@ -187,6 +194,17 @@ export interface Track {
   recorded?: string;
   /** Its P1552 recording types, of `REC_TYPES`, when they're not the ones `trackRecTypesOf` gives it. */
   recTypes?: string[];
+  /** Its P483 place as typed, a QID, when it's not the ones `trackRecAtOf` gives it. */
+  recAt?: string;
+}
+
+/**
+ * A place a MusicBrainz import found tracks recorded at, with the Wikidata item it links to.
+ * `qid` is empty when MusicBrainz links none, for the user to fill in.
+ */
+export interface MbPlace {
+  name: string;
+  qid: string;
 }
 
 export interface Disc {
@@ -209,6 +227,8 @@ export interface State {
   settings: Settings;
   album: AlbumState;
   artists: Record<string, string>;
+  /** The places tracks were recorded at on MusicBrainz, by place ID. */
+  places: Record<string, MbPlace>;
   discs: Disc[];
 }
 
@@ -260,7 +280,7 @@ export type Op =
 
 /** What's wrong with a row, by the cell it's fixed in. */
 export type RowErrs = Partial<
-  Record<"title" | "artists" | "length" | "comp" | "track" | "lang" | "recorded", string>
+  Record<"title" | "artists" | "length" | "comp" | "track" | "lang" | "recorded" | "recAt", string>
 >;
 
 export type MsgKind = "err" | "warn" | "ok";
@@ -468,6 +488,28 @@ export function trackRecordedOf(
   if (t.recorded?.trim()) return { date: t.recorded.trim(), from: null };
   if (t.mb?.recorded) return { date: t.mb.recorded.begin, from: "mb" };
   return { date: S.recDate.trim(), from: "album" };
+}
+
+/**
+ * Where a track was recorded, as P483 values: its own, or else the places MusicBrainz has
+ * for the recording, or else the album's. Values that aren't QIDs are left out. `unlinked`
+ * names the MusicBrainz places with no QID yet, which it gets none for.
+ */
+export function trackRecAtOf(
+  S: Settings,
+  places: State["places"],
+  t: Pick<Track, "mb" | "recAt">,
+): { qids: string[]; from: "mb" | "album" | null; unlinked: string[] } {
+  const valid = (qs: string[]) => [...new Set(qs.map((q) => q.trim()).filter((q) => QID.test(q)))];
+  if (t.recAt?.trim()) return { qids: valid([t.recAt]), from: null, unlinked: [] };
+  const mb = (t.mb?.places ?? []).map((id) => places[id] ?? { name: id, qid: "" });
+  if (mb.length)
+    return {
+      qids: valid(mb.map((p) => p.qid)),
+      from: "mb",
+      unlinked: mb.filter((p) => !QID.test(p.qid.trim())).map((p) => p.name),
+    };
+  return { qids: valid([S.recAt]), from: "album", unlinked: [] };
 }
 
 /** Whether a track's own language is a QID typed in, rather than one the form lists. */
@@ -868,6 +910,12 @@ export function buildPlan(state: State): Plan {
     : "";
   const recDate = parseDate(S.recDate);
   fieldErrs.recDate = recDate.ok ? "" : recDate.error;
+  const recAt = S.recAt.trim();
+  fieldErrs.recAt = recAt && !QID.test(recAt) ? `"${recAt}" isn't a QID.` : "";
+  for (const [id, p] of Object.entries(state.places)) {
+    const q = p.qid.trim();
+    fieldErrs[`place-${id}`] = q && !QID.test(q) ? `"${q}" isn't a QID.` : "";
+  }
   fieldErrs.compDesc = checkTemplate(S.compDesc, date).join(" ");
   fieldErrs.trackDesc = checkTemplate(S.trackDesc, date).join(" ");
 
@@ -974,6 +1022,8 @@ export function buildPlan(state: State): Plan {
       const ownLang = r.p407?.trim() ?? "";
       const ownRecorded = parseDate(r.recorded ?? "");
       if (!ownRecorded.ok) errs.recorded = ownRecorded.error;
+      const ownRecAt = r.recAt?.trim() ?? "";
+      if (ownRecAt && !QID.test(ownRecAt)) errs.recAt = `"${ownRecAt}" isn't a QID.`;
       if (isCustomTrackLang(r) && !QID.test(ec)) {
         if (!ownLang) errs.lang = "Enter a QID, or choose another language.";
         else if (!QID.test(ownLang)) errs.lang = `"${ownLang}" isn't a QID (e.g. Q1860).`;
@@ -1107,6 +1157,8 @@ export function buildPlan(state: State): Plan {
     !!fieldErrs.date ||
     !!fieldErrs.p407 ||
     !!fieldErrs.recDate ||
+    !!fieldErrs.recAt ||
+    Object.keys(state.places).some((id) => !!fieldErrs[`place-${id}`]) ||
     blocking(fieldErrs.compDesc) ||
     blocking(fieldErrs.trackDesc);
   if (settingsErr) err("Fix the errors in Item settings.", "settings");
@@ -1169,6 +1221,23 @@ export function buildPlan(state: State): Plan {
       },
     ];
   };
+  // P483, cited to the recording when they're the places MusicBrainz has.
+  const recAtOf = (it: PlanItem) => trackRecAtOf(S, state.places, it.r);
+  const recAtClaims = (it: PlanItem): Claim[] => {
+    const { qids, from } = recAtOf(it);
+    return qids.map((q) => ({
+      ...claim("P483", item(q)),
+      ...(from === "mb" ? mbRef(it.r.mb) : {}),
+    }));
+  };
+  // When every track was recorded at the same places, so was the album.
+  const albumRecAt = (() => {
+    const sets = items.map((it) => recAtOf(it).qids.toSorted().join());
+    const [first] = sets;
+    return first && sets.every((x) => x === first)
+      ? recAtOf(items[0]).qids.map((q) => claim("P483", item(q)))
+      : [];
+  })();
   // P1552, cited to the recording when MusicBrainz says it.
   const recTypeClaims = (it: PlanItem): Claim[] => {
     const { qids, fromMb } = trackRecTypesOf(S, it.r);
@@ -1229,6 +1298,7 @@ export function buildPlan(state: State): Plan {
         ...albumPerf.map((p) => claim("P175", item(p))),
         ...pubDate,
         ...workLang,
+        ...albumRecAt,
         ...counts,
         ...albumIds,
       ],
@@ -1290,6 +1360,7 @@ export function buildPlan(state: State): Plan {
           ...perf,
           ...recordedClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
           ...recTypeClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
+          ...recAtClaims(it).map((c): Claim => ({ ...c, ifMissing: true })),
           // Not a second recording ID, as with a composition's work ID.
           ...(it.r.mb?.recording
             ? [
@@ -1324,6 +1395,7 @@ export function buildPlan(state: State): Plan {
             ]
           : []),
         ...recordedClaims(it),
+        ...recAtClaims(it),
         ...recTypeClaims(it),
         ...trackIds(it.r.mb),
       ],
@@ -1345,7 +1417,9 @@ export function buildPlan(state: State): Plan {
           ...(it.part ? [{ property: "P518", value: item(it.part) }] : []),
         ]),
       ),
-      ...(creatingAlbum ? [] : counts.map((c): Claim => ({ ...c, ifMissing: true }))),
+      ...(creatingAlbum
+        ? []
+        : [...counts, ...albumRecAt].map((c): Claim => ({ ...c, ifMissing: true }))),
     ],
   });
 

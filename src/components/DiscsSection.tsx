@@ -10,6 +10,7 @@ import {
 import {
   albumArtists,
   isCustomPart,
+  joinNames,
   isCustomTrackLang,
   LANGS,
   NO_LINGUISTIC_CONTENT,
@@ -23,6 +24,7 @@ import {
   REC_TYPES,
   recTypeName,
   trackLangOf,
+  trackRecAtOf,
   trackRecordedOf,
   trackRecTypesOf,
   trackTypeOf,
@@ -31,6 +33,7 @@ import {
   type Plan,
   type RowErrs,
   type Settings,
+  type State,
   type Track,
 } from "../lib/plan.ts";
 import { artistsText, emptyDisc, parseArtists } from "../lib/state.ts";
@@ -450,6 +453,7 @@ function DiscBlock({
               errs.track,
               errs.lang,
               errs.recorded,
+              errs.recAt,
             ].filter((e): e is string => !!e);
             // A row from MusicBrainz can't be typed back in as easily.
             const del = () => (t.mb ? setDeleting(keys[i]) : remove(i));
@@ -588,6 +592,21 @@ function DiscBlock({
                           })
                         }
                       />
+                      <RecordedAt
+                        n={r.n}
+                        track={t}
+                        settings={state.settings}
+                        places={state.places}
+                        linkedTrack={linkedTo("track", r.n)}
+                        error={errs.recAt}
+                        onChange={(v) =>
+                          setDisc((disc) => {
+                            const row = disc.tracks[i];
+                            if (v.trim()) row.recAt = v;
+                            else delete row.recAt;
+                          })
+                        }
+                      />
                       <RecTypes
                         n={r.n}
                         track={t}
@@ -663,6 +682,7 @@ function DiscBlock({
                         !linkedTo("comp", r.n) && langTag(t, state.settings),
                         recTypesFact(t, state.settings),
                         recordedFact(t, state.settings),
+                        recAtFact(t, state.settings, state.places),
                         hasPerformers(performers) && (
                           <RowArtists
                             key="who"
@@ -1113,6 +1133,69 @@ function Recorded({
 }
 
 /**
+ * Where a track was recorded, which it takes from MusicBrainz or the album unless it has its
+ * own. An existing track only gets it if it has none.
+ */
+function RecordedAt({
+  n,
+  track,
+  settings,
+  places,
+  linkedTrack,
+  error,
+  onChange,
+}: {
+  n: number;
+  track: Track;
+  settings: Settings;
+  places: State["places"];
+  linkedTrack: boolean;
+  error: string | undefined;
+  onChange: (qid: string) => void;
+}) {
+  const id = useId();
+  const fallback = trackRecAtOf(settings, places, { mb: track.mb });
+  const own = track.recAt !== undefined;
+  const mb = (track.mb?.places ?? []).map((p) => places[p]?.name ?? p);
+  const unlinked = fallback.from === "mb" && !own ? fallback.unlinked : [];
+  const missing = unlinked.length
+    ? ` ${joinNames(unlinked)} ${unlinked.length === 1 ? "has" : "have"} no QID yet. Enter ${unlinked.length === 1 ? "it" : "them"} under Item settings.`
+    : "";
+  const note = linkedTrack
+    ? `Added to the existing track only if it has none.${missing}`
+    : mb.length && !own
+      ? `From the recording on MusicBrainz: ${joinNames(mb)}${missing && `.${missing}`}`
+      : mb.length
+        ? `MusicBrainz has ${joinNames(mb)}`
+        : fallback.qids.length && !own
+          ? "Default from Item settings"
+          : "";
+  return (
+    <div className="f">
+      <label htmlFor={id}>Recorded at</label>
+      <QidInput
+        id={id}
+        className="mono"
+        data-col="recAt"
+        aria-label={`Track ${n} recorded at`}
+        placeholder={fallback.qids.join(", ") || "Q…"}
+        value={track.recAt ?? ""}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={`${id}-err`}
+        onChange={onChange}
+      />
+      {note && (
+        <span className="sub with-badge">
+          {mb.length > 0 && !linkedTrack && <span className="mb-badge">MB</span>}
+          {note}
+        </span>
+      )}
+      <FieldErr id={id} msg={error} />
+    </div>
+  );
+}
+
+/**
  * What kind of recording a track is, which it takes from the album and MusicBrainz unless
  * it has its own. Changing one makes them all its own, until they're the same again.
  */
@@ -1193,6 +1276,27 @@ function recordedFact(track: Track, settings: Settings) {
   return (
     <span key="recorded" className="with-badge">
       {`Recorded ${formatTime(parsed.val.time, parsed.val.precision)}`}
+      {from === "mb" && <span className="mb-badge">MB</span>}
+    </span>
+  );
+}
+
+/**
+ * A closed card's "Recorded at Kia Center", by the places' names on MusicBrainz, or null for
+ * a track recorded at the album's place or none.
+ */
+function recAtFact(track: Track, settings: Settings, places: State["places"]) {
+  const { qids, from } = trackRecAtOf(settings, places, track);
+  if (from === "album" || !qids.length) return null;
+  const names =
+    from === "mb"
+      ? (track.mb?.places ?? [])
+          .filter((p) => qids.includes(places[p]?.qid.trim() ?? ""))
+          .map((p) => places[p].name)
+      : qids;
+  return (
+    <span key="recAt" className="with-badge">
+      {`Recorded at ${joinNames(names)}`}
       {from === "mb" && <span className="mb-badge">MB</span>}
     </span>
   );

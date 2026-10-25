@@ -25,6 +25,7 @@ import { userAgent } from "./auth/user-agent.ts";
 import type { AuthEnv } from "./auth/session.ts";
 import {
   type MbLookups,
+  type MbRelation,
   type MbRelease,
   type MbReleaseListing,
   parseMbInput,
@@ -39,7 +40,7 @@ import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../sr
 const API_URL = () =>
   (process.env.MUSICBRAINZ_API_URL ?? "https://musicbrainz.org/ws/2").replace(/\/+$/, "");
 const RELEASE_INC =
-  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+release-group-level-rels+isrcs";
+  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+release-group-level-rels+isrcs+place-rels";
 /** MusicBrainz's largest page, and how many pages of a release group's releases to read. */
 const PAGE_SIZE = 100;
 const MAX_PAGES = 3;
@@ -135,6 +136,12 @@ export function createMusicBrainzClient(overrides: Partial<ClientDeps> = {}) {
         `/release/${mbid}?inc=${RELEASE_INC}&fmt=json`,
         "MusicBrainz has no release with that ID. If it's a release group's ID, paste the release group's URL instead.",
       )) as MbRelease,
+    /** A place, with its links. A release's places come without them. */
+    place: async (mbid: string) =>
+      (await cached(
+        `/place/${mbid}?inc=url-rels&fmt=json`,
+        "MusicBrainz has no place with that ID.",
+      )) as { relations?: MbRelation[] },
     /**
      * A release group's official releases, or every release when it has no
      * official ones, up to `MAX_PAGES` pages, and how many there are. They
@@ -229,6 +236,7 @@ export async function lookupRelease(
     (onWikidata ? wikidataLink(release["release-group"].relations) : undefined);
   return {
     albumQid,
+    places: onWikidata ? await placeLinks(ids.places) : {},
     artists: artists.unique,
     recordings: recordings.unique,
     works: works.unique,
@@ -246,6 +254,23 @@ export async function lookupRelease(
     ],
     misplacedWorks: works.elsewhere,
   };
+}
+
+/**
+ * The Wikidata items places link to on MusicBrainz, one request each. A place that can't be
+ * looked up gets none, for the user to fill in, rather than failing the import.
+ */
+async function placeLinks(places: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const id of places) {
+    try {
+      const qid = wikidataLink((await client.place(id)).relations);
+      if (qid) out[id] = qid;
+    } catch (err) {
+      if (!(err instanceof MusicBrainzError)) throw err;
+    }
+  }
+  return out;
 }
 
 export const musicbrainzRoutes = new Hono<AuthEnv>();

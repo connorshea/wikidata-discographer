@@ -291,6 +291,36 @@ describe("releaseToForm", () => {
     expect(form.report.references).toContain("recording dates");
   });
 
+  it("keeps the places each recording was recorded at, with the items they link to", () => {
+    const r = release();
+    const ARENA = "3e325c9f-d5a9-4280-a60b-ef77c34e9d17";
+    const STUDIO = "b5297256-8482-4cba-968a-25db61563faf";
+    const at = (id: string, name: string, type = "recorded at") => ({
+      type,
+      "target-type": "place",
+      place: { id, name },
+    });
+    const rels = (i: number) => r.media[0].tracks![i].recording.relations!;
+    rels(0).push(at(ARENA, "Kia Center"), at(ARENA, "Kia Center"), at(STUDIO, "A Studio"));
+    rels(1).push(at(STUDIO, "A Studio", "mixed at"));
+    expect(releaseIds(r).places).toEqual([ARENA, STUDIO]);
+    const form = releaseToForm(r, { ...NONE, places: { [ARENA]: "Q481795" } });
+    const [a, b] = form.discs[0].tracks;
+    expect(a.mb?.places).toEqual([ARENA, STUDIO]);
+    expect(b.mb).not.toHaveProperty("places");
+    expect(form.places).toEqual({
+      [ARENA]: { name: "Kia Center", qid: "Q481795" },
+      [STUDIO]: { name: "A Studio", qid: "" },
+    });
+    expect(form.report.references).toContain("recording places");
+    expect(form.report.notes).toContainEqual(
+      expect.stringContaining("no Wikidata link on MusicBrainz: A Studio."),
+    );
+    const next = applyMbForm({ ...EMPTY, settings: { ...EMPTY.settings, recAt: "Q1" } }, form);
+    expect(next.places).toEqual(form.places);
+    expect(next.settings.recAt).toBe("");
+  });
+
   it("dates a medley from the first to the last day of its works' recordings", () => {
     const r = release();
     const rels = r.media[0].tracks![0].recording.relations!;

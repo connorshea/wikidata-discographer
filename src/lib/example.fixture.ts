@@ -25,6 +25,7 @@ export const EXAMPLE: State = {
     artists: ["Carly Rae Jepsen"],
   },
   artists: { "Carly Rae Jepsen": "Q52583" },
+  places: {},
   discs: [
     {
       part: "Q61629664",
