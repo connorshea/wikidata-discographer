@@ -13,8 +13,7 @@ import { SIMILAR_TITLE } from "./titles.ts";
 
 /**
  * The reason given for a same-title item with no performer, composer or
- * lyricist. Such a match is only a guess, so it's suggested but never filled
- * in by `fillUnambiguous`.
+ * lyricist. Such a match is only a guess.
  */
 export const NO_ARTIST = "no artist set";
 
@@ -26,16 +25,10 @@ export const isIdReason = (r: string) =>
 
 /**
  * Whether the match's title is only similar to the track's, not the same
- * (or it was reached through such a match). Suggested, but never filled in by
- * `fillUnambiguous`.
+ * (or it was reached through such a match).
  */
 export const isSimilarOnly = (m: Pick<Match, "reasons">) =>
   m.reasons.includes(SIMILAR_TITLE) && !m.reasons.includes("same title");
-
-/** Whether the match is only a title with no artist, or only a similar title. */
-const isGuess = (m: Match) =>
-  isSimilarOnly(m) ||
-  (m.reasons.includes(NO_ARTIST) && m.reasons.every((r) => isTitleReason(r) || r === NO_ARTIST));
 
 /** A matches response, with the request it answers. */
 export interface Answered {
@@ -78,48 +71,6 @@ export function stillValid(
 export function pickTrack(disc: Disc, n: number, t: TrackMatch): void {
   disc.track[n] = t.qid;
   if (t.composition) disc.comp[n] = t.composition;
-}
-
-/**
- * Fill every empty field of disc `di` that has exactly one match, and return
- * how many were filled.
- *
- * A reused track is linked to the composition field (P2550), so the two must
- * agree: a track is left out when it records a different composition than the
- * one filled in, an empty composition takes the one the track records, and
- * the composition is only filled from the row's own matches when the track is
- * new, or a matched one that records none (a track entered by hand may record
- * one this doesn't know about).
- */
-export function fillUnambiguous(disc: Disc, di: number, rows: Record<string, RowMatches>): number {
-  let filled = 0;
-  const set = (map: Record<string, string>, n: number, qid: string) => {
-    if (map[n]) return;
-    map[n] = qid;
-    filled++;
-  };
-  for (const [key, all] of Object.entries(rows)) {
-    const [d, num] = key.split(":");
-    if (Number(d) !== di) continue;
-    const n = Number(num);
-    // A similar title is never filled, so it doesn't make a same-title match ambiguous.
-    const m = {
-      track: all.track.filter((t) => !isSimilarOnly(t)),
-      comp: all.comp.filter((c) => !isSimilarOnly(c)),
-    };
-    if (!disc.track[n] && m.track.length === 1 && !isGuess(m.track[0])) {
-      const t = m.track[0];
-      if (!t.composition || !disc.comp[n] || disc.comp[n] === t.composition) {
-        set(disc.track, n, t.qid);
-        if (t.composition) set(disc.comp, n, t.composition);
-      }
-    }
-    const track = disc.track[n] ? m.track.find((t) => t.qid === disc.track[n]) : undefined;
-    if (track?.composition) set(disc.comp, n, track.composition);
-    const compFree = !disc.track[n] || (track !== undefined && !track.composition);
-    if (compFree && m.comp.length === 1 && !isGuess(m.comp[0])) set(disc.comp, n, m.comp[0].qid);
-  }
-  return filled;
 }
 
 /** A field a candidate fills: the row's existing composition or track. */

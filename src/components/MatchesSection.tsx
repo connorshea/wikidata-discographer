@@ -3,7 +3,6 @@ import { useAuth } from "../lib/auth-context.ts";
 import {
   type Candidate,
   dismissAllIds,
-  fillUnambiguous,
   groupId,
   isSimilarOnly,
   moveRowId,
@@ -18,12 +17,11 @@ import {
   takenLine,
   ties,
   type TrackReview,
-  withoutDismissed,
 } from "../lib/matches.ts";
 import type { Disc } from "../lib/plan.ts";
 import type { TrackMatch } from "../lib/api-types.ts";
-import { InfoTip, WikiLink } from "./common.tsx";
-import type { Matches, MatchStatus } from "./use-matches.ts";
+import { WikiLink } from "./common.tsx";
+import type { MatchStatus } from "./use-matches.ts";
 import type { SectionProps } from "./types.ts";
 
 const KINDS: Record<Slot, string> = { comp: "Composition", track: "Track" };
@@ -50,28 +48,19 @@ export default function MatchesSection({
   state,
   update,
   plan,
-  matches,
   status,
   reviews,
-  dismissed,
   setDismissed,
   ref,
 }: SectionProps & {
-  matches: Matches;
   status: MatchStatus;
   reviews: TrackReview[];
-  dismissed: ReadonlySet<string>;
   setDismissed: (fn: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void;
   ref?: Ref<MatchesHandle>;
 }) {
   // What each use replaced, by candidate, so Undo puts it back.
   const before = useRef(new Map<string, Before>());
   const open = reviews.filter((r) => !r.reviewed).length;
-  const left = withoutDismissed(matches, dismissed);
-  const fillable = state.discs.reduce(
-    (sum, d, di) => sum + fillUnambiguous(structuredClone(d), di, left),
-    0,
-  );
   const hasRows = plan.tracks.some((tracks) => tracks.length > 0);
 
   // Once every track is reviewed the card folds into a summary, unless it was
@@ -167,10 +156,6 @@ export default function MatchesSection({
     setKept(true);
     setDismissed((prev) => new Set([...prev].filter((id) => !id.startsWith(`${r.di}:${r.n}:`))));
   };
-  const fill = () => {
-    setKept(true);
-    update((s) => s.discs.forEach((d, di) => fillUnambiguous(d, di, left)));
-  };
   const label = (r: TrackReview) =>
     state.discs.length > 1 ? `Disc ${r.di + 1} · ${r.n}` : `${r.n}`;
   const sum = reviewSummary(reviews);
@@ -241,17 +226,6 @@ export default function MatchesSection({
           <span className="match-checking" role="status">
             <span className="spinner" aria-hidden="true" />
             Checking for changes…
-          </span>
-        )}
-        {!folded && fillable > 0 && (
-          <span className="f-head">
-            <InfoTip id="match-fill" label="About unambiguous matches" end>
-              Fills any matches that have the exact same title and artist. Anything less certain is
-              left for you to review.
-            </InfoTip>
-            <button type="button" className="link match-fill" onClick={fill}>
-              Fill in {plural(fillable, "unambiguous match", "unambiguous matches")}
-            </button>
           </span>
         )}
         {allReviewed && (

@@ -181,8 +181,7 @@ export function assembleMatches(
         reasons.push(NO_ARTIST);
       if (reasons.length > 1) add(it.qid, reasons);
     }
-    // Items reached through a similar-title match are only similar too, so
-    // "Fill in unambiguous matches" leaves them alone.
+    // Items reached through a similar-title match are only similar too.
     const similarIf = (similar: boolean) => (similar ? [SIMILAR_TITLE] : []);
     // A single's track, when it has the row's title.
     for (const [single, sm] of [...found.single])
