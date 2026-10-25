@@ -17,6 +17,10 @@
 //
 // A single already taken from (P13602) another album isn't this album's
 // single, so it's never suggested.
+//
+// A studio recording isn't a live one (P1552), so a track of the other kind is
+// never suggested either, unless it's on the album. It still records the same
+// song, so its composition is.
 import { and, eq, exists, inArray, lte, notExists, or, sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
@@ -24,6 +28,7 @@ import { musicItems, musicLinks } from "../db/schema.ts";
 import { labelSearchKey, SIMILAR_TITLE, titleKey } from "../src/lib/titles.ts";
 import type { MusicKind } from "../src/lib/music.ts";
 import { isSimilarOnly, NO_ARTIST } from "../src/lib/matches.ts";
+import { LIVE_RECORDING, STUDIO_RECORDING } from "../src/lib/plan.ts";
 import type {
   Match,
   MatchesRequest,
@@ -50,6 +55,12 @@ const MAX_PER_SLOT = 5;
 
 const targets = (it: ItemFacts, ...properties: string[]) =>
   it.links.filter((l) => properties.includes(l.property)).map((l) => l.target);
+
+/** Whether recording types (P1552) make it live or studio, or null when they say neither. */
+function liveOrStudio(types: readonly string[]): "live" | "studio" | null {
+  if (types.includes(LIVE_RECORDING)) return "live";
+  return types.includes(STUDIO_RECORDING) ? "studio" : null;
+}
 
 /** How strongly a match's reasons tie it to the row, for ordering. */
 function score(m: Match): number {
@@ -108,6 +119,12 @@ export function assembleMatches(
     const titleReason = (it: ItemFacts) =>
       it.label !== null && titleKey(it.label) === exact ? "same title" : SIMILAR_TITLE;
     const performers = new Set(row.performers);
+    const recording = liveOrStudio(row.recTypes ?? []);
+    // A live track for a studio row, or a studio one for a live row.
+    const otherRecording = (it: ItemFacts) => {
+      const its = liveOrStudio(targets(it, "P1552"));
+      return recording !== null && its !== null && its !== recording && !albumTracks.has(it.qid);
+    };
     const found: Record<Slot, Map<string, Match>> = {
       comp: new Map(),
       track: new Map(),
@@ -117,6 +134,12 @@ export function assembleMatches(
       const it = items.get(qid);
       const slot = it && SLOTS[it.kind];
       if (!it || !slot || (it.kind === "single" && takenElsewhere(it))) return;
+      if (it.kind === "track" && otherRecording(it)) {
+        const comp = targets(it, "P2550").find((q) => items.get(q)?.kind === "work");
+        if (comp)
+          add(comp, [`recorded as ${qid}`, ...(isSimilarOnly({ reasons }) ? [SIMILAR_TITLE] : [])]);
+        return;
+      }
       const m = found[slot].get(qid);
       if (m) {
         // Similar only while every way of reaching it is.
@@ -277,6 +300,9 @@ export async function findMatches(body: Partial<MatchesRequest>): Promise<Matche
       key: r.key.slice(0, 32),
       title: r.title.slice(0, 400),
       performers: r.performers.filter((p): p is string => typeof p === "string" && QID.test(p)),
+      recTypes: Array.isArray(r.recTypes)
+        ? r.recTypes.filter((q): q is string => typeof q === "string" && QID.test(q)).slice(0, 20)
+        : [],
     }));
   const keys = [...new Set(rows.map((r) => labelSearchKey(r.title.trim())))].filter(
     (k): k is string => !!k,

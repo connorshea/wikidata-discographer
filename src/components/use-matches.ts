@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
 import { type Answered, stillValid } from "../lib/matches.ts";
-import { type Plan, QID, type State } from "../lib/plan.ts";
+import { type Plan, QID, type State, trackRecTypesOf } from "../lib/plan.ts";
 import type { MatchesRequest, MatchesResponse } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
 
@@ -11,7 +11,7 @@ export type Matches = MatchesResponse["rows"];
 export type MatchStatus = "off" | "pending" | "done" | "failed";
 
 /**
- * Existing compositions, tracks and singles in the mirror for the tracks: same title and a shared performer, or on the existing album.
+ * Existing compositions, tracks and singles in the mirror for the tracks: same title and a shared performer, or on the existing album. A studio track isn't offered for a live one, or the other way round.
  */
 export function useMatches(state: State, plan: Plan): { matches: Matches; status: MatchStatus } {
   const albumQid = state.album.qid.trim();
@@ -24,6 +24,7 @@ export function useMatches(state: State, plan: Plan): { matches: Matches; status
         performers: t.artists
           .map((a) => (state.artists[a] ?? "").trim())
           .filter((q) => QID.test(q)),
+        recTypes: trackRecTypesOf(state.settings, t).qids,
       })),
     ),
   };

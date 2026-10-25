@@ -168,6 +168,8 @@ describe("stillValid", () => {
     expect(stillValid(answered, request)).toEqual({ "0:1": answered.rows["0:1"] });
     const performers = { albumQid: "", rows: [row("0:1", "A", ["Q1", "Q2"]), row("0:2", "B")] };
     expect(stillValid(answered, performers)).toEqual({ "0:2": answered.rows["0:2"] });
+    const live = { albumQid: "", rows: [{ ...row("0:1", "A"), recTypes: ["Q56123235"] }] };
+    expect(stillValid(answered, live)).toEqual({});
   });
 
   it("drops everything when the album changes, or before any answer", () => {
