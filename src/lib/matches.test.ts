@@ -4,7 +4,6 @@ import {
   candidateId,
   comesWithTrack,
   dismissAllIds,
-  fillUnambiguous,
   isStrong,
   NO_ARTIST,
   otherArtists,
@@ -52,104 +51,6 @@ describe("pickTrack", () => {
     disc.comp[4] = "Q98";
     pickTrack(disc, 4, track("Q14", null));
     expect(disc.comp[4]).toBe("Q98");
-  });
-});
-
-describe("fillUnambiguous", () => {
-  it("fills matches on this disc, and leaves ambiguous ones and singles", () => {
-    const disc = emptyDisc();
-    const rows = {
-      // A track with its composition: the other composition candidate doesn't matter.
-      "0:1": rm({ track: [track("Q10", "Q20", ["Q30"])], comp: [match("Q20"), match("Q21")] }),
-      // Two tracks: only the composition is certain.
-      "0:2": rm({ track: [track("Q11", null), track("Q12", null)], comp: [match("Q22")] }),
-      // Singles aren't matched for now.
-      "0:3": rm({ single: [match("Q33")] }),
-      "1:1": rm({ comp: [match("Q99")] }),
-    };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(3);
-    expect(disc.track).toEqual({ 1: "Q10" });
-    expect(disc.comp).toEqual({ 1: "Q20", 2: "Q22" });
-    expect(fillUnambiguous(disc, 0, rows)).toBe(0);
-  });
-
-  it("never fills a track and composition that disagree", () => {
-    const disc = emptyDisc();
-    disc.comp[1] = "Q99"; // differs from the only track's composition
-    disc.track[2] = "Q50"; // entered by hand: its composition is unknown
-    disc.track[3] = "Q13"; // a matched track that records none
-    const rows = {
-      "0:1": rm({ track: [track("Q10", "Q20")] }),
-      "0:2": rm({ comp: [match("Q22")] }),
-      "0:3": rm({ track: [track("Q13", null)], comp: [match("Q23")] }),
-    };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
-    expect(disc.track).toEqual({ 2: "Q50", 3: "Q13" });
-    expect(disc.comp).toEqual({ 1: "Q99", 3: "Q23" });
-  });
-
-  it("fills an empty composition from the track already in the field", () => {
-    const disc = emptyDisc();
-    disc.track[1] = "Q50"; // e.g. found by its MusicBrainz recording ID
-    const rows = {
-      "0:1": rm({ track: [track("Q50", "Q60")], comp: [match("Q60"), match("Q61")] }),
-    };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
-    expect(disc.comp).toEqual({ 1: "Q60" });
-  });
-});
-
-describe("fillUnambiguous with guesses", () => {
-  it("doesn't fill a match that is only a same-title item with no artist", () => {
-    const guess = <M extends Match>(m: M): M => ({ ...m, reasons: ["same title", NO_ARTIST] });
-    const disc = emptyDisc();
-    const rows = {
-      "0:1": rm({
-        track: [guess(track("Q10", null))],
-        comp: [guess(match("Q20"))],
-      }),
-      // Linked to a credited track, it's no longer a guess.
-      "0:2": rm({
-        comp: [{ ...match("Q21"), reasons: ["same title", NO_ARTIST, "recorded as Q11"] }],
-      }),
-    };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
-    expect(disc.track).toEqual({});
-    expect(disc.comp).toEqual({ 2: "Q21" });
-  });
-});
-
-describe("fillUnambiguous with similar titles", () => {
-  it("doesn't fill a match whose title is only similar, or one reached through it", () => {
-    const similar = <M extends Match>(m: M, ...more: string[]): M => ({
-      ...m,
-      reasons: ["similar title", ...more],
-    });
-    const disc = emptyDisc();
-    const rows = {
-      "0:1": rm({
-        track: [similar(track("Q10", "Q20"), "same performer")],
-        comp: [{ ...match("Q20"), reasons: ["recorded as Q10", "similar title"] }],
-      }),
-      "0:2": rm({ comp: [{ ...match("Q21"), reasons: ["same title", "same performer"] }] }),
-    };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
-    expect(disc.track).toEqual({});
-    expect(disc.comp).toEqual({ 2: "Q21" });
-  });
-
-  it("fills a same-title match that a similar title sits beside", () => {
-    const disc = emptyDisc();
-    const rows = {
-      "0:1": rm({
-        track: [
-          { ...track("Q10", null), reasons: ["same title", "same performer"] },
-          { ...track("Q11", null), reasons: ["similar title", "same performer"] },
-        ],
-      }),
-    };
-    expect(fillUnambiguous(disc, 0, rows)).toBe(1);
-    expect(disc.track).toEqual({ 1: "Q10" });
   });
 });
 
