@@ -70,8 +70,9 @@ export const ID_PROPERTIES: Readonly<Record<string, string>> = {
 
 /**
  * Item-valued properties stored in the mirror (`music_links`), so the app can
- * find existing items for a tracklist: who made them, and how compositions,
- * tracks, singles and albums point at each other.
+ * find existing items for a tracklist: who made them, how compositions,
+ * tracks, singles and albums point at each other, and whether a track is a
+ * live or studio recording (P1552).
  */
 export const LINK_PROPERTIES: Readonly<Record<string, string>> = {
   P175: "performer",
@@ -82,6 +83,7 @@ export const LINK_PROPERTIES: Readonly<Record<string, string>> = {
   P361: "part of",
   P658: "tracklist",
   P13602: "single taken from",
+  P1552: "has characteristic",
 };
 
 /** What an album's more specific class makes it, for the artist page's Type column. */

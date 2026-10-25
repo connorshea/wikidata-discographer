@@ -174,4 +174,35 @@ describe("assembleMatches", () => {
       ["Q31", "Q32"],
     ]);
   });
+
+  it("leaves out a studio track for a live row, but keeps its composition", () => {
+    const LIVE = "Q56123235";
+    const STUDIO = "Q15975575";
+    const items = mapOf(
+      facts("Q10", "track", "Golden Days", { P175: ["Q52583"], P2550: ["Q20"], P1552: [STUDIO] }),
+      facts("Q11", "track", "Golden Days", { P175: ["Q52583"], P1552: [LIVE] }),
+      facts("Q12", "track", "Golden Days", { P175: ["Q52583"] }),
+      facts("Q13", "track", "Golden Days", { P175: ["Q52583"], P1552: [STUDIO] }),
+      facts("Q20", "work", "Golden Days", { P86: ["Q52583"] }),
+    );
+    const matches = (recTypes: string[], albumTracks: string[] = []) => {
+      const { rows } = assembleMatches([{ ...row("Golden Days"), recTypes }], {
+        items,
+        albumTracks: new Set(albumTracks),
+      });
+      return {
+        track: rows["0:1"].track.map((m) => m.qid),
+        comp: rows["0:1"].comp.map((m) => [m.qid, m.reasons]),
+      };
+    };
+    expect(matches([LIVE])).toEqual({
+      track: ["Q11", "Q12"],
+      comp: [["Q20", ["recorded as Q10", "same title", "same composer or lyricist"]]],
+    });
+    expect(matches([STUDIO]).track).toEqual(["Q10", "Q12", "Q13"]);
+    // Neither, or not saying: every track.
+    expect(matches([]).track).toEqual(["Q10", "Q11", "Q12", "Q13"]);
+    // On the album, it's this album's track whatever it says.
+    expect(matches([LIVE], ["Q13"]).track).toEqual(["Q13", "Q11", "Q12"]);
+  });
 });

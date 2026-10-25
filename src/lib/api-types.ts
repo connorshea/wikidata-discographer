@@ -272,6 +272,8 @@ export interface MatchesRequest {
     title: string;
     /** The row's performer QIDs. */
     performers: string[];
+    /** The row's P1552 recording types, e.g. live recording. Optional for older clients. */
+    recTypes?: string[];
   }[];
 }
 

@@ -45,7 +45,7 @@ export interface Answered {
 
 /**
  * The answered matches that still hold for `request`: those for rows whose
- * title and performers are unchanged since, while the album is the same. Rows
+ * title, performers and recording types are unchanged since, while the album is the same. Rows
  * that changed drop theirs until the next response, and the rest keep showing
  * theirs meanwhile.
  */
@@ -59,7 +59,12 @@ export function stillValid(
   for (const r of request.rows) {
     const was = asked.get(r.key);
     const m = answered.rows[r.key];
-    if (m && was?.title === r.title && was.performers.join() === r.performers.join())
+    if (
+      m &&
+      was?.title === r.title &&
+      was.performers.join() === r.performers.join() &&
+      was.recTypes?.join() === r.recTypes?.join()
+    )
       out[r.key] = m;
   }
   return out;
