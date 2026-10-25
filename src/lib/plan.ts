@@ -350,12 +350,13 @@ export const MB_ATTRIBUTES = ["live", "cover", "instrumental", "medley"] as cons
 export type MbAttribute = (typeof MB_ATTRIBUTES)[number];
 
 /**
- * The recording type each MusicBrainz attribute says, for those that say one. Instrumental
- * makes a track without lyrics instead, as an instrumental version is one of a song with words.
+ * The recording type each MusicBrainz attribute says. Instrumental also makes the track one
+ * without lyrics, by `trackTypeOf`.
  */
-const MB_REC_TYPES: Partial<Record<MbAttribute, string>> = {
+const MB_REC_TYPES: Record<MbAttribute, string> = {
   live: LIVE_RECORDING,
   cover: "Q155171",
+  instrumental: "Q56612794",
   medley: "Q13582719",
 };
 
@@ -368,7 +369,7 @@ export function trackRecTypesOf(
   S: Settings,
   t: Pick<Track, "mb" | "recTypes">,
 ): { qids: string[]; fromMb: string[] } {
-  const mb = (t.mb?.attributes ?? []).flatMap((a) => MB_REC_TYPES[a] ?? []);
+  const mb = (t.mb?.attributes ?? []).map((a) => MB_REC_TYPES[a]);
   // A track's own types that MusicBrainz says too are still cited to it.
   if (t.recTypes) {
     const qids = knownRecTypes(t.recTypes);

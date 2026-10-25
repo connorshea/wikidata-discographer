@@ -445,10 +445,12 @@ describe("buildPlan", () => {
       expect(cited()).toEqual(["Q56123235", "Q155171"]);
     });
 
-    it("doesn't make an instrumental recording an instrumental version", () => {
+    it("makes an instrumental recording an instrumental version, cited to it", () => {
       const state = liveCover(structuredClone(EXAMPLE));
       state.discs[0].tracks[1].mb!.attributes = ["instrumental"];
-      expect(typesOf(state, "track:0:2")).toEqual([]);
+      const claims = typesOf(state, "track:0:2");
+      expect(ids(claims)).toEqual(["Q56612794"]);
+      expect(claims[0].references).toBeDefined();
     });
 
     it("adds them to an existing track only if it has none", () => {
