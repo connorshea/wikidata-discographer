@@ -445,6 +445,12 @@ function CandidateItem({
         {composition && !c.used && (
           <span className="match-note">Using it also uses its composition, {composition}</span>
         )}
+        {c.slot === "track" && (m as TrackMatch).recordingUnknown && (
+          <span className="match-warn">
+            <Warn />
+            No recording type set, so it may be a studio recording
+          </span>
+        )}
         {c.others.length > 0 && (
           <span className="match-warn">
             <Warn />

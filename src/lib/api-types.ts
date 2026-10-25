@@ -287,6 +287,8 @@ export interface TrackMatch extends Match {
   composition: string | null;
   /** Singles it's on (its P1433/P361, or their P658). */
   singles: string[];
+  /** For a live row, it doesn't say whether it's a live or studio recording (P1552), so it may be a studio one. */
+  recordingUnknown?: true;
 }
 
 export interface RowMatches {
