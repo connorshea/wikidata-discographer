@@ -50,6 +50,7 @@ import {
 import { formatTime } from "../lib/preview.ts";
 import { FieldErr, Lock, Pids, QidInput, WikiLink } from "./common.tsx";
 import { ConfirmButton, ConfirmDialog } from "./ConfirmDialog.tsx";
+import { onGoToTrack, type RowAt } from "./go-to-track.ts";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import type { SectionProps } from "./types.ts";
 
@@ -95,6 +96,26 @@ export default function DiscsSection({
     setTab(i);
     if (focus) tabs.current[i]?.focus();
   };
+  // A row asked for from elsewhere, such as a person's songs in People, to show once its
+  // disc's tab is open.
+  const [goTo, setGoTo] = useState<RowAt | null>(null);
+  useEffect(
+    () =>
+      onGoToTrack((at) => {
+        setTab(at.disc);
+        setGoTo({ ...at });
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (!goTo) return;
+    const row = document.querySelector<HTMLElement>(`#tracks [data-row="${goTo.row}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    row
+      .querySelector<HTMLElement>('[data-col="edit"], [data-col="title"]')
+      ?.focus({ preventScroll: true });
+  }, [goTo]);
   const rows = plan.tracks[di] ?? [];
   const { ofAlbum, base } = baseArtists(state, rows);
   return (
