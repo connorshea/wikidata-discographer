@@ -110,6 +110,33 @@ describe("coerceState", () => {
     expect(sameDay.mb?.recorded).toEqual({ begin: "2025-11", end: "" });
   });
 
+  it("keeps the places imported, and a track's own place as typed", () => {
+    const ARENA = "3e325c9f-d5a9-4280-a60b-ef77c34e9d17";
+    const s = coerceState({
+      settings: { recAt: "Q1" },
+      places: {
+        [ARENA]: { name: " Kia Center ", qid: "Q481795" },
+        nope: { name: "X" },
+        [ARENA.replace("3e", "4e")]: { name: "" },
+      },
+      discs: [
+        {
+          tracks: [
+            { n: 1, title: "A", recAt: "Q2", mb: { places: [ARENA, "nope", ARENA] } },
+            { n: 2, title: "B", recAt: " ", mb: { places: "x" } },
+          ],
+        },
+      ],
+    });
+    expect(s.settings.recAt).toBe("Q1");
+    expect(s.places).toEqual({ [ARENA]: { name: "Kia Center", qid: "Q481795" } });
+    const [a, b] = s.discs[0].tracks;
+    expect(a).toMatchObject({ recAt: "Q2", mb: { places: [ARENA] } });
+    expect(b).not.toHaveProperty("recAt");
+    expect(b.mb).not.toHaveProperty("places");
+    expect(coerceState({}).places).toEqual({});
+  });
+
   it("keeps only the recording types the form lists", () => {
     const s = coerceState({
       settings: { recTypes: ["Q56123235", "Q1", "Q15975575"] },

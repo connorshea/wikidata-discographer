@@ -383,6 +383,99 @@ describe("buildPlan", () => {
     });
   });
 
+  describe("recording places", () => {
+    const REC = "519d8f15-518b-479c-af8d-664fb3ae455a";
+    const ARENA = "3e325c9f-d5a9-4280-a60b-ef77c34e9d17";
+    const STUDIO = "b5297256-8482-4cba-968a-25db61563faf";
+    const opOf = (state: typeof EXAMPLE, key: string) =>
+      buildPlan(state).ops.find((o) => (o.op === "create" ? o.key : o.what) === key) as {
+        claims: Claim[];
+      };
+    const placesOf = (state: typeof EXAMPLE, key: string) =>
+      opOf(state, key).claims.filter((c) => c.property === "P483");
+    const ids = (c: Claim[]) => c.map((x) => (x.value as { id: string }).id);
+    const withMb = (state: typeof EXAMPLE, places: string[]) => {
+      state.places = {
+        [ARENA]: { name: "Kia Center", qid: "Q481795" },
+        [STUDIO]: { name: "A Studio", qid: "" },
+      };
+      state.discs[0].tracks[1].mb = {
+        recording: REC,
+        work: "",
+        recordingName: "",
+        workName: "",
+        iswcs: [],
+        isrcs: [],
+        spotify: [],
+        appleMusic: [],
+        deezer: [],
+        tidal: [],
+        composers: [],
+        lyricists: [],
+        places,
+        source: { recording: REC, retrieved: "2026-10-04" },
+      };
+      return state;
+    };
+
+    it("adds none without a place", () => {
+      expect(placesOf(structuredClone(EXAMPLE), "track:0:2")).toEqual([]);
+    });
+
+    it("gives a track the album's place, or its own, and the album the one they share", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recAt = "Q1";
+      expect(ids(placesOf(state, "track:0:2"))).toEqual(["Q1"]);
+      expect(placesOf(state, "album tracklist")).toEqual([
+        { property: "P483", value: { type: "item", id: "Q1" }, ifMissing: true },
+      ]);
+      state.discs[0].tracks[1].recAt = "Q2";
+      expect(ids(placesOf(state, "track:0:2"))).toEqual(["Q2"]);
+      expect(ids(placesOf(state, "track:0:3"))).toEqual(["Q1"]);
+      expect(placesOf(state, "album tracklist")).toEqual([]);
+    });
+
+    it("adds a new album's place when it's created", () => {
+      const state = structuredClone(EXAMPLE);
+      Object.assign(state.album, { mode: "create", qid: "" });
+      state.settings.recAt = "Q1";
+      expect(ids(placesOf(state, "album"))).toEqual(["Q1"]);
+    });
+
+    it("uses the places MusicBrainz has, cited to the recording, leaving out those with no QID", () => {
+      const state = withMb(structuredClone(EXAMPLE), [ARENA, STUDIO]);
+      state.settings.recAt = "Q1";
+      const c = placesOf(state, "track:0:2");
+      expect(ids(c)).toEqual(["Q481795"]);
+      expect(c[0].references?.[0]).toContainEqual({
+        property: "P4404",
+        value: { type: "string", value: REC },
+      });
+      state.places[STUDIO].qid = "Q3";
+      expect(ids(placesOf(state, "track:0:2"))).toEqual(["Q481795", "Q3"]);
+    });
+
+    it("adds it to an existing track only if it has none", () => {
+      const state = structuredClone(EXAMPLE);
+      state.settings.recAt = "Q1";
+      state.discs[0].track[2] = "Q123";
+      const where = `track 1.2 “${state.discs[0].tracks[1].title}”`;
+      expect(placesOf(state, where)).toMatchObject([{ property: "P483", ifMissing: true }]);
+    });
+
+    it("checks the QIDs typed in", () => {
+      const state = withMb(structuredClone(EXAMPLE), [ARENA]);
+      state.settings.recAt = "Kia";
+      state.places[ARENA].qid = "Amway";
+      state.discs[0].tracks[2].recAt = "Q";
+      const plan = buildPlan(state);
+      expect(plan.fieldErrs.recAt).toBe(`"Kia" isn't a QID.`);
+      expect(plan.fieldErrs[`place-${ARENA}`]).toBe(`"Amway" isn't a QID.`);
+      expect(plan.rowErrs["0:3"].recAt).toBe(`"Q" isn't a QID.`);
+      expect(plan.blockers).toContain("settings");
+    });
+  });
+
   describe("recording types", () => {
     const REC = "519d8f15-518b-479c-af8d-664fb3ae455a";
     const typesOf = (state: typeof EXAMPLE, key: string) => {

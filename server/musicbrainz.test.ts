@@ -38,7 +38,14 @@ describe("createMusicBrainzClient", () => {
     expect(await client.release(ID)).toMatchObject({ title: "Day and Night" });
     expect(calls[0].url).toMatch(new RegExp(`/release/${ID}\\?inc=recordings\\+artist-credits`));
     expect(calls[0].url).toContain("release-group-level-rels");
+    expect(calls[0].url).toContain("place-rels");
     expect(calls[0].agent).toBe(userAgent());
+  });
+
+  it("asks for a place with its links", async () => {
+    const { client, calls } = fakeClient([ok("Kia Center")]);
+    await client.place(ID);
+    expect(calls[0].url).toMatch(new RegExp(`/place/${ID}\\?inc=url-rels&fmt=json$`));
   });
 
   it("keeps requests a gap apart, and caches releases", async () => {

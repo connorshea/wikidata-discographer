@@ -213,6 +213,7 @@ export function settingsPills(S: Settings): string[] {
     ...(p407 ? [`Language of work: ${work ? `${work} (${p407})` : p407}`] : []),
     S.date.trim() ? `Published ${S.date.trim()}` : "No publication date",
     ...(S.recDate.trim() ? [`Recorded ${S.recDate.trim()}`] : []),
+    ...(S.recAt.trim() ? [`Recorded at ${S.recAt.trim()}`] : []),
     ...(S.recTypes.length
       ? [
           S.recTypes

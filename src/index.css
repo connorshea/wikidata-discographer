@@ -661,13 +661,19 @@ input[aria-invalid="true"] {
   gap: 22px;
   margin-top: 8px;
 }
-.descs {
+.descs,
+.places {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-.descs h3.kicker {
+.descs h3.kicker,
+.places h3.kicker {
   margin: 0;
+}
+/* auto-fill, so one place keeps a column's width rather than the row's. */
+.places .grid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
 }
 .desc-vars {
   margin: 0;

@@ -8,6 +8,7 @@ import {
   type AlbumMb,
   type Disc,
   type MbCited,
+  type MbPlace,
   type MbRowIds,
   type MbWriter,
   type Settings,
@@ -40,6 +41,7 @@ const DEFAULT_SETTINGS: Settings = {
   mbWriters: true,
   recDate: "",
   recTypes: [],
+  recAt: "",
 };
 
 export const emptyDisc = (): Disc => ({
@@ -72,6 +74,7 @@ export const EMPTY: State = {
     mb: null,
   },
   artists: {},
+  places: {},
   discs: [emptyDisc()],
 };
 
@@ -120,6 +123,7 @@ const isTrackType = (v: unknown): v is string => TRACK_TYPES.some(([q]) => q ===
 /** Imported identifiers, keeping only well-formed ones. */
 function coerceMbIds(ids: Obj): MbRowIds {
   const languages = strList(ids.languages, /^Q\d+$/);
+  const places = strList(ids.places, MBID_PATTERN);
   const recorded = coerceRecorded(ids.recorded);
   const attributes = MB_ATTRIBUTES.filter(
     (a) => Array.isArray(ids.attributes) && ids.attributes.includes(a),
@@ -140,6 +144,7 @@ function coerceMbIds(ids: Obj): MbRowIds {
     ...(attributes.length ? { attributes } : {}),
     ...(languages.length ? { languages } : {}),
     ...(recorded ? { recorded } : {}),
+    ...(places.length ? { places } : {}),
     // Forms saved before identifiers had references kept the source with the length.
     source: coerceSource(ids.source ?? ids.length),
   };
@@ -170,6 +175,7 @@ function coerceTrack(t: Obj): Track | null {
     ...(Array.isArray(t.recTypes) && (!t.recTypes.length || knownRecTypes(t.recTypes).length)
       ? { recTypes: knownRecTypes(t.recTypes) }
       : {}),
+    ...(typeof t.recAt === "string" && t.recAt.trim() ? { recAt: t.recAt } : {}),
   };
 }
 
@@ -315,6 +321,18 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
   };
 }
 
+/** Imported places, by a well-formed MusicBrainz place ID, each with a name. */
+function coercePlaces(v: unknown): Record<string, MbPlace> {
+  if (!isObj(v)) return {};
+  return Object.fromEntries(
+    Object.entries(v).flatMap(([id, p]): [string, MbPlace][] =>
+      MBID_PATTERN.test(id) && isObj(p) && str(p.name).trim()
+        ? [[id, { name: str(p.name).trim(), qid: str(p.qid) }]]
+        : [],
+    ),
+  );
+}
+
 const STARTS: readonly StartingPoint[] = ["mb", "existing", "search", "new"];
 
 /**
@@ -348,6 +366,7 @@ export function coerceState(raw: unknown): State {
     mbWriters: bool(s.mbWriters, d.mbWriters),
     recDate: str(s.recDate),
     recTypes: Array.isArray(s.recTypes) ? knownRecTypes(s.recTypes) : [],
+    recAt: str(s.recAt),
   };
   const a = isObj(r.album) ? r.album : {};
   const ids = isObj(a.ids) ? a.ids : {};
@@ -391,6 +410,7 @@ export function coerceState(raw: unknown): State {
     settings,
     album,
     artists: strMap(r.artists),
+    places: coercePlaces(r.places),
     discs: discs.length ? discs : [emptyDisc()],
   };
   const start = "start" in r ? (STARTS.find((p) => p === r.start) ?? null) : legacyStart(rest);

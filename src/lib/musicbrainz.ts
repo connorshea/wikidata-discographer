@@ -20,7 +20,16 @@ import {
   WITH_VOCALS,
   WITHOUT_LYRICS,
 } from "./plan.ts";
-import type { AlbumMb, AlbumState, Disc, MbRowIds, MbWriter, State, Track } from "./plan.ts";
+import type {
+  AlbumMb,
+  AlbumState,
+  Disc,
+  MbPlace,
+  MbRowIds,
+  MbWriter,
+  State,
+  Track,
+} from "./plan.ts";
 import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
@@ -140,9 +149,11 @@ export function releaseChoices(releases: MbReleaseListing[]): ReleaseChoice[] {
 // The parts of MusicBrainz's release JSON the import reads. The lookup is
 //   /ws/2/release/<mbid>?inc=recordings+artist-credits+release-groups+
 //     work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+
-//     release-group-level-rels+isrcs
+//     release-group-level-rels+isrcs+place-rels
 // work-level-rels and artist-rels bring each work's own artist relations,
-// its composers and lyricists among them.
+// its composers and lyricists among them. place-rels brings the places each
+// recording was recorded at, without their links, so the server looks each
+// place up again for its Wikidata item.
 // ---------------------------------------------------------------------------
 
 export interface MbArtistCredit {
@@ -156,6 +167,7 @@ export interface MbRelation {
   "target-type": string;
   url?: { resource: string };
   artist?: { id: string; name: string; disambiguation?: string };
+  place?: { id: string; name: string };
   work?: {
     id: string;
     title: string;
@@ -225,7 +237,17 @@ export function releaseIds(release: MbRelease) {
     appleMusicTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "appleMusic")))],
     deezerTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "deezer")))],
     tidalTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "tidal")))],
+    places: [...new Set(tracks.flatMap((t) => placesOf(t).map((p) => p.id)))],
   };
+}
+
+/** The places a track's recording was recorded at, each once. Events are left out. */
+function placesOf(t: MbTrack): { id: string; name: string }[] {
+  const out = new Map<string, { id: string; name: string }>();
+  for (const r of t.recording.relations ?? [])
+    if (r.type === "recorded at" && r["target-type"] === "place" && r.place && !out.has(r.place.id))
+      out.set(r.place.id, { id: r.place.id, name: r.place.name.trim() || r.place.id });
+  return [...out.values()];
 }
 
 /** The streaming services a recording's links give a track ID for. */
@@ -284,6 +306,8 @@ export interface MbLookups {
   works: Record<string, string>;
   /** P1827 ISWC → composition, for a work no composition has the work ID of. */
   iswcs?: Record<string, string>;
+  /** MusicBrainz place ID → the item the place links to on Wikidata. */
+  places?: Record<string, string>;
   /**
    * Recording, work and streaming track IDs and ISWCs some item in the mirror already
    * has, however many. They aren't added to new items, which would duplicate them.
@@ -353,6 +377,8 @@ export interface MbForm {
   p407: string;
   /** The recording types its tracks start with, of `REC_TYPES`. */
   recTypes: string[];
+  /** The places its tracks were recorded at, by MusicBrainz place ID. */
+  places: Record<string, MbPlace>;
   report: MbReport;
 }
 
@@ -644,8 +670,10 @@ export function releaseToForm(
     tidal: 0,
     durationRefs: 0,
     recordedRefs: 0,
+    recAtRefs: 0,
   };
   const toExtend = { recordings: 0, works: 0 };
+  const places: Record<string, MbPlace> = {};
   const discs = media.map((m, i): Disc => {
     const disc = emptyDisc();
     if (media.length > 1) {
@@ -659,6 +687,8 @@ export function releaseToForm(
       const attributes = attributesOf(t);
       const languages = languagesOf(t);
       const recorded = recordedOf(t);
+      const recAt = placesOf(t);
+      for (const p of recAt) places[p.id] ??= { name: p.name, qid: lookups.places?.[p.id] ?? "" };
       addWriters([...writers.composers, ...writers.lyricists]);
       if (work && lookups.misplacedWorks?.[work] && !misplaced.has(work))
         misplaced.set(work, t.title.trim());
@@ -689,6 +719,7 @@ export function releaseToForm(
         ...(attributes.length ? { attributes } : {}),
         ...(languages.length ? { languages } : {}),
         ...(recorded ? { recorded } : {}),
+        ...(recAt.length ? { places: recAt.map((p) => p.id) } : {}),
         source: { recording: t.recording.id, ...(work ? { work } : {}), retrieved },
       };
       if (disc.track[t.position]) toExtend.recordings += ids.recording ? 1 : 0;
@@ -704,6 +735,7 @@ export function releaseToForm(
           if (trackLinks(t, key).length > 1) several[key].push(t.title.trim());
         toAdd.durationRefs += t.length === null ? 0 : 1;
         toAdd.recordedRefs += recorded ? 1 : 0;
+        toAdd.recAtRefs += recAt.some((p) => places[p.id].qid) ? 1 : 0;
       }
       if (!disc.comp[t.position]) {
         toAdd.works += ids.work ? 1 : 0;
@@ -731,6 +763,13 @@ export function releaseToForm(
       newComp: !lookups.works[work],
     })),
   );
+  const unlinkedPlaces = Object.values(places)
+    .filter((p) => !p.qid)
+    .map((p) => p.name);
+  if (unlinkedPlaces.length)
+    notes.push(
+      `${plural(unlinkedPlaces.length, "place the tracks were recorded at has", "places the tracks were recorded at have")} no Wikidata link on MusicBrainz: ${joinList(unlinkedPlaces)}. Enter ${unlinkedPlaces.length === 1 ? "its QID" : "their QIDs"} under Item settings, or the tracks won't say where they were recorded.`,
+    );
   const unlinked = [...new Set(unlinkedWriters.values())];
   if (unlinked.length)
     notes.push(
@@ -887,6 +926,7 @@ export function releaseToForm(
       : form === STUDIO_ALBUM
         ? [STUDIO_RECORDING]
         : [],
+    places,
     report,
   };
 }
@@ -903,12 +943,14 @@ function references(n: {
   tidal: number;
   durationRefs: number;
   recordedRefs: number;
+  recAtRefs: number;
 }): string[] {
   return [
     n.date && "publication date",
     n.albumIds && "album IDs",
     n.durationRefs && "durations",
     n.recordedRefs && "recording dates",
+    n.recAtRefs && "recording places",
     n.isrcs && "ISRCs",
     n.iswcs && "ISWCs",
     n.spotify + n.appleMusic + n.deezer + n.tidal && "track IDs",
@@ -952,8 +994,9 @@ export function applyMbForm(state: State, form: MbForm): State {
       date: form.date,
       p407: form.p407,
       p407Custom: false,
-      // The last album's recording date isn't this one's.
+      // The last album's recording date and place aren't this one's.
       recDate: "",
+      recAt: "",
       recTypes: form.recTypes,
       // A release with no linguistic content has tracks without lyrics, and one with a
       // language doesn't keep the last one's.
@@ -966,6 +1009,7 @@ export function applyMbForm(state: State, form: MbForm): State {
     },
     album: form.album,
     artists: form.artists,
+    places: form.places,
     discs: form.discs,
   });
 }
