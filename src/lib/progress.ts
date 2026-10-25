@@ -54,65 +54,75 @@ export function performerNames(state: State, plan: Plan): string[] {
   return [...names];
 }
 
+/** A track in the tracklist: its disc and row, by index, with its number and title. */
+export interface TrackAt {
+  disc: number;
+  row: number;
+  n: number;
+  title: string;
+}
+
 /**
- * The composers and lyricists the compositions get, by name, with how many songs each
+ * The composers and lyricists the compositions get, by name, with the songs each
  * wrote: those of every imported track, with the setting on.
  */
 export function writers(
   state: State,
   plan: Plan,
-): Map<string, { composer: boolean; lyricist: boolean; songs: number }> {
-  const out = new Map<string, { composer: boolean; lyricist: boolean; songs: number }>();
+): Map<string, { composer: boolean; lyricist: boolean; songs: TrackAt[] }> {
+  const out = new Map<string, { composer: boolean; lyricist: boolean; songs: TrackAt[] }>();
   if (!state.settings.mbWriters) return out;
-  plan.tracks.forEach((rows) => {
-    for (const t of rows) {
-      if (!t.mb) continue;
+  plan.tracks.forEach((rows, disc) => {
+    rows.forEach((t, row) => {
+      if (!t.mb) return;
       const names = new Set<string>();
       for (const [role, ws] of [
         ["composer", t.mb.composers],
         ["lyricist", t.mb.lyricists],
       ] as const)
         for (const w of ws) {
-          const row = out.get(w.name) ?? { composer: false, lyricist: false, songs: 0 };
-          row[role] = true;
-          out.set(w.name, row);
+          const entry = out.get(w.name) ?? { composer: false, lyricist: false, songs: [] };
+          entry[role] = true;
+          out.set(w.name, entry);
           names.add(w.name);
         }
-      for (const name of names) out.get(name)!.songs++;
-    }
+      for (const name of names) out.get(name)!.songs.push({ disc, row, n: t.n, title: t.title });
+    });
   });
   return out;
 }
 
 export interface PerformerRow {
   name: string;
-  /** How many tracks list them. */
-  tracks: number;
+  /** The tracks that list them. */
+  tracks: TrackAt[];
   /** One of the album artists, as entered for a new album or imported from MusicBrainz. */
   albumArtist: boolean;
   /** Whether they're a performer, whom the run needs a QID for. */
   performer: boolean;
-  /** Composer or lyricist of some composition, and of how many songs. */
+  /** Composer or lyricist of some composition, and of which songs. */
   composer: boolean;
   lyricist: boolean;
-  songs: number;
+  songs: TrackAt[];
 }
 
 /** Each name in People, in the table's order, with where it's used: performers, then writers. */
 export function performerRows(state: State, plan: Plan): PerformerRow[] {
   const ofAlbum =
     state.album.mode === "create" || state.start === "mb" ? new Set(albumArtists(state)) : null;
-  const tracks = plan.tracks.flat();
+  const tracks = plan.tracks.flatMap((rows, disc) =>
+    rows.map((t, row) => ({ at: { disc, row, n: t.n, title: t.title }, artists: t.artists })),
+  );
   const performers = new Set(performerNames(state, plan));
   const wrote = writers(state, plan);
   return [...new Set([...performers, ...wrote.keys()])].map((name) => ({
     name,
-    tracks: tracks.filter((t) => t.artists.includes(name)).length,
+    tracks: tracks.filter((t) => t.artists.includes(name)).map((t) => t.at),
     albumArtist: ofAlbum?.has(name) ?? false,
     performer: performers.has(name),
     composer: wrote.get(name)?.composer ?? false,
     lyricist: wrote.get(name)?.lyricist ?? false,
-    songs: wrote.get(name)?.songs ?? 0,
+    songs: wrote.get(name)?.songs ?? [],
   }));
 }
 

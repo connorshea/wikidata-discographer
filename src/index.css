@@ -2094,6 +2094,69 @@ button.perf-add {
   background: var(--cmp-tint);
   color: var(--cmp-ink);
 }
+/* A person's count of tracks or songs, and the card it opens listing them. */
+button.link.perf-count {
+  font-size: inherit;
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+button.link.perf-count:hover,
+button.link.perf-count[aria-expanded="true"] {
+  color: var(--accent);
+  text-decoration-style: solid;
+}
+.perf-card {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(360px, calc(100vh - 32px));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow:
+    0 12px 32px rgb(20 23 31 / 16%),
+    0 2px 6px rgb(20 23 31 / 8%);
+  color: var(--ink);
+  font-size: 13px;
+}
+.perf-card b {
+  padding: 0 6px;
+  font-size: 13.5px;
+}
+.perf-card ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+button.perf-track {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.perf-track:hover {
+  background: var(--tint);
+}
+button.perf-track .mono {
+  flex: none;
+  min-width: 2.6em;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
 .perf-pick {
   display: flex;
   flex-direction: column;

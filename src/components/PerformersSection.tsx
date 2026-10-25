@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { normalizeQid, QID } from "../lib/plan.ts";
-import { type PerformerRow, performerRows } from "../lib/progress.ts";
+import { type PerformerRow, performerRows, type TrackAt } from "../lib/progress.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
 import { QidInput, WikiLink } from "./common.tsx";
+import { goToTrack } from "./go-to-track.ts";
 import type { SectionProps } from "./types.ts";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
@@ -32,6 +33,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
   const linked = performers.filter((r) => isLinked(r.name)).length;
   const writers = all.filter((r) => r.composer || r.lyricist);
   const linkedWriters = writers.filter((r) => isLinked(r.name)).length;
+  const counts = { total: plan.tracks.flat().length, discs: plan.tracks.length };
   // A row that just closed, for focus to go to its Change button.
   const closing = useRef<string | null>(null);
   useEffect(() => {
@@ -109,7 +111,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
               return (
                 <div className="perf-row linked" key={r.name} data-performer={r.name}>
                   <StatusIcon linked />
-                  <PerformerName row={r} roles={writers.length > 0} />
+                  <PerformerName row={r} roles={writers.length > 0} {...counts} />
                   <div className="perf-line">
                     <Chosen qid={v} found={found} showQid />
                     <button
@@ -145,7 +147,7 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
             return (
               <div className="perf-row" key={r.name} data-performer={r.name}>
                 <StatusIcon linked={ok} optional={!r.performer} />
-                <PerformerName row={r} roles={writers.length > 0} />
+                <PerformerName row={r} roles={writers.length > 0} {...counts} />
                 <div className="perf-pick">
                   {ok ? (
                     <div className="perf-edit">
@@ -162,7 +164,9 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
                   ) : !r.performer ? (
                     <p className="muted perf-note">
                       Optional. Not found by their MusicBrainz ID. Leave it empty and{" "}
-                      {r.songs === 1 ? "this song won't name them" : "these songs won't name them"}{" "}
+                      {r.songs.length === 1
+                        ? "this song won't name them"
+                        : "these songs won't name them"}{" "}
                       as{" "}
                       {r.composer && r.lyricist
                         ? "composer or lyricist"
@@ -232,20 +236,55 @@ function StatusIcon({ linked, optional }: { linked: boolean; optional?: boolean 
 
 /**
  * A name and where it's used. With composers and lyricists in the list, each role
- * gets a pill so the two kinds of row can be told apart.
+ * gets a pill so the two kinds of row can be told apart. `total` and `discs` are how
+ * many tracks and discs the album has.
  */
-function PerformerName({ row, roles }: { row: PerformerRow; roles: boolean }) {
-  const counts = [
-    row.performer && plural(row.tracks, "track"),
-    (row.composer || row.lyricist) && plural(row.songs, "song"),
+function PerformerName({
+  row,
+  roles,
+  total,
+  discs,
+}: {
+  row: PerformerRow;
+  roles: boolean;
+  total: number;
+  discs: number;
+}) {
+  const where = [
+    row.performer && (
+      <OnTracks
+        key="tracks"
+        tracks={row.tracks}
+        {...{ total, discs }}
+        one="track"
+        title={`Tracks ${row.name} is on`}
+        label={(n) => `Show the ${plural(n, "track")} ${row.name} is on`}
+      />
+    ),
+    (row.composer || row.lyricist) && (
+      <OnTracks
+        key="songs"
+        tracks={row.songs}
+        {...{ total, discs }}
+        one="song"
+        title={`Songs ${row.name} wrote`}
+        label={(n) => `Show the ${plural(n, "song")} ${row.name} wrote`}
+      />
+    ),
   ].filter(Boolean);
+  const counts = where.map((el, i) => (
+    <Fragment key={i}>
+      {i > 0 && " · "}
+      {el}
+    </Fragment>
+  ));
   if (!roles)
     return (
       <span className="perf-name">
         <b>{row.name}</b>
         <span className="muted">
           {row.albumArtist && "Album artist · "}
-          {counts.join(" · ")}
+          {counts}
         </span>
       </span>
     );
@@ -258,8 +297,144 @@ function PerformerName({ row, roles }: { row: PerformerRow; roles: boolean }) {
         )}
         {row.composer && <span className="perf-role writer">Composer</span>}
         {row.lyricist && <span className="perf-role writer">Lyricist</span>}
-        <span className="muted">{counts.join(" · ")}</span>
+        <span className="muted">{counts}</span>
       </span>
+    </span>
+  );
+}
+
+/**
+ * How many tracks a person is on, as a button that opens a card listing them, each going
+ * to its row in Tracks. It opens on hover, focus or a click, which keeps it open until a
+ * click outside, Escape or the focus moving away. On every track of the album, the list
+ * wouldn't say much, so it's only the count.
+ */
+function OnTracks({
+  tracks,
+  total,
+  discs,
+  one,
+  title,
+  label,
+}: {
+  tracks: TrackAt[];
+  total: number;
+  discs: number;
+  one: string;
+  title: string;
+  label: (n: number) => string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const shown = hovered || focused || pinned;
+  const id = useId();
+  const box = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const card = useRef<HTMLDivElement>(null);
+  // Leaving the button for the card crosses a gap, so hovering ends a moment later.
+  const leaving = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const hover = (on: boolean) => {
+    clearTimeout(leaving.current);
+    if (on) setHovered(true);
+    else leaving.current = setTimeout(() => setHovered(false), 200);
+  };
+  useEffect(() => () => clearTimeout(leaving.current), []);
+  const hide = () => {
+    clearTimeout(leaving.current);
+    setHovered(false);
+    setFocused(false);
+    setPinned(false);
+  };
+
+  // Placed under the count, or over it when there's no room below, inside the window. It's
+  // fixed so a scrolling box around it can't clip it.
+  useLayoutEffect(() => {
+    if (!shown) return;
+    const place = () => {
+      const b = button.current?.getBoundingClientRect();
+      const el = card.current;
+      if (!b || !el) return;
+      const w = Math.min(320, window.innerWidth - 32);
+      const h = el.offsetHeight;
+      const below = b.bottom + 6;
+      const top = below + h > window.innerHeight && b.top - h - 6 > 0 ? b.top - h - 6 : below;
+      el.style.width = `${w}px`;
+      el.style.left = `${Math.max(16, Math.min(b.left, window.innerWidth - w - 16))}px`;
+      el.style.top = `${top}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [shown]);
+  useEffect(() => {
+    if (!shown) return;
+    const outside = (e: Event) => {
+      if (!box.current?.contains(e.target as Node)) hide();
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [shown]);
+
+  const count = plural(tracks.length, one);
+  if (!tracks.length || tracks.length === total) return <>{count}</>;
+  return (
+    <span
+      ref={box}
+      className="perf-on"
+      onPointerEnter={(e) => e.pointerType === "mouse" && hover(true)}
+      onPointerLeave={(e) => e.pointerType === "mouse" && hover(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!box.current?.contains(e.relatedTarget as Node | null)) hide();
+      }}
+      onKeyDown={(e) => {
+        if (!shown || e.key !== "Escape") return;
+        e.preventDefault();
+        e.stopPropagation();
+        hide();
+        // Still focused, but closed until it's focused again.
+        button.current?.focus();
+        setFocused(false);
+      }}
+    >
+      <button
+        ref={button}
+        type="button"
+        className="link perf-count"
+        aria-label={label(tracks.length)}
+        aria-expanded={shown}
+        aria-controls={shown ? `${id}-card` : undefined}
+        onClick={() => (pinned ? hide() : setPinned(true))}
+      >
+        {count}
+      </button>
+      {shown && (
+        <div ref={card} id={`${id}-card`} className="perf-card" role="group" aria-label={title}>
+          <b>{title}</b>
+          <ol>
+            {tracks.map((t) => (
+              <li key={`${t.disc}:${t.row}`}>
+                <button
+                  type="button"
+                  className="perf-track"
+                  onClick={() => {
+                    hide();
+                    goToTrack(t);
+                  }}
+                >
+                  <span className="mono muted">{discs > 1 ? `${t.disc + 1}.${t.n}` : t.n}</span>
+                  <span>{t.title || <span className="muted">No title</span>}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </span>
   );
 }

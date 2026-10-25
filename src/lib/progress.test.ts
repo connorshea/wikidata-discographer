@@ -227,13 +227,17 @@ describe("settingsPills", () => {
 });
 
 describe("performerRows", () => {
-  const performer = { performer: true, composer: false, lyricist: false, songs: 0 };
-  it("counts each name's tracks and marks the album artists", () => {
+  const performer = { performer: true, composer: false, lyricist: false, songs: [] };
+  it("lists each name's tracks and marks the album artists", () => {
     const state = structuredClone(EXAMPLE);
     state.discs[0].tracks[1].artists = ["Carly Rae Jepsen", "Guest"];
-    expect(performerRows(state, buildPlan(state))).toEqual([
+    const rows = performerRows(state, buildPlan(state));
+    expect(rows.map((r) => ({ ...r, tracks: r.tracks.length }))).toEqual([
       { name: "Carly Rae Jepsen", tracks: 24, albumArtist: false, ...performer },
       { name: "Guest", tracks: 1, albumArtist: false, ...performer },
+    ]);
+    expect(rows[1].tracks).toEqual([
+      { disc: 0, row: 1, n: 2, title: state.discs[0].tracks[1].title },
     ]);
     state.start = "mb";
     expect(performerRows(state, buildPlan(state))[0].albumArtist).toBe(true);
@@ -262,7 +266,13 @@ describe("performerRows", () => {
       };
     });
     const rows = () => performerRows(state, buildPlan(state));
-    expect(rows()).toEqual([
+    const at = (row: number) => ({
+      disc: 0,
+      row,
+      n: row + 1,
+      title: state.discs[0].tracks[row].title,
+    });
+    expect(rows().map((r) => ({ ...r, tracks: r.tracks.length }))).toEqual([
       {
         name: "Carly Rae Jepsen",
         tracks: 24,
@@ -270,7 +280,7 @@ describe("performerRows", () => {
         ...performer,
         composer: true,
         lyricist: true,
-        songs: 2,
+        songs: [at(0), at(1)],
       },
       {
         name: "Patrik Berger",
@@ -279,7 +289,7 @@ describe("performerRows", () => {
         performer: false,
         composer: true,
         lyricist: false,
-        songs: 1,
+        songs: [at(0)],
       },
     ]);
     state.settings.mbWriters = false;
