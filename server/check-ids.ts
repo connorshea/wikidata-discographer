@@ -19,13 +19,14 @@
 import { DEFAULT_WIKIDATA_API_URL, wikiOrigin } from "./auth/config.ts";
 import { userAgent } from "./auth/user-agent.ts";
 import { entityToRow, upsertRows } from "./mirror.ts";
-import { getEntities } from "./wikidata-client.ts";
+import { getEntities, retryAfterMs } from "./wikidata-client.ts";
 import { newItemName } from "./check-qids.ts";
 import { ID_PROPERTIES } from "../src/lib/music.ts";
 import type { Op } from "../src/lib/plan.ts";
 
 export const SPARQL_URL = "https://query.wikidata.org/sparql";
 const TIMEOUT_MS = 30_000;
+const MAX_RETRIES = 2;
 /** How far behind Wikidata the Query Service may be for its answer to count. */
 export const MAX_LAG_MS = 10 * 60_000;
 const MAX_PROBLEMS = 10;
@@ -91,18 +92,43 @@ interface Binding {
   value: string;
 }
 
-/** Ask the Query Service. Throws on a failure or a non-JSON answer. */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Ask the Query Service, trying again (up to MAX_RETRIES more times) after a
+ * dropped connection, a timeout, a 429 or a 5xx, honouring Retry-After. The
+ * waits are shorter than the Action API reads': the user is waiting on this.
+ * Throws on the last failure, any other error or a non-JSON answer.
+ */
 async function sparql(query: string): Promise<Record<string, Binding>[]> {
-  const res = await fetch(SPARQL_URL, {
-    method: "POST",
-    headers: {
-      "User-Agent": userAgent(),
-      Accept: "application/sparql-results+json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({ query }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    // 2 s, 6 s.
+    const backoff = 2_000 * 3 ** attempt;
+    try {
+      res = await fetch(SPARQL_URL, {
+        method: "POST",
+        headers: {
+          "User-Agent": userAgent(),
+          Accept: "application/sparql-results+json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ query }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (attempt < MAX_RETRIES) {
+        await sleep(backoff);
+        continue;
+      }
+      throw err;
+    }
+    if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+      await sleep(retryAfterMs(res.headers, backoff));
+      continue;
+    }
+    break;
+  }
   if (!res.ok) throw new Error(`the Query Service answered HTTP ${res.status}`);
   const body = (await res.json()) as { results?: { bindings?: Record<string, Binding>[] } };
   if (!Array.isArray(body.results?.bindings))
@@ -173,7 +199,7 @@ export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
     else if (same)
       fix = `Put ${it} in that row's ${same} field instead, so it isn't created twice.`;
     else
-      fix = `If ${it} is the same ${op.kind === "work" ? "composition" : "track"}, use it in the form instead. If not, fix the ID on Wikidata first.`;
+      fix = `If ${it} is the same ${op.kind === "work" ? "composition" : "track"}, use it in the form instead. If not, fix the ID on Wikidata or run anyway.`;
     problems.push(`${capitalize(newItemName(op))} would get ${name} ${value}, but ${who}. ${fix}`);
   }
   await addToMirror([...new Set([...taken.values()].flatMap((s) => [...s]))]);

@@ -50,6 +50,7 @@ import type {
   SubmissionListResponse,
   SubmissionRequest,
   SubmissionStatus,
+  TakenIdsConflict,
   UnknownRunConflict,
 } from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
@@ -66,6 +67,7 @@ const RECENT = 5;
 
 type UnknownRun = UnknownRunConflict["unknownRun"];
 type Recreate = RecreateConflict["recreate"];
+type TakenIds = TakenIdsConflict["takenIds"];
 
 /** Poll a run until it ends, calling `onRun` with each answer. Returns a cleanup. */
 function watchRun(
@@ -161,6 +163,8 @@ export default function RunSection({
   // The run would create items the last run already made, e.g. it was run
   // from another browser: what the server wants done before it goes on.
   const [recreate, setRecreate] = useState<Recreate | null>(null);
+  // Items on Wikidata already have identifiers the new items would get.
+  const [takenIds, setTakenIds] = useState<TakenIds | null>(null);
   const closeRun = useCallback(() => {
     setCleared(false);
     setRunId(null);
@@ -168,6 +172,7 @@ export default function RunSection({
     setError(null);
     setUnknownRun(null);
     setRecreate(null);
+    setTakenIds(null);
   }, []);
   // A cleared or replaced form starts with no run on show. A run still going
   // is followed in the background, like any own run.
@@ -317,6 +322,7 @@ export default function RunSection({
     setError(null);
     setUnknownRun(null);
     setRecreate(null);
+    setTakenIds(null);
     confirmed.current = confirm ? { ...confirmed.current, ...confirm } : {};
     const body: SubmissionRequest = { state, ...confirmed.current };
     api<{ id: number }>("/api/submissions", { method: "POST", body })
@@ -328,10 +334,11 @@ export default function RunSection({
       .catch((e: unknown) => {
         const conflict =
           e instanceof FetchError
-            ? (e.body as Partial<UnknownRunConflict & RecreateConflict>)
+            ? (e.body as Partial<UnknownRunConflict & RecreateConflict & TakenIdsConflict>)
             : null;
         if (conflict?.unknownRun) setUnknownRun(conflict.unknownRun);
         else if (conflict?.recreate) setRecreate(conflict.recreate);
+        else if (conflict?.takenIds) setTakenIds(conflict.takenIds);
         else setError(e instanceof FetchError ? e.message : "Couldn't start the run.");
       })
       .finally(() => setStarting(false));
@@ -483,6 +490,13 @@ export default function RunSection({
                 setRecreate(null);
               }}
               onConfirm={() => start({ confirmRecreate: recreate.id })}
+            />
+          )}
+          {takenIds && (
+            <TakenIdsGuard
+              takenIds={takenIds}
+              disabled={starting}
+              onConfirm={() => start({ confirmTakenIds: true })}
             />
           )}
         </div>
@@ -784,6 +798,41 @@ function RecreateGuard({
         </button>
         <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
           Create {n === 1 ? "it" : "them"} again anyway
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Shown when items on Wikidata already have identifiers the run's new items would get. */
+function TakenIdsGuard({
+  takenIds,
+  disabled,
+  onConfirm,
+}: {
+  takenIds: TakenIds;
+  disabled: boolean;
+  onConfirm: () => void;
+}) {
+  const n = takenIds.length;
+  return (
+    <div className="msg warn">
+      <p>
+        {n === 1
+          ? "An item on Wikidata already has an identifier"
+          : "Items on Wikidata already have identifiers"}{" "}
+        this run would give its new items. If {n === 1 ? "it's" : "they're"} the same, use{" "}
+        {n === 1 ? "it" : "them"} in the form. Some IDs can rightly be on more than one item, such
+        as a song item that is both the composition and the recording.
+      </p>
+      <ul>
+        {takenIds.map((p) => (
+          <li key={p}>{p}</li>
+        ))}
+      </ul>
+      <div className="row">
+        <button type="button" className="ghost" disabled={disabled} onClick={onConfirm}>
+          Run anyway
         </button>
       </div>
     </div>

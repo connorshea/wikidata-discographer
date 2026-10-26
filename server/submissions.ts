@@ -53,6 +53,7 @@ import type {
   SubmissionRequest,
   SubmissionStatus,
   RecreateConflict,
+  TakenIdsConflict,
   UnknownRunConflict,
 } from "../src/lib/api-types.ts";
 import { recreatedItems, recreatesFound } from "./recreate.ts";
@@ -225,7 +226,8 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
   if (problems.length > 0) return c.json({ error: problems.join(" ") }, 422);
 
   // The mirror can be a week behind, so ask Wikidata live whether an item
-  // already has an identifier a new item would get.
+  // already has an identifier a new item would get. Go on only once the user
+  // says to run anyway.
   let taken: string[];
   try {
     taken = await checkPlanIds(plan.ops);
@@ -238,7 +240,8 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
       503,
     );
   }
-  if (taken.length > 0) return c.json({ error: taken.join(" ") }, 409);
+  if (taken.length > 0 && !body?.confirmTakenIds)
+    return c.json({ error: taken.join(" "), takenIds: taken } satisfies TakenIdsConflict, 409);
 
   const editGroup = randomBytes(8).toString("hex");
   const [res] = await db.insert(submissions).values({

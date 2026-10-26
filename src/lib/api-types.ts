@@ -128,6 +128,8 @@ export interface SubmissionRequest {
   confirmUnknown?: number;
   /** The id of the user's last run, once they've said to create its items again. */
   confirmRecreate?: number;
+  /** True once the user has said to run anyway, though other items have the identifiers. */
+  confirmTakenIds?: boolean;
 }
 
 /**
@@ -144,6 +146,18 @@ export interface RecreateConflict {
     /** What it created that this run would create again, by plan key, to write back with `applyCreated`. */
     created: { key: string; qid: string; what: string }[];
   };
+}
+
+/**
+ * The 409 from POST /api/submissions when items on Wikidata already have
+ * identifiers the run's new items would get. The same identifier can rightly
+ * be on two items (a song item that is both the composition and the
+ * recording, say), so the user can run anyway.
+ */
+export interface TakenIdsConflict {
+  error: string;
+  /** One sentence per identifier taken. */
+  takenIds: string[];
 }
 
 /**

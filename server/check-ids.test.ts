@@ -136,7 +136,7 @@ describe("checkPlanIds", () => {
     expect(await checkPlanIds(ops)).toEqual([
       "The new album “Album” would get Spotify album ID 4aawyAB9vmqN3uQ7FjRGTy, but Q20 already has it. Use Q20 as the existing album instead, so it isn't created twice.",
       `The new track “Intro” (disc 1 track 1) would get MusicBrainz recording ID ${RECORDING}, but Q10 already has it. Put Q10 in that row's track field instead, so it isn't created twice.`,
-      "The new track “Intro” (disc 1 track 1) would get Apple Music track ID 1065973702, but Q11 and Q12 already have it. If one of them is the same track, use it in the form instead. If not, fix the ID on Wikidata first.",
+      "The new track “Intro” (disc 1 track 1) would get Apple Music track ID 1065973702, but Q11 and Q12 already have it. If one of them is the same track, use it in the form instead. If not, fix the ID on Wikidata or run anyway.",
     ]);
     expect(mocks.upsertRows).toHaveBeenCalledWith(
       [{ qid: "Q10" }, { qid: "Q11" }, { qid: "Q12" }, { qid: "Q20" }],
@@ -169,8 +169,35 @@ describe("checkPlanIds", () => {
     await expect(checkPlanIds(ops)).rejects.toThrow(IdCheckError);
   });
 
-  it("fails when the Query Service does", async () => {
-    stubSparql({ status: 503 });
-    await expect(checkPlanIds(ops)).rejects.toThrow("the Query Service answered HTTP 503");
+  it("fails when the Query Service does, after trying twice more", async () => {
+    vi.useFakeTimers();
+    const fetch = stubSparql({ status: 503 });
+    const check = expect(checkPlanIds(ops)).rejects.toThrow("the Query Service answered HTTP 503");
+    await vi.runAllTimersAsync();
+    await check;
+    expect(fetch).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it("tries again after a 5xx or a dropped connection", async () => {
+    vi.useFakeTimers();
+    const ok = stubSparql();
+    const fetch = vi
+      .fn<typeof ok>()
+      .mockResolvedValueOnce(new Response("", { status: 502 }))
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockImplementation(ok);
+    vi.stubGlobal("fetch", fetch);
+    const check = checkPlanIds(ops);
+    await vi.runAllTimersAsync();
+    expect(await check).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it("doesn't try again after a 4xx", async () => {
+    const fetch = stubSparql({ status: 400 });
+    await expect(checkPlanIds(ops)).rejects.toThrow("the Query Service answered HTTP 400");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

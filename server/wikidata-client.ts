@@ -189,7 +189,7 @@ async function csrfToken(user: EditUser, accessToken: string): Promise<string> {
   return token;
 }
 
-function retryAfterMs(headers: Headers, fallback: number): number {
+export function retryAfterMs(headers: Headers, fallback: number): number {
   const seconds = Number(headers.get("retry-after"));
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 60_000) : fallback;
 }
