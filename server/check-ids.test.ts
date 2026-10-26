@@ -78,29 +78,20 @@ describe("idsQuery", () => {
   });
 });
 
-/** Answer the Query Service: `hits` are [qid, property, value], last updated `lagMs` ago. */
+/** Answer the Query Service: `hits` are [qid, property, value]. */
 function stubSparql({
   hits = [],
-  lagMs = 3_000,
   status = 200,
-}: { hits?: [string, string, string][]; lagMs?: number | null; status?: number } = {}) {
-  // The update time comes in a row of its own.
-  const updated =
-    lagMs === null
-      ? []
-      : [{ updated: { type: "literal", value: new Date(Date.now() - lagMs).toISOString() } }];
+}: { hits?: [string, string, string][]; status?: number } = {}) {
   const fetch = vi.fn(async (url: string, init: RequestInit) => {
     expect(url).toBe(SPARQL_URL);
     expect((init.headers as Record<string, string>)["User-Agent"]).toBeTruthy();
     if (status !== 200) return new Response("", { status });
-    const bindings = [
-      ...updated,
-      ...hits.map(([q, p, v]) => ({
-        item: { type: "uri", value: `http://www.wikidata.org/entity/${q}` },
-        p: { type: "uri", value: `http://www.wikidata.org/prop/${p}` },
-        value: { type: "literal", value: v },
-      })),
-    ];
+    const bindings = hits.map(([q, p, v]) => ({
+      item: { type: "uri", value: `http://www.wikidata.org/entity/${q}` },
+      p: { type: "uri", value: `http://www.wikidata.org/prop/${p}` },
+      value: { type: "literal", value: v },
+    }));
     return Response.json({ results: { bindings } });
   });
   vi.stubGlobal("fetch", fetch);
@@ -157,22 +148,12 @@ describe("checkPlanIds", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("fails when the Query Service is too far behind", async () => {
-    stubSparql({ lagMs: 30 * 60_000 });
-    await expect(checkPlanIds(ops)).rejects.toThrow(
-      new IdCheckError("the Query Service is 30 minutes behind Wikidata"),
-    );
-  });
-
-  it("fails when it doesn't say how far behind it is", async () => {
-    stubSparql({ lagMs: null });
-    await expect(checkPlanIds(ops)).rejects.toThrow(IdCheckError);
-  });
-
   it("fails when the Query Service does, after trying twice more", async () => {
     vi.useFakeTimers();
     const fetch = stubSparql({ status: 503 });
-    const check = expect(checkPlanIds(ops)).rejects.toThrow("the Query Service answered HTTP 503");
+    const check = expect(checkPlanIds(ops)).rejects.toThrow(
+      new IdCheckError("the Query Service answered HTTP 503"),
+    );
     await vi.runAllTimersAsync();
     await check;
     expect(fetch).toHaveBeenCalledTimes(3);

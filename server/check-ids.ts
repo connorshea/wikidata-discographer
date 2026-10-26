@@ -7,8 +7,8 @@
 // The Wikidata Query Service is asked once per run, with a `VALUES` row per
 // identifier. `p:`/`ps:` with a rank filter, not `wdt:`, so a normal-rank ID
 // on an item that also has a preferred one is found, and deprecated IDs are
-// skipped. The same request reads when the service last applied an edit, and
-// the check fails if it's too far behind to be trusted.
+// skipped. An item made in the minutes the service is behind can be missed,
+// but the mirror's gap is a week.
 //
 // ISRCs (P1243) and ISWCs (P1827) aren't checked: the same one can rightly be
 // on more than one item. Items found are added to the mirror, so the form
@@ -27,8 +27,6 @@ import type { Op } from "../src/lib/plan.ts";
 export const SPARQL_URL = "https://query.wikidata.org/sparql";
 const TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 2;
-/** How far behind Wikidata the Query Service may be for its answer to count. */
-export const MAX_LAG_MS = 10 * 60_000;
 const MAX_PROBLEMS = 10;
 
 /** The identifiers checked: the ones the mirror stores, but ISWCs. */
@@ -66,24 +64,19 @@ function literal(s: string): string {
 }
 
 /**
- * The query for the items with any of these identifiers, and the service's
- * last update. A `UNION`, with the statements looked up by value first: the
- * same patterns in an `OPTIONAL`, item first, took 9 seconds for 4 IDs and
- * timed out for 200, where this answers 500 in half a second.
+ * The query for the items with any of these identifiers. The statements are
+ * looked up by value first: the same patterns item first took 9 seconds for
+ * 4 IDs and timed out for 200, where this answers 500 in half a second.
  */
 export function idsQuery(ids: readonly { property: string; value: string }[]): string {
-  const rows = ids.map(({ property: p, value }) => `      (p:${p} ps:${p} ${literal(value)})`);
-  return `SELECT ?item ?p ?value ?updated WHERE {
-  { <http://www.wikidata.org> schema:dateModified ?updated }
-  UNION
-  {
-    VALUES (?p ?ps ?value) {
+  const rows = ids.map(({ property: p, value }) => `    (p:${p} ps:${p} ${literal(value)})`);
+  return `SELECT ?item ?p ?value WHERE {
+  VALUES (?p ?ps ?value) {
 ${rows.join("\n")}
-    }
-    ?st ?ps ?value .
-    ?item ?p ?st .
-    FILTER NOT EXISTS { ?st wikibase:rank wikibase:DeprecatedRank }
   }
+  ?st ?ps ?value .
+  ?item ?p ?st .
+  FILTER NOT EXISTS { ?st wikibase:rank wikibase:DeprecatedRank }
 }`;
 }
 
@@ -149,8 +142,7 @@ export class IdCheckError extends Error {
 /**
  * Problems with the identifiers the run's new items would get, one sentence
  * each: every one some item on Wikidata already has. Empty when none is
- * taken. Throws an IdCheckError if the Query Service can't be asked, or is
- * too far behind.
+ * taken. Throws an IdCheckError if the Query Service can't be asked.
  */
 export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
   if (wikiOrigin() !== new URL(DEFAULT_WIKIDATA_API_URL).origin) return [];
@@ -164,19 +156,10 @@ export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
   } catch (err) {
     throw new IdCheckError(err instanceof Error ? err.message : String(err));
   }
-  const updated = rows.find((r) => r.updated)?.updated.value;
-  const lag = updated ? Date.now() - Date.parse(updated) : NaN;
-  if (!(lag <= MAX_LAG_MS))
-    throw new IdCheckError(
-      Number.isNaN(lag)
-        ? "the Query Service didn't say when it was last updated"
-        : `the Query Service is ${Math.round(lag / 60_000)} minutes behind Wikidata`,
-    );
 
   // Each identifier taken, with the items that have it.
   const taken = new Map<string, Set<string>>();
   for (const r of rows) {
-    if (!r.item || !r.p || !r.value) continue;
     const k = `${entityId(r.p.value)}\t${r.value.value}`;
     const set = taken.get(k) ?? new Set();
     set.add(entityId(r.item.value));
