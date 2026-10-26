@@ -304,7 +304,7 @@ function rowOf(key: string): string | null {
   return m ? `disc ${Number(m[1]) + 1} track ${m[2]}` : null;
 }
 
-function newItemName(op: Extract<Op, { op: "create" }>): string {
+export function newItemName(op: Extract<Op, { op: "create" }>): string {
   const row = rowOf(op.key);
   return `the new ${describeOp(op)}${row ? ` (${row})` : ""}`;
 }
