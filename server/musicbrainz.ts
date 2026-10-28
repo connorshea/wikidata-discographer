@@ -175,8 +175,9 @@ const client = createMusicBrainzClient();
  * value to its item when exactly one item of the given kinds has it,
  * `taken` lists every value any item has, `held` every value an item of
  * the given kinds has, and `elsewhere` the items of other kinds that have each value.
+ * When several items have a value, the only one of kind `prefer` is used, if there is one.
  */
-async function lookup(property: string, values: string[], kinds: MusicKind[]) {
+async function lookup(property: string, values: string[], kinds: MusicKind[], prefer?: MusicKind) {
   const unique: Record<string, string> = {};
   const elsewhere: Record<string, { qid: string; kind: MusicKind }[]> = {};
   if (!values.length) return { unique, taken: [], held: [], elsewhere };
@@ -190,12 +191,15 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
         inArray(musicExternalIds.value, values),
       ),
     );
-  const seen = new Map<string, Set<number>>();
+  const seen = new Map<string, Map<number, MusicKind>>();
   for (const r of rows)
     if (kinds.includes(r.kind as MusicKind))
-      seen.set(r.value, (seen.get(r.value) ?? new Set()).add(r.qid));
+      seen.set(r.value, (seen.get(r.value) ?? new Map()).set(r.qid, r.kind as MusicKind));
     else (elsewhere[r.value] ??= []).push({ qid: toQid(r.qid), kind: r.kind as MusicKind });
-  for (const [value, qids] of seen) if (qids.size === 1) unique[value] = toQid([...qids][0]);
+  for (const [value, holders] of seen) {
+    const qid = soleHolder(holders, prefer);
+    if (qid !== undefined) unique[value] = toQid(qid);
+  }
   return {
     unique,
     taken: [...new Set(rows.map((r) => r.value))],
@@ -203,6 +207,26 @@ async function lookup(property: string, values: string[], kinds: MusicKind[]) {
     elsewhere,
   };
 }
+
+/**
+ * The item that has a value, from its holders by QID: the only one, or else the only
+ * one of kind `prefer`. Undefined when that still leaves several, or none.
+ */
+export function soleHolder(
+  holders: Map<number, MusicKind>,
+  prefer?: MusicKind,
+): number | undefined {
+  if (holders.size === 1) return [...holders.keys()][0];
+  const preferred = [...holders].filter(([, kind]) => kind === prefer);
+  return preferred.length === 1 ? preferred[0][0] : undefined;
+}
+
+/** The kind of item a release group's primary type is on Wikidata. */
+const GROUP_KINDS: Readonly<Record<string, MusicKind>> = {
+  Album: "album",
+  EP: "ep",
+  Single: "single",
+};
 
 /**
  * The release's MusicBrainz IDs, looked up in the mirror. `album` is the
@@ -217,7 +241,13 @@ export async function lookupRelease(
   const ids = releaseIds(release);
   const [albums, artists, recordings, works, iswcs, spotify, appleMusic, deezer, tidal] =
     await Promise.all([
-      lookup("P436", [ids.releaseGroup], ["album", "ep", "single"]),
+      // An album and a single sometimes both have the group's ID, so its type picks one.
+      lookup(
+        "P436",
+        [ids.releaseGroup],
+        ["album", "ep", "single"],
+        GROUP_KINDS[release["release-group"]["primary-type"] ?? ""],
+      ),
       lookup("P434", ids.artists, ["artist"]),
       lookup("P4404", ids.recordings, ["track"]),
       lookup("P435", ids.works, ["work"]),
