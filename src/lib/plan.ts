@@ -1287,6 +1287,18 @@ export function buildPlan(state: State): Plan {
         )
       : [claim("P2635", { type: "quantity", amount: items.length, unit: TRACK_UNIT })];
 
+  // Distribution format, cited as the streaming ID it comes from is, when one is.
+  const streamingIds = albumIds.filter((c) => STREAMING_ID_PROPERTIES.has(c.property));
+  const streamingRef = streamingIds.find((c) => c.references)?.references;
+  const streaming: Claim[] = streamingIds.length
+    ? [
+        {
+          ...claim("P437", item(MUSIC_STREAMING)),
+          ...(streamingRef && { references: streamingRef }),
+        },
+      ]
+    : [];
+
   // 1. The album, without its tracklist (the tracks don't exist yet).
   if (creatingAlbum) {
     ops.push({
@@ -1304,10 +1316,7 @@ export function buildPlan(state: State): Plan {
         ...albumRecAt,
         ...counts,
         ...albumIds,
-        // Distribution format.
-        ...(albumIds.some((c) => STREAMING_ID_PROPERTIES.has(c.property))
-          ? [claim("P437", item(MUSIC_STREAMING))]
-          : []),
+        ...streaming,
       ],
     });
   }

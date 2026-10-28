@@ -987,7 +987,7 @@ describe("buildPlan", () => {
       const op = find(buildPlan(state).ops, "album");
       return Object.fromEntries(
         (op?.op === "create" ? op.claims : [])
-          .filter((c) => ["P577", "P436", "P2205", "P1954"].includes(c.property))
+          .filter((c) => ["P577", "P436", "P2205", "P1954", "P437"].includes(c.property))
           .map((c) => [c.property, c.references]),
       );
     };
@@ -998,6 +998,7 @@ describe("buildPlan", () => {
         P436: undefined,
         P2205: refTo("P5813", REL),
         P1954: refTo("P436", RG),
+        P437: refTo("P5813", REL),
       });
     });
 
@@ -1005,7 +1006,7 @@ describe("buildPlan", () => {
       const edited = imported();
       edited.settings.date = "2026-09";
       edited.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTz";
-      expect(refsOf(edited)).toMatchObject({ P577: undefined, P2205: undefined });
+      expect(refsOf(edited)).toMatchObject({ P577: undefined, P2205: undefined, P437: undefined });
       expect(refsOf(edited).P1954).toEqual(refTo("P436", RG));
     });
 
@@ -1196,6 +1197,13 @@ describe("buildPlan", () => {
     expect(formatsOf({ tidal: "75413011" })).toEqual(streaming);
     expect(formatsOf({ musicbrainz: "f5093c06-23e3-404f-aeaa-40f72885ee3a" })).toEqual([]);
     expect(formatsOf({ spotify: "not an id" })).toEqual([]);
+  });
+
+  it("gives an existing album no distribution format", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTy";
+    const claims = buildPlan(state).ops.flatMap((o) => o.claims);
+    expect(claims.filter((c) => c.property === "P437")).toEqual([]);
   });
 
   it("blocks on a bad performer QID", () => {
