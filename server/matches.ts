@@ -29,7 +29,7 @@ import { propertyNumber, qidNumber, toProperty, toQid } from "./ids.ts";
 import { musicItems, musicLinks } from "../db/schema.ts";
 import { labelSearchKey, SIMILAR_TITLE, titleKey } from "../src/lib/titles.ts";
 import type { MusicKind } from "../src/lib/music.ts";
-import { isSimilarOnly, NO_ARTIST } from "../src/lib/matches.ts";
+import { isSimilarOnly, NO_ARTIST, ON_RELEASE } from "../src/lib/matches.ts";
 import { LIVE_RECORDING, STUDIO_RECORDING } from "../src/lib/plan.ts";
 import type {
   Match,
@@ -67,7 +67,7 @@ function liveOrStudio(types: readonly string[]): "live" | "studio" | null {
 /** How strongly a match's reasons tie it to the row, for ordering. */
 function score(m: Match): number {
   let n = m.reasons.length;
-  if (m.reasons.includes("on this album")) n += 4;
+  if (m.reasons.includes(ON_RELEASE)) n += 4;
   if (m.reasons.includes("same performer")) n += 2;
   if (m.reasons.includes(NO_ARTIST)) n -= 1;
   if (isSimilarOnly(m)) n -= 1;
@@ -175,7 +175,7 @@ export function assembleMatches(
     for (const it of byTitle.get(key) ?? []) {
       if (!SLOTS[it.kind]) continue;
       const reasons = [titleReason(it)];
-      if (albumTracks.has(it.qid)) reasons.push("on this album");
+      if (albumTracks.has(it.qid)) reasons.push(ON_RELEASE);
       if (it.links.some((l) => l.property === "P175" && performers.has(l.target)))
         reasons.push("same performer");
       else if (

@@ -92,17 +92,24 @@ describe("isStrong", () => {
 
 describe("ties", () => {
   it("names what ties a match beyond its title, strongest first", () => {
-    expect(ties({ reasons: ["same title", "same performer"] })).toEqual(["Same performer"]);
-    expect(ties({ reasons: ["same title", "same performer", "on this album"] })).toEqual([
+    expect(ties({ reasons: ["same title", "same performer"] }, "album")).toEqual([
+      "Same performer",
+    ]);
+    expect(ties({ reasons: ["same title", "same performer", "on this album"] }, "album")).toEqual([
       "On this album",
       "Same performer",
     ]);
-    expect(ties({ reasons: ["recorded as Q2", "similar title"] })).toEqual(["Recorded as Q2"]);
+    expect(ties({ reasons: ["recorded as Q2", "similar title"] }, "album")).toEqual([
+      "Recorded as Q2",
+    ]);
+    expect(ties({ reasons: ["same title", "on this album"] }, "single")).toEqual([
+      "On this single",
+    ]);
   });
 
   it("is empty for a title-only match", () => {
-    expect(ties({ reasons: ["same title", NO_ARTIST] })).toEqual([]);
-    expect(ties({ reasons: ["similar title"] })).toEqual([]);
+    expect(ties({ reasons: ["same title", NO_ARTIST] }, "album")).toEqual([]);
+    expect(ties({ reasons: ["similar title"] }, "album")).toEqual([]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   moveRowId,
   moveRowIds,
   pickTrack,
+  reasonText,
   comesWithTrack,
   reviewedLine,
   reviewSummary,
@@ -18,7 +19,7 @@ import {
   ties,
   type TrackReview,
 } from "../lib/matches.ts";
-import type { Disc } from "../lib/plan.ts";
+import { type Disc, releaseNoun } from "../lib/plan.ts";
 import type { TrackMatch } from "../lib/api-types.ts";
 import { WikiLink } from "./common.tsx";
 import type { MatchStatus } from "./use-matches.ts";
@@ -58,6 +59,7 @@ export default function MatchesSection({
   setDismissed: (fn: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void;
   ref?: Ref<MatchesHandle>;
 }) {
+  const noun = releaseNoun(state.album);
   // What each use replaced, by candidate, so Undo puts it back.
   const before = useRef(new Map<string, Before>());
   const open = reviews.filter((r) => !r.reviewed).length;
@@ -321,6 +323,7 @@ export default function MatchesSection({
               <CandidateItem
                 key={c.id}
                 c={c}
+                noun={noun}
                 // Used on its own here, it's undone on its own too.
                 withTrack={comesWithTrack(r, c) && !before.current.has(c.id)}
                 onUse={() => use(r, c)}
@@ -397,12 +400,15 @@ const Check = () => (
 
 function CandidateItem({
   c,
+  noun,
   withTrack,
   onUse,
   onUndo,
   onDismiss,
 }: {
   c: Candidate;
+  /** What the existing release is called, e.g. "single". */
+  noun: string;
   /** It was filled in by using the track, so it's undone with that. */
   withTrack: boolean;
   onUse: () => void;
@@ -431,13 +437,16 @@ function CandidateItem({
             {m.label ?? "No label"}
             {m.description && <span className="match-desc"> · {m.description}</span>}
           </span>
-          {ties(m).map((t) => (
+          {ties(m, noun).map((t) => (
             <span key={t} className="match-tag tie">
               {t}
             </span>
           ))}
           {tag && (
-            <span className="match-tag" title={`Matched by ${m.reasons.join(", ")}`}>
+            <span
+              className="match-tag"
+              title={`Matched by ${m.reasons.map((r) => reasonText(r, noun)).join(", ")}`}
+            >
               {tag}
             </span>
           )}
