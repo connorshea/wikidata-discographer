@@ -116,6 +116,19 @@ describe("previewPlan", () => {
         }
   });
 
+  it("labels a streaming album's distribution format", () => {
+    const streaming = structuredClone(state);
+    streaming.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTy";
+    const format = previewPlan(buildPlan(streaming), streaming)
+      .flatMap((g) => g.edits)
+      .flatMap((e) => e.statements)
+      .find((s) => s.property.id === "P437")!;
+    expect([format.property.label, format.value.text]).toEqual([
+      "distribution format",
+      "music streaming",
+    ]);
+  });
+
   it("shows a MusicBrainz ID with the name it's named as", () => {
     const state = structuredClone(EXAMPLE);
     state.discs[0].tracks[1].mb = {

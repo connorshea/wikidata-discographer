@@ -226,8 +226,9 @@ export default function AlbumSection({
           <p className="hint">
             <Pids>
               The album is created first with P31, P7937, P1476, P175, P577 (publication date),
-              P407, the identifiers above, and P2635 number of tracks: one statement per disc
-              qualified with its part when every disc has a part, otherwise one total.
+              P407, the identifiers above, P437 music streaming when there's a Spotify, Apple Music,
+              Deezer or Tidal ID, and P2635 number of tracks: one statement per disc qualified with
+              its part when every disc has a part, otherwise one total.
             </Pids>
           </p>
         </div>
