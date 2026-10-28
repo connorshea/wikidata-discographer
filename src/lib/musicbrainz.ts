@@ -31,7 +31,13 @@ import type {
   State,
   Track,
 } from "./plan.ts";
-import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
+import {
+  ALBUM_ID_FIELDS,
+  ISRC_PATTERN,
+  ISWC_PATTERN,
+  KIND_NOUNS,
+  type MusicKind,
+} from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
 const MBID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
@@ -318,15 +324,6 @@ export interface MbLookups {
   /** P435 work ID → items that have it but aren't compositions, usually singles. */
   misplacedWorks?: Record<string, { qid: string; kind: MusicKind }[]>;
 }
-
-const KIND_NOUNS: Record<MusicKind, string> = {
-  artist: "artist",
-  album: "album",
-  ep: "EP",
-  single: "single",
-  work: "composition",
-  track: "track",
-};
 
 /** An identifier the import adds, and to how many items. */
 export interface MbIdCount {

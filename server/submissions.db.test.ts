@@ -7,9 +7,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { db, pool } from "./db.ts";
-import { submissions, users, wikidataEdits } from "../db/schema.ts";
+import { musicExternalIds, musicItems, submissions, users, wikidataEdits } from "../db/schema.ts";
 import { submissionRoutes } from "./submissions.ts";
-import type { State } from "../src/lib/plan.ts";
+import { SINGLE_CLASS, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
 
@@ -73,7 +73,14 @@ function newAlbum(title: string): State {
   return s;
 }
 
+/** An album in the mirror with a Spotify album ID, for the duplicate-ID check. */
+const TAKEN = { qid: 990000166, spotify: "0123456789abcdefABCDEF" };
+
+if (process.env.DB_TESTS) afterAll(() => pool.end());
+
 async function clear() {
+  await db.delete(musicExternalIds).where(eq(musicExternalIds.qid, TAKEN.qid));
+  await db.delete(musicItems).where(eq(musicItems.qid, TAKEN.qid));
   await db.delete(wikidataEdits).where(eq(wikidataEdits.userId, USER.id));
   await db.delete(submissions).where(eq(submissions.userId, USER.id));
   await db.delete(users).where(eq(users.id, USER.id));
@@ -107,10 +114,7 @@ async function unknownRun(qid: number | null): Promise<number> {
 
 describe.skipIf(!process.env.DB_TESTS)("the unknown-run guard", () => {
   beforeEach(clear);
-  afterAll(async () => {
-    await clear();
-    await pool.end();
-  });
+  afterAll(clear);
 
   describe("once the item is found", () => {
     it("holds up the same form, which would create it again", async () => {
@@ -167,5 +171,27 @@ describe.skipIf(!process.env.DB_TESTS)("the unknown-run guard", () => {
       const confirmed = await post({ state: newAlbum("Emotion"), confirmUnknown: id });
       expect(confirmed.error).toBe("Past the guards.");
     });
+  });
+});
+
+describe.skipIf(!process.env.DB_TESTS)("the duplicate-ID check", () => {
+  beforeEach(clear);
+  afterAll(clear);
+
+  it("names the kind of the item that has the ID, not the form's", async () => {
+    await db
+      .insert(musicItems)
+      .values({ qid: TAKEN.qid, kind: "album", label: "Ocean Eyes", instanceOf: [] });
+    await db
+      .insert(musicExternalIds)
+      .values({ qid: TAKEN.qid, property: 2205, value: TAKEN.spotify });
+    const s = newAlbum("Fireflies");
+    s.album.type = SINGLE_CLASS;
+    s.album.ids.spotify = TAKEN.spotify;
+    const res = await post({ state: s });
+    expect(res.status).toBe(409);
+    expect(res.error).toBe(
+      `Q${TAKEN.qid} already has Spotify album ID ${TAKEN.spotify}. Use that album instead.`,
+    );
   });
 });
