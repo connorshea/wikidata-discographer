@@ -18,10 +18,16 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
   unreviewed: 0,
   hasTracklist: false,
   notAlbum: false,
-  existingSingle: false,
   running: null,
   ...more,
 });
+
+/** `state` with its existing release known to be a single on Wikidata. */
+const singleOf = (state: State): State => {
+  const s = structuredClone(state);
+  s.album.singleQid = s.album.qid.trim();
+  return s;
+};
 
 const checks = (p: ProgressInput) =>
   runChecks({ ...p, ineligible: null, matchesPending: false, albumPending: false });
@@ -140,10 +146,17 @@ describe("startSummary", () => {
 
 describe("an existing single", () => {
   it("is called a single in the rail, the checklist and the counts", () => {
-    const p = input(EXAMPLE, { existingSingle: true, hasTracklist: true });
+    const state = singleOf(EXAMPLE);
+    const p = input(state, { hasTracklist: true });
     expect(railSteps(p).find((s) => s.id === "album")?.name).toBe("Single");
     expect(checks(p)[0].text).toBe("Single already has a tracklist");
-    expect(createCounts(EXAMPLE, buildPlan(EXAMPLE), true).at(-1)?.label).toBe("Single tracklist");
+    expect(createCounts(state, buildPlan(state)).at(-1)?.label).toBe("Single tracklist");
+  });
+
+  it("is an album again once the QID changes", () => {
+    const state = singleOf(EXAMPLE);
+    state.album.qid = "Q1";
+    expect(createCounts(state, buildPlan(state)).at(-1)?.label).toBe("Album tracklist");
   });
 });
 

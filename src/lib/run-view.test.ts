@@ -89,6 +89,14 @@ describe("runProgress", () => {
     expect(info.secondsLeft).toBe(0);
   });
 
+  it("calls an existing single a single, from the form the run was sent", () => {
+    const input = structuredClone(EXAMPLE);
+    input.album.singleQid = input.album.qid;
+    const info = runProgress({ ...runOf(plan.ops.length - 1), input });
+    expect(info.kinds.at(-1)?.label).toBe("Single tracklist");
+    expect(info.next).toMatchObject({ noun: "single", title: "Single tracklist" });
+  });
+
   it("doesn't guess when the plan no longer lines up with the run", () => {
     const info = runProgress({ ...runOf(3), total: plan.ops.length + 1 });
     expect(info.edits).toBeNull();

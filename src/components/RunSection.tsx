@@ -26,10 +26,10 @@ import {
   saveOwnRun,
   settleOwnRun,
 } from "../lib/own-run.ts";
-import type { Plan, State } from "../lib/plan.ts";
+import { type Plan, releaseNoun, type State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type { PreviewEdit } from "../lib/preview.ts";
-import { releaseName, type RunningInfo } from "../lib/progress.ts";
+import type { RunningInfo } from "../lib/progress.ts";
 import {
   editShares,
   type EditShare,
@@ -111,7 +111,6 @@ export default function RunSection({
   slot,
   sideSlot,
   albumName,
-  existingSingle,
   onRunning,
   onStarting,
   onShowing,
@@ -132,8 +131,6 @@ export default function RunSection({
   sideSlot: HTMLElement | null;
   /** The album as the run's summary names it: its label or title. */
   albumName: string;
-  /** The existing release is a single on Wikidata, so it's called one. */
-  existingSingle: boolean;
   /** Told when a run starts, makes progress and ends. */
   onRunning: (r: RunningInfo | null) => void;
   /** Told while the run's QIDs are checked before it starts, so the form is locked then too. */
@@ -351,8 +348,8 @@ export default function RunSection({
 
   const count = plan.ops.length;
   const n = `${count} edit${count === 1 ? "" : "s"}`;
-  const edits = useMemo(() => runEdits(plan, state, existingSingle), [plan, state, existingSingle]);
-  const noun = releaseName(state, existingSingle);
+  const edits = useMemo(() => runEdits(plan, state), [plan, state]);
+  const noun = releaseNoun(state.album);
   // The run can't start until everything in the checklist is done.
   const blocked = !checklistDone || !user || !plan.ready || stale;
   const disabled = blocked || finished || running || starting;
@@ -512,7 +509,6 @@ export default function RunSection({
           disabled={disabled}
           plan={plan}
           state={state}
-          existingSingle={existingSingle}
           username={user?.username ?? "you"}
           onConfirm={() => start()}
         />
@@ -580,7 +576,6 @@ function ConfirmRun({
   disabled,
   plan,
   state,
-  existingSingle,
   username,
   onConfirm,
 }: {
@@ -588,7 +583,6 @@ function ConfirmRun({
   disabled: boolean;
   plan: Plan;
   state: State;
-  existingSingle: boolean;
   username: string;
   onConfirm: () => void;
 }) {
@@ -633,7 +627,7 @@ function ConfirmRun({
           The edits are made right away with your account, {username}. They can be undone together
           from EditGroups afterwards.
         </p>
-        {open && <EditCounts plan={plan} state={state} existingSingle={existingSingle} />}
+        {open && <EditCounts plan={plan} state={state} />}
         <div className="row">
           <button ref={cancel} type="button" className="ghost" onClick={close}>
             Cancel
@@ -684,19 +678,8 @@ function EditBar({ shares, total }: { shares: EditShare[]; total: number }) {
 }
 
 /** How many edits each part of the plan takes, e.g. "Tracks: 12 edits". */
-function EditCounts({
-  plan,
-  state,
-  existingSingle,
-}: {
-  plan: Plan;
-  state: State;
-  existingSingle: boolean;
-}) {
-  const groups = useMemo(
-    () => previewPlan(plan, state, existingSingle),
-    [plan, state, existingSingle],
-  );
+function EditCounts({ plan, state }: { plan: Plan; state: State }) {
+  const groups = useMemo(() => previewPlan(plan, state), [plan, state]);
   return (
     <ul className="confirm-counts">
       {groups.map((g) => (

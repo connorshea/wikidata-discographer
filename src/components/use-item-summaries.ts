@@ -91,11 +91,14 @@ export function albumProblem(qid: string, found: ItemLookup | undefined): string
     : `${name} isn't an album, EP or single. Check the QID.`;
 }
 
-/** A release's kind, from its classes on Wikidata: "Single", "EP" or "Album". */
+/**
+ * A release's kind, from its classes on Wikidata: "EP" if any class is an EP, else "Single"
+ * if any is a single, else "Album".
+ */
 export function releaseKind(classes: string[]): "Album" | "EP" | "Single" {
   const is = (kind: MusicKind) =>
     classes.some((c) => CLASS_KINDS.some(([q, k]) => q === c && k === kind));
-  return is("album") ? "Album" : is("ep") ? "EP" : is("single") ? "Single" : "Album";
+  return is("ep") ? "EP" : is("single") ? "Single" : "Album";
 }
 
 /** Whether the existing release is a single on Wikidata, so it's called one in the form. */

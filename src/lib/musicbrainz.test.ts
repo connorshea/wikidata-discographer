@@ -182,6 +182,7 @@ describe("releaseToForm", () => {
           discogs: { value: "4348311", from: "releaseGroup" },
         },
       },
+      singleQid: "",
     });
     expect(form.date).toBe("2026-09-18");
     expect(form.p407).toBe("Q1860");
@@ -862,6 +863,13 @@ describe("releaseToForm", () => {
     expect(form.album).toMatchObject({ type: "Q134556", form: "" });
     expect(form.recTypes).toEqual(["Q56123235"]);
     expect(form.report.notes).not.toContainEqual(expect.stringContaining("not an album"));
+  });
+
+  it("gives a studio single's tracks the studio recording type", () => {
+    const r = release();
+    r["release-group"]["primary-type"] = "Single";
+    r["release-group"]["secondary-types"] = [];
+    expect(releaseToForm(r, NONE).recTypes).toEqual(["Q15975575"]);
   });
 
   it("cites the release's own date when the release group has none", () => {

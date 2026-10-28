@@ -267,7 +267,7 @@ export default function SettingsSection({
               )}
               <span className="sub">
                 {state.album.mode === "create"
-                  ? `Added to the new ${releaseNoun(state.album.type)} and compositions.`
+                  ? `Added to the new ${releaseNoun(state.album)} and compositions.`
                   : "Added to new compositions."}
               </span>
               <FieldErr id="p407" msg={errs.p407} />

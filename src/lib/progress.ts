@@ -42,8 +42,6 @@ export interface ProgressInput {
   hasTracklist: boolean;
   /** The existing album's QID can't be used: it doesn't exist, redirects, or isn't an album or EP. */
   notAlbum: boolean;
-  /** The existing release is a single on Wikidata, so it's called one. */
-  existingSingle: boolean;
   running: RunningInfo | null;
 }
 
@@ -148,15 +146,7 @@ function albumSummary(state: State): string | null {
 }
 
 /** A new release's noun, "single" or "album". */
-const newNoun = (state: State) => releaseName(state, false);
-
-/** What the release is called: "single", or "album" for an EP too. */
-export const releaseName = (state: State, existingSingle: boolean) =>
-  state.album.mode === "create"
-    ? releaseNoun(state.album.type)
-    : existingSingle
-      ? "single"
-      : "album";
+const newNoun = (state: State) => releaseNoun({ ...state.album, mode: "create" });
 const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** What each starting point is called once the form is started from it. */
@@ -244,7 +234,7 @@ export function settingsPills(S: Settings): string[] {
 /** The rail's steps, in page order. */
 export function railSteps(p: ProgressInput): Step[] {
   const { state, plan, unreviewed, hasTracklist, notAlbum, running } = p;
-  const noun = releaseName(state, p.existingSingle);
+  const noun = releaseNoun(state.album);
   const S = state.settings;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const discCount = plan.tracks.filter((rows) => rows.length).length;
@@ -319,7 +309,7 @@ export function railSteps(p: ProgressInput): Step[] {
 /** The first thing holding up the run, in a few words. */
 function createBlockedBy(p: ProgressInput, perf: { linked: number; total: number }): string {
   if (!p.state.start) return "pick a starting point";
-  const noun = releaseName(p.state, p.existingSingle);
+  const noun = releaseNoun(p.state.album);
   if (p.notAlbum) return `${noun} QID`;
   if (p.hasTracklist) return `${noun} has a tracklist`;
   if (blockedAt(p.plan, "album")) return `${noun} details`;
@@ -344,7 +334,7 @@ export interface CreateCount {
  * How many items of each kind the run creates. From the plan's edits once it has
  * them, otherwise from the form, so the counts still show while something blocks the run.
  */
-export function createCounts(state: State, plan: Plan, existingSingle = false): CreateCount[] {
+export function createCounts(state: State, plan: Plan): CreateCount[] {
   const rows = plan.tracks.flatMap((ts, di) => ts.map((t) => ({ t, d: state.discs[di] })));
   const has = (v: string | undefined) => QID.test((v ?? "").trim());
   const creates = (prefix: string) =>
@@ -372,7 +362,7 @@ export function createCounts(state: State, plan: Plan, existingSingle = false): 
       label:
         state.album.mode === "create"
           ? capital(newNoun(state))
-          : `${capital(releaseName(state, existingSingle))} tracklist`,
+          : `${capital(releaseNoun(state.album))} tracklist`,
       edge: "disc-edge",
       count: rows.length ? 1 : 0,
       reused: 0,
@@ -429,7 +419,7 @@ export function runChecks(p: CheckInput): Check[] {
 /** The album or single: picked or filled in, and with no tracklist yet. */
 function releaseCheck(p: CheckInput): Check {
   const { state, plan } = p;
-  const noun = releaseName(state, p.existingSingle);
+  const noun = releaseNoun(state.album);
   if (!state.start) return todo("Pick a starting point", "start");
   const wrong = blockedAt(plan, "album") || p.notAlbum;
   if (wrong) return problem(`Choose or create the ${noun}`, "album");

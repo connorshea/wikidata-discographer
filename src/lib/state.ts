@@ -5,6 +5,7 @@ import {
   knownRecTypes,
   MB_ATTRIBUTES,
   parseDate,
+  QID,
   SINGLE_CLASS,
   TRACK_TYPES,
   type AlbumMb,
@@ -74,6 +75,7 @@ export const EMPTY: State = {
     },
     release: "",
     mb: null,
+    singleQid: "",
   },
   artists: {},
   places: {},
@@ -394,6 +396,7 @@ export function coerceState(raw: unknown): State {
     },
     release: "",
     mb: coerceAlbumMb(a.mb),
+    singleQid: matching(a.singleQid, QID),
   };
   if ((album.form && !/^Q\d+$/.test(album.form)) || album.type === SINGLE_CLASS) album.form = "";
   // A form saved before the release was kept on its own has it only in a new album's references.

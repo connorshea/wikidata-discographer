@@ -10,8 +10,7 @@ import type { SectionProps } from "./types.ts";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
-  const releaseArtist =
-    releaseNoun(state.album.type) === "single" ? "Single artist" : "Album artist";
+  const releaseArtist = releaseNoun(state.album) === "single" ? "Single artist" : "Album artist";
   const all = performerRows(state, plan);
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);

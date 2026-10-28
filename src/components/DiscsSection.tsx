@@ -133,7 +133,7 @@ export default function DiscsSection({
           <p className="album-line">
             <span>
               {ofAlbum
-                ? `${capitalized(releaseNoun(state.album.type))} artist${base.length > 1 ? "s" : ""}`
+                ? `${capitalized(releaseNoun(state.album))} artist${base.length > 1 ? "s" : ""}`
                 : "On every track"}
             </span>
             {base.map((a) => (
@@ -539,7 +539,7 @@ function DiscBlock({
                           ofAlbum
                             ? `${base.join(", ")} (default for every track)`
                             : creating
-                              ? `${capitalized(releaseNoun(state.album.type))} artist`
+                              ? `${capitalized(releaseNoun(state.album))} artist`
                               : "Artists"
                         }
                         error={title ? errs.artists : undefined}

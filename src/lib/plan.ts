@@ -62,6 +62,11 @@ export interface AlbumState {
   release: string;
   /** Where a MusicBrainz import's album details came from. Null without an import. */
   mb: AlbumMb | null;
+  /**
+   * The existing release's QID once Wikidata says it's a single, so it's called one in the
+   * form, the plan and the run. Empty for anything else. It stops counting once `qid` changes.
+   */
+  singleQid: string;
 }
 
 /** A value a MusicBrainz import filled in, and the MusicBrainz entity it was read from. */
@@ -601,8 +606,11 @@ export function setAlbumType(s: State, type: string) {
   if (type === EP_CLASS && s.album.form === STUDIO_ALBUM) s.album.form = "";
 }
 
-/** What a new release of this type is called in the form: "single", or "album" for an EP too. */
-export const releaseNoun = (type: string) => (type === SINGLE_CLASS ? "single" : "album");
+/** What the release is called in the form: "single", or "album" for an EP too. */
+export const releaseNoun = (A: AlbumState) =>
+  (A.mode === "create" ? A.type === SINGLE_CLASS : !!A.singleQid && A.singleQid === A.qid.trim())
+    ? "single"
+    : "album";
 
 /** The `{type}` in an album's description: the form's label, or "album" or "EP" when
  * there's no form. An EP says "EP" in place of "album", and a studio EP is just "EP".
@@ -983,7 +991,7 @@ export function buildPlan(state: State): Plan {
   const albumTitle = creatingAlbum ? straighten(A.title.trim()) : "";
   const albumTypeLabel = descTypeLabel(A.type, A.form);
   const single = creatingAlbum && A.type === SINGLE_CLASS;
-  const noun = creatingAlbum ? releaseNoun(A.type) : "album";
+  const noun = releaseNoun(A);
   Object.assign(fieldErrs, { albumQid: "", albumTitle: "", albumArtists: "", albumDesc: "" });
   const albumIds: Claim[] = [];
   if (!creatingAlbum) {

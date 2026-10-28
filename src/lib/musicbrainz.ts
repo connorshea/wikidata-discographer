@@ -923,16 +923,18 @@ export function releaseToForm(
       // Only a new album gets references, so an album already on Wikidata keeps
       // none, even if it's switched to a new one, as the summary says.
       mb: albumQid ? null : albumMb,
+      // The form looks the album up, and records it if it's a single.
+      singleQid: "",
     },
     artists,
     discs: discs.length ? discs : [emptyDisc()],
     date,
     p407,
     // A live album is live, even when it's also a compilation, and a studio album is
-    // studio. The rest may be either.
+    // studio, as is a single with no secondary type. The rest may be either.
     recTypes: secondary.includes("Live")
       ? [LIVE_RECORDING]
-      : form === STUDIO_ALBUM
+      : form === STUDIO_ALBUM || (type === SINGLE_CLASS && !secondary.length)
         ? [STUDIO_RECORDING]
         : [],
     places,

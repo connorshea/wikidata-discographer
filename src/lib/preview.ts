@@ -14,6 +14,7 @@ import {
   NO_LINGUISTIC_CONTENT,
   type Op,
   PARTS,
+  releaseNoun,
   type Plan,
   SECOND_UNIT,
   type Snak,
@@ -261,12 +262,7 @@ function aboutOp(
 }
 
 /** The plan's operations as grouped, labelled edits. */
-export function previewPlan(
-  plan: Pick<Plan, "ops" | "tracks">,
-  state: State,
-  /** The existing release is a single on Wikidata, so it's called one. */
-  existingSingle = false,
-): PreviewGroup[] {
+export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewGroup[] {
   const reused = reusedQids(state, plan.tracks);
   const created = new Map<string, string>();
   for (const op of plan.ops) if (op.op === "create") created.set(op.key, `new ${describeOp(op)}`);
@@ -305,15 +301,15 @@ export function previewPlan(
   const albumQid = state.album.mode === "existing" ? state.album.qid.trim() : null;
   // The release a new one is created as. An existing one is an album unless it's a single.
   const release = plan.ops.find((o) => o.op === "create" && o.key === "album");
-  const releaseNoun =
-    release?.op === "create" ? KIND_NAMES[release.kind] : existingSingle ? "single" : "album";
-  const names = itemNames(state, plan.tracks, releaseNoun);
+  const releaseName =
+    release?.op === "create" ? KIND_NAMES[release.kind] : releaseNoun(state.album);
+  const names = itemNames(state, plan.tracks, releaseName);
   const groups = new Map<PreviewGroupId, PreviewEdit[]>();
   plan.ops.forEach((op, i) => {
     const g = groupOf(op, albumQid);
-    const about = aboutOp(op, g, plan.tracks, releaseNoun === "single");
+    const about = aboutOp(op, g, plan.tracks, releaseName === "single");
     const noun =
-      about.kind === "album" ? releaseNoun : about.kind === "comp" ? "composition" : about.kind;
+      about.kind === "album" ? releaseName : about.kind === "comp" ? "composition" : about.kind;
     const edit: PreviewEdit =
       op.op === "create"
         ? {

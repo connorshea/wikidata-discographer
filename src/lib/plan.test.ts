@@ -1257,6 +1257,25 @@ describe("buildPlan", () => {
     });
   });
 
+  it("calls an existing single a single in its tracklist and messages", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.singleQid = state.album.qid;
+    expect(
+      buildPlan(state).ops.some((o) => o.op === "addClaims" && o.what === "single tracklist"),
+    ).toBe(true);
+    state.discs = [emptyDisc()];
+    expect(buildPlan(state).messages).toContainEqual([
+      "err",
+      "Add the single's tracks, or load them from MusicBrainz.",
+    ]);
+    // Another QID isn't known to be a single.
+    state.album.qid = "Q1";
+    expect(buildPlan(state).messages).toContainEqual([
+      "err",
+      "Add the album's tracks, or load them from MusicBrainz.",
+    ]);
+  });
+
   it("blocks on a bad performer QID", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";

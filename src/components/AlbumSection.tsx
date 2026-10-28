@@ -19,12 +19,7 @@ import { ALBUM_ID_FIELDS, type AlbumIdKey, normalizeAlbumId } from "../lib/music
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import {
-  albumProblem,
-  existingSingle,
-  type ItemLookup,
-  releaseKind,
-} from "./use-item-summaries.ts";
+import { albumProblem, type ItemLookup, releaseKind } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
@@ -64,9 +59,8 @@ export default function AlbumSection({
   const problem = errs.albumQid || notAlbum;
   const ok = found?.status === "ok" ? found : null;
   // A single is called one throughout. An EP is called an album, as it always has been.
-  const noun =
-    A.mode === "create" ? releaseNoun(A.type) : existingSingle(A.qid, found) ? "single" : "album";
-  const Noun = noun[0].toUpperCase() + noun.slice(1);
+  const noun = releaseNoun(A);
+  const Noun = sentence(noun);
   return (
     <section className="block" id="album">
       <div className="album-head">
@@ -471,17 +465,13 @@ export function ArtistChips({
   };
   return (
     <div className="f">
-      <label htmlFor={id}>
-        {releaseNoun(state.album.type) === "single" ? "Single" : "Album"} artists
-      </label>
+      <label htmlFor={id}>{sentence(releaseNoun(state.album))} artists</label>
       <div
         className={`chips${error ? " invalid" : ""}`}
         onClick={(e) => e.target === e.currentTarget && inputRef.current?.focus()}
       >
         {names.length > 0 && (
-          <ul
-            aria-label={`${releaseNoun(state.album.type) === "single" ? "Single" : "Album"} artists`}
-          >
+          <ul aria-label={`${sentence(releaseNoun(state.album))} artists`}>
             {names.map(({ name, i }) => (
               <li className="chip" key={`${i}-${name}`}>
                 {name}

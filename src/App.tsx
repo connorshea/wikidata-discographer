@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation, useRoute, useSearch } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { loginHref, useAuth, useLoggedOut } from "./lib/auth-context.ts";
-import { buildPlan, QID, type State } from "./lib/plan.ts";
+import { buildPlan, QID, releaseNoun, type State } from "./lib/plan.ts";
 import { artistStart, existingAlbum } from "./lib/artist-start.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -13,13 +13,7 @@ import DiscsSection from "./components/DiscsSection.tsx";
 import MatchesSection, { type MatchesHandle } from "./components/MatchesSection.tsx";
 import { useMatches } from "./components/use-matches.ts";
 import { moveRowIds, reviewTracks } from "./lib/matches.ts";
-import {
-  createCounts,
-  railSteps,
-  releaseName,
-  type RunningInfo,
-  runChecks,
-} from "./lib/progress.ts";
+import { createCounts, railSteps, type RunningInfo, runChecks } from "./lib/progress.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
@@ -378,7 +372,14 @@ function Form() {
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
-  const isExistingSingle = existingSingle(existingQid, albumFound);
+  // Record what Wikidata says the existing release is once it's been asked, so the plan, the
+  // server and the run all call a single one. A QID still being looked up keeps what it had.
+  const singleQid = existingSingle(existingQid, albumFound) ? existingQid : "";
+  const albumKnown = !existingQid || (!!albumFound && albumFound.status !== "loading");
+  if (albumKnown && state.album.singleQid !== singleQid)
+    update((s) => {
+      s.album.singleQid = singleQid;
+    });
   const startRef = useRef<StartHandle>(null);
   const loadedRg = useRef(false);
   useEffect(() => {
@@ -409,7 +410,6 @@ function Form() {
     unreviewed,
     hasTracklist: !!albumTracklist,
     notAlbum: !!albumProblem(existingQid, albumFound),
-    existingSingle: isExistingSingle,
     running,
   };
   const checks = runChecks({
@@ -437,7 +437,7 @@ function Form() {
         <div className={loggedOut ? "shell logged-out" : "shell"} inert={loggedOut}>
           <ProgressRail
             steps={railSteps(progress)}
-            noun={releaseName(state, isExistingSingle)}
+            noun={releaseNoun(state.album)}
             locked={locked}
             empty={empty && !showingRun}
             // An empty form loses nothing, so closing the run needs no asking.
@@ -537,7 +537,6 @@ function Form() {
                     ? state.album.title.trim()
                     : (albumFound?.status === "ok" && albumFound.label) || existingQid
                 }
-                existingSingle={isExistingSingle}
                 onRunning={setRunning}
                 onStarting={setStarting}
                 onShowing={setShowingRun}
@@ -545,7 +544,7 @@ function Form() {
             </LockedContext.Provider>
           </main>
           <PlanPanel
-            counts={createCounts(state, plan, isExistingSingle)}
+            counts={createCounts(state, plan)}
             checks={checks}
             slot={setSlot}
             sideSlot={setSideSlot}

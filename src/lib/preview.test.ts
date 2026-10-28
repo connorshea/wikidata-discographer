@@ -162,8 +162,9 @@ describe("previewPlan", () => {
   });
 
   it("calls an existing single a single", () => {
-    const plan = buildPlan(EXAMPLE);
-    const [album] = previewPlan(plan, EXAMPLE, true);
+    const state = structuredClone(EXAMPLE);
+    state.album.singleQid = state.album.qid;
+    const [album] = previewPlan(buildPlan(state), state);
     expect(album.edits[0]).toMatchObject({
       title: "Single tracklist",
       noun: "single",

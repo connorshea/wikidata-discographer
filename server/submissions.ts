@@ -202,7 +202,7 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
       if (hit)
         return c.json(
           {
-            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}. Use that ${releaseNoun(state.album.type)} instead.`,
+            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}. Use that ${releaseNoun(state.album)} instead.`,
           },
           409,
         );

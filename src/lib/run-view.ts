@@ -5,12 +5,8 @@ import { buildPlan, type Plan, type State } from "./plan.ts";
 import { type PreviewEdit, type PreviewKind, previewPlan } from "./preview.ts";
 
 /** The plan's edits in run order, each with its item's kind, title and row. */
-export function runEdits(
-  plan: Pick<Plan, "ops" | "tracks">,
-  state: State,
-  existingSingle = false,
-): PreviewEdit[] {
-  return previewPlan(plan, state, existingSingle)
+export function runEdits(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewEdit[] {
+  return previewPlan(plan, state)
     .flatMap((g) => g.edits)
     .toSorted((a, b) => a.n - b.n);
 }

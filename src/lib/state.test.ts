@@ -180,6 +180,12 @@ describe("coerceState", () => {
     expect(coerceState({ album: { type: "Q169930" } }).album.type).toBe("Q169930");
   });
 
+  it("keeps the QID of an existing single only when it's a QID", () => {
+    expect(coerceState({ album: { singleQid: "Q42" } }).album.singleQid).toBe("Q42");
+    expect(coerceState({ album: { singleQid: "single" } }).album.singleQid).toBe("");
+    expect(coerceState({}).album.singleQid).toBe("");
+  });
+
   it("keeps an album's import source only when it's well-formed", () => {
     const mb = {
       releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",
