@@ -257,6 +257,8 @@ export default function RunSection({
       runId,
       (r) => {
         setRun(r);
+        // A poll that failed and was retried shouldn't leave its error up.
+        setError(null);
         settle(r);
       },
       (e) => {
