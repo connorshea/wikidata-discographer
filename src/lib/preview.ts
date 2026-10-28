@@ -17,6 +17,7 @@ import {
   SECOND_UNIT,
   type Snak,
   MUSICBRAINZ,
+  MUSIC_STREAMING,
   SONG_FORM,
   type State,
   REC_TYPES,
@@ -31,6 +32,7 @@ export const PROPERTY_LABELS: Readonly<Record<string, string>> = {
   ...LINK_PROPERTIES,
   P31: "instance of",
   P7937: "form of creative work",
+  P437: "distribution format",
   P1476: "title",
   P577: "publication date",
   P407: "language of work or name",
@@ -188,6 +190,7 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
     [SONG_FORM, "song"],
     [SECOND_UNIT, "second"],
     [MUSICBRAINZ, "MusicBrainz"],
+    [MUSIC_STREAMING, "music streaming"],
   ]);
   const add = (qid: string | undefined, name: string) => {
     const q = qid?.trim();

@@ -1180,6 +1180,24 @@ describe("buildPlan", () => {
     });
   });
 
+  it("gives a new album with a Spotify, Apple Music, Deezer or Tidal ID music streaming as its distribution format", () => {
+    const formatsOf = (ids: Record<string, string>) => {
+      const state = structuredClone(EXAMPLE);
+      state.album.mode = "create";
+      state.album.ids = ids;
+      const album = find(buildPlan(state).ops, "album");
+      return album?.op === "create" ? album.claims.filter((c) => c.property === "P437") : [];
+    };
+    const streaming = [{ property: "P437", value: { type: "item", id: "Q15982450" } }];
+    expect(formatsOf({ spotify: "4aawyAB9vmqN3uQ7FjRGTy" })).toEqual(streaming);
+    expect(formatsOf({ deezer: "302127" })).toEqual(streaming);
+    expect(formatsOf({ spotify: "4aawyAB9vmqN3uQ7FjRGTy", deezer: "302127" })).toEqual(streaming);
+    expect(formatsOf({ appleMusic: "1440818839" })).toEqual(streaming);
+    expect(formatsOf({ tidal: "75413011" })).toEqual(streaming);
+    expect(formatsOf({ musicbrainz: "f5093c06-23e3-404f-aeaa-40f72885ee3a" })).toEqual([]);
+    expect(formatsOf({ spotify: "not an id" })).toEqual([]);
+  });
+
   it("blocks on a bad performer QID", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";

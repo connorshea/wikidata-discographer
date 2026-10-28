@@ -583,6 +583,9 @@ export const TRACK_UNIT = "Q7302866";
 export const SECOND_UNIT = "Q11574";
 export const MUSICBRAINZ = "Q14005";
 export const EP_CLASS = "Q169930";
+export const MUSIC_STREAMING = "Q15982450";
+/** Album IDs on streaming services, which mean the album is distributed by music streaming. */
+const STREAMING_ID_PROPERTIES = new Set(["P2205", "P2281", "P2723", "P4577"]);
 
 /** Set a new album's type. An EP isn't a studio album, so switching to EP drops that form. */
 export function setAlbumType(s: State, type: string) {
@@ -1301,6 +1304,10 @@ export function buildPlan(state: State): Plan {
         ...albumRecAt,
         ...counts,
         ...albumIds,
+        // Distribution format.
+        ...(albumIds.some((c) => STREAMING_ID_PROPERTIES.has(c.property))
+          ? [claim("P437", item(MUSIC_STREAMING))]
+          : []),
       ],
     });
   }
