@@ -373,9 +373,12 @@ function Form() {
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
   // Record what Wikidata says the existing release is once it's been asked, so the plan, the
-  // server and the run all call a single one. A QID still being looked up keeps what it had.
+  // server and the run all call a single one. A QID still being looked up, or whose lookup
+  // failed, keeps what it had.
   const singleQid = existingSingle(existingQid, albumFound) ? existingQid : "";
-  const albumKnown = !existingQid || (!!albumFound && albumFound.status !== "loading");
+  const albumKnown =
+    !existingQid ||
+    (!!albumFound && albumFound.status !== "loading" && albumFound.status !== "failed");
   if (albumKnown && state.album.singleQid !== singleQid)
     update((s) => {
       s.album.singleQid = singleQid;
