@@ -612,6 +612,9 @@ export const releaseNoun = (A: AlbumState) =>
     ? "single"
     : "album";
 
+/** The string with its first letter capitalised, e.g. "Single" from "single". */
+export const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** The `{type}` in an album's description: the form's label, or "album" or "EP" when
  * there's no form. An EP says "EP" in place of "album", and a studio EP is just "EP".
  * A single is always "single". */

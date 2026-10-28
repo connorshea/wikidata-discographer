@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { normalizeQid, QID, releaseNoun } from "../lib/plan.ts";
+import { capitalized, normalizeQid, QID, releaseNoun } from "../lib/plan.ts";
 import { type PerformerRow, performerRows, type TrackAt } from "../lib/progress.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
 import { QidInput, WikiLink } from "./common.tsx";
@@ -10,7 +10,7 @@ import type { SectionProps } from "./types.ts";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
-  const releaseArtist = releaseNoun(state.album) === "single" ? "Single artist" : "Album artist";
+  const releaseArtist = `${capitalized(releaseNoun(state.album))} artist`;
   const all = performerRows(state, plan);
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);

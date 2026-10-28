@@ -7,6 +7,7 @@ import {
   ALBUM_FORMS,
   ALBUM_TYPES,
   QID,
+  capitalized,
   citesMb,
   EP_CLASS,
   loadedReleaseGroup,
@@ -60,7 +61,7 @@ export default function AlbumSection({
   const ok = found?.status === "ok" ? found : null;
   // A single is called one throughout. An EP is called an album, as it always has been.
   const noun = releaseNoun(A);
-  const Noun = sentence(noun);
+  const Noun = capitalized(noun);
   return (
     <section className="block" id="album">
       <div className="album-head">
@@ -334,8 +335,6 @@ function AlbumIds({ state, update, plan }: SectionProps) {
   );
 }
 
-const sentence = (s: string) => s[0].toUpperCase() + s.slice(1);
-
 /**
  * Albums in the mirror that share an identifier or the title with the one being
  * created, strongest first. Once the album artists have QIDs, same-title albums
@@ -407,7 +406,7 @@ function Duplicates({ state, update, noun }: Omit<SectionProps, "plan"> & { noun
                 <ul className="pills" aria-label="Why it matched">
                   {m.reasons.map((r) => (
                     <li key={r} className={isIdReason(r) ? "pill bad" : "pill"}>
-                      {sentence(r)}
+                      {capitalized(r)}
                     </li>
                   ))}
                 </ul>
@@ -465,13 +464,13 @@ export function ArtistChips({
   };
   return (
     <div className="f">
-      <label htmlFor={id}>{sentence(releaseNoun(state.album))} artists</label>
+      <label htmlFor={id}>{capitalized(releaseNoun(state.album))} artists</label>
       <div
         className={`chips${error ? " invalid" : ""}`}
         onClick={(e) => e.target === e.currentTarget && inputRef.current?.focus()}
       >
         {names.length > 0 && (
-          <ul aria-label={`${sentence(releaseNoun(state.album))} artists`}>
+          <ul aria-label={`${capitalized(releaseNoun(state.album))} artists`}>
             {names.map(({ name, i }) => (
               <li className="chip" key={`${i}-${name}`}>
                 {name}

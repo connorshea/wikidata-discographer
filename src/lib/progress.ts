@@ -13,6 +13,7 @@ import {
   type StartingPoint,
   type State,
   releaseNoun,
+  capitalized,
 } from "./plan.ts";
 
 export type StepId = "start" | "album" | "settings" | "tracks" | "performers" | "create";
@@ -147,7 +148,6 @@ function albumSummary(state: State): string | null {
 
 /** A new release's noun, "single" or "album". */
 const newNoun = (state: State) => releaseNoun({ ...state.album, mode: "create" });
-const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** What each starting point is called once the form is started from it. */
 export const START_NAMES: Record<StartingPoint, string> = {
@@ -252,7 +252,7 @@ export function railSteps(p: ProgressInput): Step[] {
       : { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" },
     {
       id: "album",
-      name: capital(noun),
+      name: capitalized(noun),
       summary: album ?? "Not set",
       status: album
         ? status(blockedAt(plan, "album") || hasTracklist || notAlbum, true)
@@ -361,8 +361,8 @@ export function createCounts(state: State, plan: Plan): CreateCount[] {
       kind: "album",
       label:
         state.album.mode === "create"
-          ? capital(newNoun(state))
-          : `${capital(releaseNoun(state.album))} tracklist`,
+          ? capitalized(newNoun(state))
+          : `${capitalized(releaseNoun(state.album))} tracklist`,
       edge: "disc-edge",
       count: rows.length ? 1 : 0,
       reused: 0,
@@ -424,10 +424,10 @@ function releaseCheck(p: CheckInput): Check {
   const wrong = blockedAt(plan, "album") || p.notAlbum;
   if (wrong) return problem(`Choose or create the ${noun}`, "album");
   if (albumSummary(state) === null) return todo(`Choose or create the ${noun}`, "album");
-  if (p.hasTracklist) return problem(`${capital(noun)} already has a tracklist`, "album");
+  if (p.hasTracklist) return problem(`${capitalized(noun)} already has a tracklist`, "album");
   if (state.album.mode === "create") return done(`New ${noun} filled in`);
   if (p.albumPending) return todo("Checking the QID on Wikidata…", "album");
-  return done(`${capital(noun)} has no tracklist yet`);
+  return done(`${capitalized(noun)} has no tracklist yet`);
 }
 
 function tracksCheck(plan: Plan, trackCount: number): Check {

@@ -36,6 +36,7 @@ import {
   type State,
   type Track,
   releaseNoun,
+  capitalized,
 } from "../lib/plan.ts";
 import { artistsText, emptyDisc, parseArtists } from "../lib/state.ts";
 import {
@@ -890,7 +891,6 @@ function Writers({
 
 /** A track type's name in a sentence, e.g. "music track without lyrics". */
 const typeName = (qid: string) => TRACK_TYPES.find(([q]) => q === qid)?.[1] ?? qid;
-const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * A track's P31, which it takes from the album unless it has its own, or MusicBrainz says
