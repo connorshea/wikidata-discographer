@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { SubmissionInfo } from "./api-types.ts";
 import { EXAMPLE } from "./example.fixture.ts";
-import { buildPlan, describeOp } from "./plan.ts";
+import { buildPlan, describeOp, EP_CLASS } from "./plan.ts";
 import {
   editShares,
   entryKind,
@@ -68,6 +68,16 @@ describe("editShares", () => {
       (s) => s.kind === "album",
     );
     expect(album).toMatchObject({ edits: 2, count: 1, text: "new album with its tracklist" });
+  });
+
+  it("calls a new EP an EP", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.type = EP_CLASS;
+    const album = editShares(runEdits(buildPlan(state), state), "Day and Night").find(
+      (s) => s.kind === "album",
+    );
+    expect(album?.text).toBe("new EP with its tracklist");
   });
 });
 
