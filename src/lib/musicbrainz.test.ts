@@ -193,6 +193,7 @@ describe("releaseToForm", () => {
     ]);
     expect(form.report).toEqual({
       release: RELEASE.id,
+      noun: "album",
       misplaced: [],
       severalLinks: [],
       newTracks: 6,

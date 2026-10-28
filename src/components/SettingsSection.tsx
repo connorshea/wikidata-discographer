@@ -11,6 +11,7 @@ import {
   normalizeDate,
   normalizeQid,
   REC_TYPES,
+  releaseNoun,
   type Settings,
   TRACK_TYPES,
 } from "../lib/plan.ts";
@@ -102,7 +103,7 @@ export default function SettingsSection({
     <div className="settings-head">
       <div>
         <h2>Item settings</h2>
-        <p className="hint">Applied to each item created for this album.</p>
+        <p className="hint">Applied to each item the run creates.</p>
       </div>
       {!blocked && (
         <button
@@ -187,12 +188,12 @@ export default function SettingsSection({
                   >
                     MB
                   </span>
-                  Album release date, from MusicBrainz
+                  Release date, from MusicBrainz
                 </span>
               ) : (
                 <span className="sub">
-                  Album release date. YYYY, YYYY-MM or YYYY-MM-DD (“June 12, 2012” is converted),
-                  blank to skip
+                  Release date. YYYY, YYYY-MM or YYYY-MM-DD (“June 12, 2012” is converted), blank to
+                  skip
                 </span>
               )}
               <FieldErr id="date" msg={errs.date} />
@@ -264,7 +265,11 @@ export default function SettingsSection({
                   onChange={(e) => set("p407", normalizeQid(e.target.value))}
                 />
               )}
-              <span className="sub">Added to a new album and compositions.</span>
+              <span className="sub">
+                {state.album.mode === "create"
+                  ? `Added to the new ${releaseNoun(state.album.type)} and compositions.`
+                  : "Added to new compositions."}
+              </span>
               <FieldErr id="p407" msg={errs.p407} />
             </div>
           </div>

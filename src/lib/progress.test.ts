@@ -18,6 +18,7 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
   unreviewed: 0,
   hasTracklist: false,
   notAlbum: false,
+  existingSingle: false,
   running: null,
   ...more,
 });
@@ -134,6 +135,15 @@ describe("startSummary", () => {
 
   it("has nothing to say before a starting point is picked", () => {
     expect(startSummary(EMPTY, buildPlan(EMPTY), null)).toBeNull();
+  });
+});
+
+describe("an existing single", () => {
+  it("is called a single in the rail, the checklist and the counts", () => {
+    const p = input(EXAMPLE, { existingSingle: true, hasTracklist: true });
+    expect(railSteps(p).find((s) => s.id === "album")?.name).toBe("Single");
+    expect(checks(p)[0].text).toBe("Single already has a tracklist");
+    expect(createCounts(EXAMPLE, buildPlan(EXAMPLE), true).at(-1)?.label).toBe("Single tracklist");
   });
 });
 

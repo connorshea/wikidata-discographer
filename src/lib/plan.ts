@@ -1140,13 +1140,13 @@ export function buildPlan(state: State): Plan {
   for (const at of sharedWorks)
     err(
       `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are performances of the same MusicBrainz work. ` +
-        "Discographer can't create this album for now.",
+        `Discographer can't create this ${noun} for now.`,
       "tracks",
     );
   for (const at of sharedRecordings)
     err(
       `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are the same MusicBrainz recording. ` +
-        "Discographer can't create this album for now.",
+        `Discographer can't create this ${noun} for now.`,
       "tracks",
     );
   const discList = (ns: number[]) =>

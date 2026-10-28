@@ -267,7 +267,7 @@ function ExistingPanel({ state, update }: Omit<SectionProps, "plan">) {
       onSubmit={(e) => {
         e.preventDefault();
         const q = qid.trim();
-        if (!QID.test(q)) return setError("Enter a QID such as Q42, or the album's Wikidata URL.");
+        if (!QID.test(q)) return setError("Enter a QID such as Q42, or its Wikidata URL.");
         update((s) => {
           s.album.mode = "existing";
           s.album.qid = q;
@@ -290,7 +290,7 @@ function ExistingPanel({ state, update }: Omit<SectionProps, "plan">) {
           }}
         />
         <button type="submit" disabled={!qid.trim()}>
-          Use this album
+          Use this QID
         </button>
       </div>
       <span className="sub" id={`${id}-sub`}>

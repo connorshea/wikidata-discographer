@@ -5,8 +5,12 @@ import { buildPlan, type Plan, type State } from "./plan.ts";
 import { type PreviewEdit, type PreviewKind, previewPlan } from "./preview.ts";
 
 /** The plan's edits in run order, each with its item's kind, title and row. */
-export function runEdits(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewEdit[] {
-  return previewPlan(plan, state)
+export function runEdits(
+  plan: Pick<Plan, "ops" | "tracks">,
+  state: State,
+  existingSingle = false,
+): PreviewEdit[] {
+  return previewPlan(plan, state, existingSingle)
     .flatMap((g) => g.edits)
     .toSorted((a, b) => a.n - b.n);
 }
@@ -116,8 +120,13 @@ export function runProgress(
     ? ORDER.flatMap((kind) => {
         const all = edits.filter((e) => e.kind === kind);
         if (!all.length) return [];
+        const release = all[0].noun === "single" ? "Single" : "Album";
         const label =
-          kind === "album" && all.some((e) => e.creates) ? "Album" : PROGRESS_LABELS[kind];
+          kind !== "album"
+            ? PROGRESS_LABELS[kind]
+            : all.some((e) => e.creates)
+              ? release
+              : `${release} tracklist`;
         const made = all.filter((e) => e.n <= done).length;
         return [{ kind, edge: KIND_EDGES[kind], label, done: made, total: all.length }];
       })

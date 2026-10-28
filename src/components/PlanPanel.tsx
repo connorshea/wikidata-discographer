@@ -39,7 +39,7 @@ function ItemModel() {
       <div className="kicker">Data model</div>
       <ul aria-label="How the items are linked">
         <li>
-          <Kind edge="disc-edge">Album</Kind>{" "}
+          <Kind edge="disc-edge">Album or single</Kind>{" "}
           <span>
             <Prop id="P658">lists</Prop> →
           </span>{" "}
@@ -111,7 +111,10 @@ export default function PlanPanel({
                   <circle className="label" cx="28" cy="28" r="6" />
                   <circle className="hole" cx="28" cy="28" r="1.6" />
                 </svg>
-                <p>Nothing yet. Pick an album and add a tracklist to see what will be created.</p>
+                <p>
+                  Nothing yet. Pick an album or single and add a tracklist to see what will be
+                  created.
+                </p>
               </div>
             ) : (
               <ul className="counts">

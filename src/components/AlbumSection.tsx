@@ -15,20 +15,18 @@ import {
   SINGLE_CLASS,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
-import { ALBUM_ID_FIELDS, type AlbumIdKey, CLASS_KINDS, normalizeAlbumId } from "../lib/music.ts";
+import { ALBUM_ID_FIELDS, type AlbumIdKey, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { albumProblem, type ItemLookup } from "./use-item-summaries.ts";
+import {
+  albumProblem,
+  existingSingle,
+  type ItemLookup,
+  releaseKind,
+} from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
-
-/** The album's kind, from its classes on Wikidata: "Single", "EP" or "Album". */
-const kindOf = (classes: string[]) => {
-  const is = (kind: string) =>
-    classes.some((c) => CLASS_KINDS.some(([q, k]) => q === c && k === kind));
-  return is("album") ? "Album" : is("ep") ? "EP" : is("single") ? "Single" : "Album";
-};
 
 export default function AlbumSection({
   state,
@@ -67,11 +65,7 @@ export default function AlbumSection({
   const ok = found?.status === "ok" ? found : null;
   // A single is called one throughout. An EP is called an album, as it always has been.
   const noun =
-    A.mode === "create"
-      ? releaseNoun(A.type)
-      : ok && !notAlbum && kindOf(ok.classes) === "Single"
-        ? "single"
-        : "album";
+    A.mode === "create" ? releaseNoun(A.type) : existingSingle(A.qid, found) ? "single" : "album";
   const Noun = noun[0].toUpperCase() + noun.slice(1);
   return (
     <section className="block" id="album">
@@ -111,7 +105,7 @@ export default function AlbumSection({
               {ok?.description && <div className="muted">{ok.description}</div>}
               {ok && !notAlbum && (
                 <ul className="pills" aria-label={`About this ${noun}`}>
-                  <li className="pill">{kindOf(ok.classes)}</li>
+                  <li className="pill">{releaseKind(ok.classes)}</li>
                   {checked && !albumTracklist && <li className="pill ok">No tracklist yet</li>}
                 </ul>
               )}

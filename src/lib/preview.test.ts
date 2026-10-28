@@ -160,4 +160,14 @@ describe("previewPlan", () => {
     const [album] = previewPlan(plan, EXAMPLE);
     expect(album.edits[0].target).toEqual({ text: "this album", qid: "Q140316456" });
   });
+
+  it("calls an existing single a single", () => {
+    const plan = buildPlan(EXAMPLE);
+    const [album] = previewPlan(plan, EXAMPLE, true);
+    expect(album.edits[0]).toMatchObject({
+      title: "Single tracklist",
+      noun: "single",
+      target: { text: "this single", qid: "Q140316456" },
+    });
+  });
 });

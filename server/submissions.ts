@@ -43,7 +43,7 @@ import {
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
-import { buildPlan, describeOp, type Op, type State } from "../src/lib/plan.ts";
+import { buildPlan, describeOp, type Op, releaseNoun, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { ALBUM_ID_FIELDS, ID_PROPERTIES } from "../src/lib/music.ts";
 import type {
@@ -202,7 +202,7 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
       if (hit)
         return c.json(
           {
-            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
+            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}. Use that ${releaseNoun(state.album.type)} instead.`,
           },
           409,
         );

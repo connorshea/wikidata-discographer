@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
-import { normalizeQid, QID } from "../lib/plan.ts";
+import { normalizeQid, QID, releaseNoun } from "../lib/plan.ts";
 import { type PerformerRow, performerRows, type TrackAt } from "../lib/progress.ts";
 import type { AddItemResponse, MirrorItem, SearchResponse } from "../lib/api-types.ts";
 import { QidInput, WikiLink } from "./common.tsx";
@@ -10,6 +10,8 @@ import type { SectionProps } from "./types.ts";
 import { type ItemLookup, useItemSummaries } from "./use-item-summaries.ts";
 
 export default function PerformersSection({ state, update, plan }: SectionProps) {
+  const releaseArtist =
+    releaseNoun(state.album.type) === "single" ? "Single artist" : "Album artist";
   const all = performerRows(state, plan);
   // Bumped when an item is added to the mirror, so the suggestions look again.
   const [mirrorVersion, setMirrorVersion] = useState(0);
@@ -111,7 +113,12 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
               return (
                 <div className="perf-row linked" key={r.name} data-performer={r.name}>
                   <StatusIcon linked />
-                  <PerformerName row={r} roles={writers.length > 0} {...counts} />
+                  <PerformerName
+                    row={r}
+                    roles={writers.length > 0}
+                    releaseArtist={releaseArtist}
+                    {...counts}
+                  />
                   <div className="perf-line">
                     <Chosen qid={v} found={found} showQid />
                     <button
@@ -147,7 +154,12 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
             return (
               <div className="perf-row" key={r.name} data-performer={r.name}>
                 <StatusIcon linked={ok} optional={!r.performer} />
-                <PerformerName row={r} roles={writers.length > 0} {...counts} />
+                <PerformerName
+                  row={r}
+                  roles={writers.length > 0}
+                  releaseArtist={releaseArtist}
+                  {...counts}
+                />
                 <div className="perf-pick">
                   {ok ? (
                     <div className="perf-edit">
@@ -242,11 +254,14 @@ function StatusIcon({ linked, optional }: { linked: boolean; optional?: boolean 
 function PerformerName({
   row,
   roles,
+  releaseArtist,
   total,
   discs,
 }: {
   row: PerformerRow;
   roles: boolean;
+  /** What an artist of the whole release is called: "Album artist" or "Single artist". */
+  releaseArtist: string;
   total: number;
   discs: number;
 }) {
@@ -283,7 +298,7 @@ function PerformerName({
       <span className="perf-name">
         <b>{row.name}</b>
         <span className="muted">
-          {row.albumArtist && "Album artist · "}
+          {row.albumArtist && `${releaseArtist} · `}
           {counts}
         </span>
       </span>
@@ -293,7 +308,7 @@ function PerformerName({
       <b>{row.name}</b>
       <span className="perf-roles">
         {row.performer && (
-          <span className="perf-role">{row.albumArtist ? "Album artist" : "Performer"}</span>
+          <span className="perf-role">{row.albumArtist ? releaseArtist : "Performer"}</span>
         )}
         {row.composer && <span className="perf-role writer">Composer</span>}
         {row.lyricist && <span className="perf-role writer">Lyricist</span>}

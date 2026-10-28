@@ -29,7 +29,7 @@ import {
 import type { Plan, State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type { PreviewEdit } from "../lib/preview.ts";
-import type { RunningInfo } from "../lib/progress.ts";
+import { releaseName, type RunningInfo } from "../lib/progress.ts";
 import {
   editShares,
   type EditShare,
@@ -111,6 +111,7 @@ export default function RunSection({
   slot,
   sideSlot,
   albumName,
+  existingSingle,
   onRunning,
   onStarting,
   onShowing,
@@ -131,6 +132,8 @@ export default function RunSection({
   sideSlot: HTMLElement | null;
   /** The album as the run's summary names it: its label or title. */
   albumName: string;
+  /** The existing release is a single on Wikidata, so it's called one. */
+  existingSingle: boolean;
   /** Told when a run starts, makes progress and ends. */
   onRunning: (r: RunningInfo | null) => void;
   /** Told while the run's QIDs are checked before it starts, so the form is locked then too. */
@@ -348,7 +351,8 @@ export default function RunSection({
 
   const count = plan.ops.length;
   const n = `${count} edit${count === 1 ? "" : "s"}`;
-  const edits = useMemo(() => runEdits(plan, state), [plan, state]);
+  const edits = useMemo(() => runEdits(plan, state, existingSingle), [plan, state, existingSingle]);
+  const noun = releaseName(state, existingSingle);
   // The run can't start until everything in the checklist is done.
   const blocked = !checklistDone || !user || !plan.ready || stale;
   const disabled = blocked || finished || running || starting;
@@ -374,7 +378,7 @@ export default function RunSection({
     return (found?.status === "ok" && found.label) || title;
   };
   const doneHint = user && !stale && finished && (
-    <p className="hint">This run is done. Start a new album to make more edits.</p>
+    <p className="hint">This run is done. Start a new one to make more edits.</p>
   );
   const staleHint = user && stale && (
     <p className="hint">The form was changed in another tab. Reload this page first.</p>
@@ -398,7 +402,7 @@ export default function RunSection({
           <h2>Create on Wikidata</h2>
         )}
         {user && cleared && !stale && (
-          <p className="hint">The run is done, so the form was cleared for the next album.</p>
+          <p className="hint">The run is done, so the form was cleared for the next run.</p>
         )}
         {run && (
           <RunProgress
@@ -480,6 +484,7 @@ export default function RunSection({
           {recreate && (
             <RecreateGuard
               recreate={recreate}
+              noun={noun}
               disabled={starting}
               onUse={() => {
                 const found = recreate.created.map((c) => ({
@@ -507,6 +512,7 @@ export default function RunSection({
           disabled={disabled}
           plan={plan}
           state={state}
+          existingSingle={existingSingle}
           username={user?.username ?? "you"}
           onConfirm={() => start()}
         />
@@ -574,6 +580,7 @@ function ConfirmRun({
   disabled,
   plan,
   state,
+  existingSingle,
   username,
   onConfirm,
 }: {
@@ -581,6 +588,7 @@ function ConfirmRun({
   disabled: boolean;
   plan: Plan;
   state: State;
+  existingSingle: boolean;
   username: string;
   onConfirm: () => void;
 }) {
@@ -625,7 +633,7 @@ function ConfirmRun({
           The edits are made right away with your account, {username}. They can be undone together
           from EditGroups afterwards.
         </p>
-        {open && <EditCounts plan={plan} state={state} />}
+        {open && <EditCounts plan={plan} state={state} existingSingle={existingSingle} />}
         <div className="row">
           <button ref={cancel} type="button" className="ghost" onClick={close}>
             Cancel
@@ -676,8 +684,19 @@ function EditBar({ shares, total }: { shares: EditShare[]; total: number }) {
 }
 
 /** How many edits each part of the plan takes, e.g. "Tracks: 12 edits". */
-function EditCounts({ plan, state }: { plan: Plan; state: State }) {
-  const groups = useMemo(() => previewPlan(plan, state), [plan, state]);
+function EditCounts({
+  plan,
+  state,
+  existingSingle,
+}: {
+  plan: Plan;
+  state: State;
+  existingSingle: boolean;
+}) {
+  const groups = useMemo(
+    () => previewPlan(plan, state, existingSingle),
+    [plan, state, existingSingle],
+  );
   return (
     <ul className="confirm-counts">
       {groups.map((g) => (
@@ -765,11 +784,14 @@ function UnknownRunGuard({
 /** Shown when the run would create items the user's last run already created. */
 function RecreateGuard({
   recreate,
+  noun,
   disabled,
   onUse,
   onConfirm,
 }: {
   recreate: Recreate;
+  /** What the release is called, "album" or "single". */
+  noun: string;
   disabled: boolean;
   onUse: () => void;
   onConfirm: () => void;
@@ -783,7 +805,7 @@ function RecreateGuard({
         <a href={recreate.editGroupUrl} target="_blank" rel="noreferrer">
           last run
         </a>{" "}
-        already created {n === 1 ? "this item" : `these ${n} items`} for this album, maybe from
+        already created {n === 1 ? "this item" : `these ${n} items`} for this {noun}, maybe from
         another browser or device. Use {n === 1 ? "it" : "them"} in the form so{" "}
         {n === 1 ? "it isn't" : "they aren't"} created twice, then start the run again.
       </p>

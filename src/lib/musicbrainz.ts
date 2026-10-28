@@ -338,6 +338,8 @@ export interface MbIdCount {
 export interface MbReport {
   /** The MusicBrainz release it was loaded from. */
   release: string;
+  /** What the release is called, "single" or "album" (an EP too). */
+  noun: string;
   /** Items on Wikidata with a work ID only a composition should have. */
   misplaced: {
     qid: string;
@@ -789,7 +791,7 @@ export function releaseToForm(
   const type = PRIMARY_TYPES[rg["primary-type"] ?? ""];
   if (!type)
     notes.push(
-      `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album, EP or single. Check the album's type.`,
+      `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album, EP or single. Check the type.`,
     );
   const secondary = rg["secondary-types"] ?? [];
   // "Studio album" is only right for an album, so an EP with no secondary type gets no form.
@@ -867,6 +869,7 @@ export function releaseToForm(
   const songs = media.reduce((n, m) => n + m.tracks!.length, 0);
   const report: MbReport = {
     release: release.id,
+    noun: type === SINGLE_CLASS ? "single" : "album",
     misplaced: misplacedItems,
     severalLinks: (Object.entries(several) as [TrackLinkKey, string[]][])
       .filter(([, titles]) => titles.length)

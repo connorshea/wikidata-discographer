@@ -178,7 +178,7 @@ export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
     const same = SAME_ITEM[property];
     let fix: string;
     if (op.key === "album")
-      fix = `Use ${it} as the existing album instead, so it isn't created twice.`;
+      fix = `Use ${it} as the existing ${op.kind === "single" ? "single" : "album"} instead, so it isn't created twice.`;
     else if (same)
       fix = `Put ${it} in that row's ${same} field instead, so it isn't created twice.`;
     else

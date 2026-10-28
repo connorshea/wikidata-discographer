@@ -177,7 +177,7 @@ function reusedQids(state: State, tracks: Plan["tracks"]): Set<string> {
 }
 
 /** Names for the items the form knows: its fixed choices, performers and reused items. */
-function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
+function itemNames(state: State, tracks: Plan["tracks"], noun: string): Map<string, string> {
   const fixed: (readonly [string, string])[] = [
     ...ALBUM_TYPES,
     ...ALBUM_FORMS,
@@ -199,7 +199,7 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
     const q = qid?.trim();
     if (q && !names.has(q)) names.set(q, name);
   };
-  if (state.album.mode === "existing") add(state.album.qid, "this album");
+  if (state.album.mode === "existing") add(state.album.qid, `this ${noun}`);
   for (const [name, qid] of Object.entries(state.artists)) add(qid, name);
   tracks.forEach((rows, di) => {
     const disc = state.discs[di];
@@ -230,6 +230,7 @@ function aboutOp(
   op: Op,
   group: PreviewGroupId,
   tracks: Plan["tracks"],
+  single: boolean,
 ): Pick<PreviewEdit, "kind" | "creates" | "title" | "place"> {
   if (op.op === "create") {
     const [, di, n] = op.key.split(":");
@@ -251,19 +252,21 @@ function aboutOp(
       title: row.title,
       place: { disc: at.di + 1, n: at.n },
     };
-  // "Album tracklist", or "Single tracklist" for a new single.
-  const title = op.what.endsWith(" tracklist") ? op.what : "album tracklist";
   return {
     kind: "album",
     creates: false,
-    title: title[0].toUpperCase() + title.slice(1),
+    title: single ? "Single tracklist" : "Album tracklist",
     place: null,
   };
 }
 
 /** The plan's operations as grouped, labelled edits. */
-export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewGroup[] {
-  const names = itemNames(state, plan.tracks);
+export function previewPlan(
+  plan: Pick<Plan, "ops" | "tracks">,
+  state: State,
+  /** The existing release is a single on Wikidata, so it's called one. */
+  existingSingle = false,
+): PreviewGroup[] {
   const reused = reusedQids(state, plan.tracks);
   const created = new Map<string, string>();
   for (const op of plan.ops) if (op.op === "create") created.set(op.key, `new ${describeOp(op)}`);
@@ -300,13 +303,15 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
   });
 
   const albumQid = state.album.mode === "existing" ? state.album.qid.trim() : null;
-  // The release a new one is created as. An existing one is called an album.
+  // The release a new one is created as. An existing one is an album unless it's a single.
   const release = plan.ops.find((o) => o.op === "create" && o.key === "album");
-  const releaseNoun = release?.op === "create" ? KIND_NAMES[release.kind] : "album";
+  const releaseNoun =
+    release?.op === "create" ? KIND_NAMES[release.kind] : existingSingle ? "single" : "album";
+  const names = itemNames(state, plan.tracks, releaseNoun);
   const groups = new Map<PreviewGroupId, PreviewEdit[]>();
   plan.ops.forEach((op, i) => {
     const g = groupOf(op, albumQid);
-    const about = aboutOp(op, g, plan.tracks);
+    const about = aboutOp(op, g, plan.tracks, releaseNoun === "single");
     const noun =
       about.kind === "album" ? releaseNoun : about.kind === "comp" ? "composition" : about.kind;
     const edit: PreviewEdit =

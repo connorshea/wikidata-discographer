@@ -13,14 +13,20 @@ import DiscsSection from "./components/DiscsSection.tsx";
 import MatchesSection, { type MatchesHandle } from "./components/MatchesSection.tsx";
 import { useMatches } from "./components/use-matches.ts";
 import { moveRowIds, reviewTracks } from "./lib/matches.ts";
-import { createCounts, railSteps, type RunningInfo, runChecks } from "./lib/progress.ts";
+import {
+  createCounts,
+  railSteps,
+  releaseName,
+  type RunningInfo,
+  runChecks,
+} from "./lib/progress.ts";
 import RunSection from "./components/RunSection.tsx";
 import type { Update } from "./components/types.ts";
 import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import ProgressRail from "./components/ProgressRail.tsx";
 import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
-import { albumProblem, useItemSummaries } from "./components/use-item-summaries.ts";
+import { albumProblem, existingSingle, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
 import ArtistPage from "./components/ArtistPage.tsx";
 import { Lock } from "./components/common.tsx";
@@ -372,6 +378,7 @@ function Form() {
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
+  const isExistingSingle = existingSingle(existingQid, albumFound);
   const startRef = useRef<StartHandle>(null);
   const loadedRg = useRef(false);
   useEffect(() => {
@@ -402,6 +409,7 @@ function Form() {
     unreviewed,
     hasTracklist: !!albumTracklist,
     notAlbum: !!albumProblem(existingQid, albumFound),
+    existingSingle: isExistingSingle,
     running,
   };
   const checks = runChecks({
@@ -429,6 +437,7 @@ function Form() {
         <div className={loggedOut ? "shell logged-out" : "shell"} inert={loggedOut}>
           <ProgressRail
             steps={railSteps(progress)}
+            noun={releaseName(state, isExistingSingle)}
             locked={locked}
             empty={empty && !showingRun}
             // An empty form loses nothing, so closing the run needs no asking.
@@ -437,7 +446,7 @@ function Form() {
                 ? null
                 : {
                     title: "Clear the form?",
-                    body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
+                    body: "This removes the release, settings, tracklists, and performers you've entered. It can't be undone.",
                     action: "Clear the form",
                   }
             }
@@ -528,6 +537,7 @@ function Form() {
                     ? state.album.title.trim()
                     : (albumFound?.status === "ok" && albumFound.label) || existingQid
                 }
+                existingSingle={isExistingSingle}
                 onRunning={setRunning}
                 onStarting={setStarting}
                 onShowing={setShowingRun}
@@ -535,7 +545,7 @@ function Form() {
             </LockedContext.Provider>
           </main>
           <PlanPanel
-            counts={createCounts(state, plan)}
+            counts={createCounts(state, plan, isExistingSingle)}
             checks={checks}
             slot={setSlot}
             sideSlot={setSideSlot}
