@@ -174,6 +174,12 @@ describe("coerceState", () => {
     expect(s.discs[0]).not.toHaveProperty("single");
   });
 
+  it("keeps a single's type, and gives it no album form", () => {
+    const s = coerceState({ album: { type: "Q134556", form: "Q208569" } });
+    expect(s.album).toMatchObject({ type: "Q134556", form: "" });
+    expect(coerceState({ album: { type: "Q169930" } }).album.type).toBe("Q169930");
+  });
+
   it("keeps an album's import source only when it's well-formed", () => {
     const mb = {
       releaseGroup: "b012a117-afa3-4ea3-879f-eeb61b974b0a",

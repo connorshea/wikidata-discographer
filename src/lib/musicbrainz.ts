@@ -9,6 +9,7 @@ import {
   ALBUM_FORMS,
   ALBUM_TYPES,
   EP_CLASS,
+  SINGLE_CLASS,
   LIVE_RECORDING,
   MB_ATTRIBUTES,
   type MbAttribute,
@@ -424,6 +425,7 @@ const SEVERAL_ALBUM_LINKS = {
 const PRIMARY_TYPES: Record<string, (typeof ALBUM_TYPES)[number][0]> = {
   Album: "Q482994",
   EP: "Q169930",
+  Single: SINGLE_CLASS,
 };
 
 const SECONDARY_FORMS: Record<string, (typeof ALBUM_FORMS)[number][0]> = {
@@ -787,15 +789,19 @@ export function releaseToForm(
   const type = PRIMARY_TYPES[rg["primary-type"] ?? ""];
   if (!type)
     notes.push(
-      `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album or EP. Check the album's type.`,
+      `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album, EP or single. Check the album's type.`,
     );
   const secondary = rg["secondary-types"] ?? [];
   // "Studio album" is only right for an album, so an EP with no secondary type gets no form.
-  const form = secondary.length
-    ? (secondary.map((s) => SECONDARY_FORMS[s]).find(Boolean) ?? "")
-    : type === EP_CLASS
+  // A single has no album form, even a live one.
+  const form =
+    type === SINGLE_CLASS
       ? ""
-      : STUDIO_ALBUM;
+      : secondary.length
+        ? (secondary.map((s) => SECONDARY_FORMS[s]).find(Boolean) ?? "")
+        : type === EP_CLASS
+          ? ""
+          : STUDIO_ALBUM;
 
   const albumQid = lookups.albumQid;
   const ids: AlbumState["ids"] = {

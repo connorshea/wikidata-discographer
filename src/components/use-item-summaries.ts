@@ -86,6 +86,6 @@ export function albumProblem(qid: string, found: ItemLookup | undefined): string
   if (found?.status !== "ok" || found.classes.some((c) => ALBUM_CLASSES.has(c))) return null;
   const name = found.label ? `${qid} (${found.label})` : qid;
   return found.classes.length === 0
-    ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
-    : `${name} isn't an album or EP. Check the QID.`;
+    ? `${name} has no “instance of” statement, so it can't be checked to be an album, EP or single.`
+    : `${name} isn't an album, EP or single. Check the QID.`;
 }

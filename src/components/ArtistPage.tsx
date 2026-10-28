@@ -1,7 +1,8 @@
-// The artist page: find an artist, then see their albums and EPs on Wikidata
+// The artist page: find an artist, then see their albums, EPs and singles on Wikidata
 // (as of the mirror), oldest first, with which still need a tracklist. Each
 // one that does can start the form (/?album=<qid>, and &rg=<mbid> to load its
-// MusicBrainz release group). Their singles follow, in a block of their own.
+// MusicBrainz release group). Their singles follow, in a block of their own,
+// and start the form the same way.
 import { Fragment, useEffect, useId, useState } from "react";
 import { Link } from "wouter";
 import type {
@@ -60,7 +61,7 @@ function ArtistSearch() {
   return (
     <section className="block artist-search">
       <h2>Artists</h2>
-      <p className="hint">Find an artist to see their albums and EPs on Wikidata.</p>
+      <p className="hint">Find an artist to see their albums, EPs and singles on Wikidata.</p>
       <label htmlFor={id} className="visually-hidden">
         Artist name or QID
       </label>
@@ -329,10 +330,7 @@ function ArtistAlbums({ qid }: { qid: string }) {
   );
 }
 
-/**
- * The artist's singles: no filters, as those are the albums', and no Add
- * tracklist, as a single can't be picked to add one to yet.
- */
+/** The artist's singles, with no filters, as those are the albums'. */
 function ArtistSingles({
   name,
   singles,
@@ -374,7 +372,10 @@ function ArtistSingles({
           </thead>
           <tbody>
             {listed.map((s) => (
-              <tr key={s.qid}>
+              <tr
+                key={s.qid}
+                className={s.tracks > 0 || s.run?.status === "running" ? "taken" : undefined}
+              >
                 <td className="year" title={s.released ?? "No release date on Wikidata"}>
                   {s.released ? s.released.slice(0, 4) : "—"}
                 </td>
@@ -416,29 +417,10 @@ function ArtistSingles({
                   )}
                 </td>
                 <td>
-                  <span className="pills">
-                    {s.tracks > 0 ? (
-                      <span className="pill">
-                        {s.tracks === 1 ? "1 track" : `${s.tracks} tracks`}
-                      </span>
-                    ) : (
-                      <span className="pill ok">No tracklist yet</span>
-                    )}
-                    {s.tracks > 0 && s.parts !== null && s.parts !== s.tracks && (
-                      <span
-                        className="pill warn"
-                        title={`${s.tracks} listed, but its number of parts (P2635) says ${s.parts}`}
-                      >
-                        <WarnIcon />
-                        Expected {s.parts === 1 ? "1 track" : `${s.parts} tracks`}
-                      </span>
-                    )}
-                  </span>
+                  <TracklistPills release={s} />
                 </td>
                 <td className="act">
-                  <a href={`${wikiBaseUrl}/wiki/${s.qid}`} target="_blank" rel="noreferrer">
-                    Open on Wikidata ↗
-                  </a>
+                  <ReleaseAction release={s} wikiBaseUrl={wikiBaseUrl} />
                 </td>
               </tr>
             ))}
@@ -471,26 +453,12 @@ function WarnIcon() {
   );
 }
 
+/** What an album or single row says about its tracklist, and the latest run on it. */
+type Release = Pick<ArtistAlbum, "qid" | "label" | "tracks" | "parts" | "releaseGroups" | "run">;
+
 function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: string }) {
   const label = a.label ?? a.qid;
   const running = a.run?.status === "running";
-  const added = a.tracks > 0 && a.run?.status === "done";
-  // More than one is usually a mistake on the item: like the album section, suggest none.
-  const releaseGroup = a.releaseGroups.length === 1 ? a.releaseGroups[0] : null;
-  const runLink = a.run && (
-    <>
-      {a.run.mine ? (
-        <Link href={`/?run=${a.run.id}`}>Open run</Link>
-      ) : (
-        <a href={a.run.editGroupUrl} target="_blank" rel="noreferrer">
-          EditGroups ↗
-        </a>
-      )}
-      <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
-        Open on Wikidata ↗
-      </a>
-    </>
-  );
   return (
     <tr id={albumRowId(a.qid)} className={a.tracks > 0 || running ? "taken" : undefined}>
       <td className="year" title={a.released ?? "No release date on Wikidata"}>
@@ -511,49 +479,82 @@ function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: 
         <span className="pill">{a.type}</span>
       </td>
       <td>
-        <span className="pills">
-          {running ? (
-            <span className="pill">A run is adding it</span>
-          ) : added ? (
-            <span className="pill done">Added with Discographer · {runDay(a.run!.createdAt)}</span>
-          ) : a.tracks > 0 ? (
-            <span className="pill">{a.tracks === 1 ? "1 track" : `${a.tracks} tracks`}</span>
-          ) : (
-            <span className="pill ok">No tracklist yet</span>
-          )}
-          {a.tracks > 0 && a.parts !== null && a.parts !== a.tracks && (
-            <span
-              className="pill warn"
-              title={`${a.tracks} listed, but its number of parts (P2635) says ${a.parts}`}
-            >
-              <WarnIcon />
-              Expected {a.parts === 1 ? "1 track" : `${a.parts} tracks`}
-            </span>
-          )}
-        </span>
+        <TracklistPills release={a} />
       </td>
       <td className="act">
-        {running || added ? (
-          runLink
-        ) : a.tracks > 0 ? (
-          <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
-            Open on Wikidata ↗
-          </a>
-        ) : (
-          <Link
-            className="use-link"
-            href={`/?${new URLSearchParams(releaseGroup ? { album: a.qid, rg: releaseGroup } : { album: a.qid })}`}
-            aria-label={`Add a tracklist to ${label}${releaseGroup ? " from MusicBrainz" : ""}`}
-          >
-            {releaseGroup && (
-              <span className="mb-badge" aria-hidden="true">
-                MB
-              </span>
-            )}
-            Add tracklist
-          </Link>
-        )}
+        <ReleaseAction release={a} wikiBaseUrl={wikiBaseUrl} />
       </td>
     </tr>
+  );
+}
+
+/** Its tracks, or a run adding them, and a warning when they aren't its number of parts. */
+function TracklistPills({ release: a }: { release: Release }) {
+  const running = a.run?.status === "running";
+  const added = a.tracks > 0 && a.run?.status === "done";
+  return (
+    <span className="pills">
+      {running ? (
+        <span className="pill">A run is adding it</span>
+      ) : added ? (
+        <span className="pill done">Added with Discographer · {runDay(a.run!.createdAt)}</span>
+      ) : a.tracks > 0 ? (
+        <span className="pill">{a.tracks === 1 ? "1 track" : `${a.tracks} tracks`}</span>
+      ) : (
+        <span className="pill ok">No tracklist yet</span>
+      )}
+      {a.tracks > 0 && a.parts !== null && a.parts !== a.tracks && (
+        <span
+          className="pill warn"
+          title={`${a.tracks} listed, but its number of parts (P2635) says ${a.parts}`}
+        >
+          <WarnIcon />
+          Expected {a.parts === 1 ? "1 track" : `${a.parts} tracks`}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Add tracklist while it has none, else the run that added it, or Wikidata. */
+function ReleaseAction({ release: a, wikiBaseUrl }: { release: Release; wikiBaseUrl: string }) {
+  const label = a.label ?? a.qid;
+  const running = a.run?.status === "running";
+  const added = a.tracks > 0 && a.run?.status === "done";
+  // More than one is usually a mistake on the item: like the album section, suggest none.
+  const releaseGroup = a.releaseGroups.length === 1 ? a.releaseGroups[0] : null;
+  const runLink = a.run && (
+    <>
+      {a.run.mine ? (
+        <Link href={`/?run=${a.run.id}`}>Open run</Link>
+      ) : (
+        <a href={a.run.editGroupUrl} target="_blank" rel="noreferrer">
+          EditGroups ↗
+        </a>
+      )}
+      <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
+        Open on Wikidata ↗
+      </a>
+    </>
+  );
+  return running || added ? (
+    runLink
+  ) : a.tracks > 0 ? (
+    <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
+      Open on Wikidata ↗
+    </a>
+  ) : (
+    <Link
+      className="use-link"
+      href={`/?${new URLSearchParams(releaseGroup ? { album: a.qid, rg: releaseGroup } : { album: a.qid })}`}
+      aria-label={`Add a tracklist to ${label}${releaseGroup ? " from MusicBrainz" : ""}`}
+    >
+      {releaseGroup && (
+        <span className="mb-badge" aria-hidden="true">
+          MB
+        </span>
+      )}
+      Add tracklist
+    </Link>
   );
 }

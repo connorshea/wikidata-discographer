@@ -116,6 +116,22 @@ describe("startSummary", () => {
     );
   });
 
+  it("calls a new single a single", () => {
+    const state: State = {
+      ...EXAMPLE,
+      start: "new",
+      album: { ...EXAMPLE.album, mode: "create", title: "", type: "Q134556", form: "" },
+    };
+    expect(startSummary(state, buildPlan(state), null)).toMatchObject({
+      from: "New single from scratch",
+      title: "Untitled single",
+    });
+    const mb: State = { ...state, start: "mb" };
+    expect(startSummary(mb, buildPlan(mb), null)?.details).toContain(
+      "not on Wikidata yet, so a new single will be created",
+    );
+  });
+
   it("has nothing to say before a starting point is picked", () => {
     expect(startSummary(EMPTY, buildPlan(EMPTY), null)).toBeNull();
   });

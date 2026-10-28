@@ -64,9 +64,11 @@ const toItem = (r: Selected): MirrorItem => ({
 const P175 = propertyNumber("P175");
 
 const isKind = (k: unknown): k is MusicKind => MUSIC_KINDS.includes(k as MusicKind);
+/** Whether items of a kind take a tracklist from the form: albums, EPs and singles. */
+const isRelease = (k: string) => k === "album" || k === "ep" || k === "single";
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-/** The kinds a search asks for, comma separated ("album,ep"). None, or none known, is any kind. */
+/** The kinds a search asks for, comma separated ("album,ep,single"). None, or none known, is any kind. */
 export const searchKinds = (raw: string | undefined): MusicKind[] => [
   ...new Set(
     (raw ?? "")
@@ -76,14 +78,14 @@ export const searchKinds = (raw: string | undefined): MusicKind[] => [
   ),
 ];
 
-/** Search results, the albums and EPs with their facts from `albumFacts`. */
+/** Search results, the albums, EPs and singles with their facts from `albumFacts`. */
 export function withAlbumFacts(
   rows: Selected[],
   tracks: ReadonlyMap<number, number>,
   onMusicBrainz: ReadonlySet<number>,
 ): SearchItem[] {
   return rows.map((r) =>
-    r.kind === "album" || r.kind === "ep"
+    isRelease(r.kind)
       ? {
           ...toItem(r),
           album: { tracks: tracks.get(r.qid) ?? 0, musicBrainz: onMusicBrainz.has(r.qid) },
@@ -155,9 +157,7 @@ items.get("/search", async (c) => {
     c.req.query("q")?.trim() ?? "",
     searchKinds(c.req.query("kind")),
   );
-  const facts = await albumFacts(
-    result.filter((r) => r.kind === "album" || r.kind === "ep").map((r) => r.qid),
-  );
+  const facts = await albumFacts(result.filter((r) => isRelease(r.kind)).map((r) => r.qid));
   return c.json({
     items: withAlbumFacts(result, facts.tracks, facts.onMusicBrainz),
   } satisfies SearchResponse);

@@ -213,7 +213,7 @@ describe("checkPlanQids", () => {
   it("refuses an existing album that already has a tracklist", async () => {
     stubWiki({ tracklist: ["Q1", "Q2"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
-      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 2 tracks. The app only adds tracklists to albums without one.`,
+      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 2 tracks. The app only adds tracklists to albums and singles without one.`,
     ]);
   });
 
@@ -222,7 +222,7 @@ describe("checkPlanQids", () => {
     state.discs[0].track[1] = "Q1";
     stubWiki({ tracklist: ["Q1"] });
     expect(await checkPlanQids(buildPlan(state).ops, state)).toEqual([
-      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 1 track. The app only adds tracklists to albums without one.`,
+      `The existing album: ${EXAMPLE.album.qid} already has a tracklist (P658) with 1 track. The app only adds tracklists to albums and singles without one.`,
     ]);
   });
 
@@ -399,10 +399,15 @@ describe("checkPlanQids", () => {
     );
   });
 
-  it("refuses an existing album that isn't an album or EP", async () => {
+  it("accepts an existing single", async () => {
+    stubWiki({ instanceOf: ["Q134556"] });
+    expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([]);
+  });
+
+  it("refuses an existing album that isn't an album, EP or single", async () => {
     stubWiki({ instanceOf: ["Q5"] });
     expect(await checkPlanQids(plan.ops, EXAMPLE)).toEqual([
-      `The existing album: ${EXAMPLE.album.qid} is an instance of Q5, not an album or EP. Check the QID.`,
+      `The existing album: ${EXAMPLE.album.qid} is an instance of Q5, not an album, EP or single. Check the QID.`,
     ]);
     stubWiki({ instanceOf: [] });
     expect((await checkPlanQids(plan.ops, EXAMPLE))[0]).toMatch(/has no “instance of” statement/);

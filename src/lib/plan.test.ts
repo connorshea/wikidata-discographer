@@ -17,6 +17,7 @@ import {
   type MbRowIds,
   type Op,
   PARTS,
+  setAlbumType,
 } from "./plan.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
 import { EXAMPLE, track } from "./example.fixture.ts";
@@ -1206,6 +1207,56 @@ describe("buildPlan", () => {
     expect(claims.filter((c) => c.property === "P437")).toEqual([]);
   });
 
+  describe("a new single", () => {
+    const single = () => {
+      const state = structuredClone(EXAMPLE);
+      state.album.mode = "create";
+      setAlbumType(state, "Q134556");
+      state.album.ids.spotify = "4aawyAB9vmqN3uQ7FjRGTy";
+      return state;
+    };
+
+    it("is created as a single, with no album form, and lists its tracks", () => {
+      const { ops, ready } = buildPlan(single());
+      expect(ready).toBe(true);
+      const created = find(ops, "album");
+      expect(created?.op === "create" && created.kind).toBe("single");
+      const claims = created?.op === "create" ? created.claims : [];
+      expect(claims.find((c) => c.property === "P31")?.value).toEqual({
+        type: "item",
+        id: "Q134556",
+      });
+      expect(claims.some((c) => c.property === "P7937")).toBe(false);
+      expect(claims.find((c) => c.property === "P2205")?.value).toEqual({
+        type: "string",
+        value: "4aawyAB9vmqN3uQ7FjRGTy",
+      });
+      const tracklist = ops.find((o) => o.op === "addClaims" && o.what === "single tracklist");
+      const tracks = EXAMPLE.discs.reduce((n, d) => n + d.tracks.length, 0);
+      expect(tracklist?.claims.filter((c) => c.property === "P658").length).toBe(tracks);
+    });
+
+    it("says single in its description and messages", () => {
+      const state = single();
+      expect(albumDescPreview(state)).toBe("2026 single by Carly Rae Jepsen");
+      state.album.title = "";
+      expect(buildPlan(state).fieldErrs.albumTitle).toBe("Enter the single title.");
+      expect(buildPlan(state).messages).toContainEqual([
+        "err",
+        "Fix the single details at the top of the page.",
+      ]);
+    });
+
+    it("drops an album form left over from a saved form", () => {
+      const state = single();
+      state.album.form = "Q208569";
+      const created = find(buildPlan(state).ops, "album");
+      expect(created?.op === "create" && created.claims.some((c) => c.property === "P7937")).toBe(
+        false,
+      );
+    });
+  });
+
   it("blocks on a bad performer QID", () => {
     const state = structuredClone(EXAMPLE);
     state.artists["Carly Rae Jepsen"] = "Carly";
@@ -1420,6 +1471,11 @@ describe("descTypeLabel", () => {
     expect(descTypeLabel("Q482994", "Q208569")).toBe("studio album");
     expect(descTypeLabel("Q482994", "Q209939")).toBe("live album");
     expect(descTypeLabel("Q482994", "")).toBe("album");
+  });
+
+  it("says single for a single, whatever its form", () => {
+    expect(descTypeLabel("Q134556", "")).toBe("single");
+    expect(descTypeLabel("Q134556", "Q209939")).toBe("single");
   });
 
   it("says EP for an EP, whatever its form", () => {

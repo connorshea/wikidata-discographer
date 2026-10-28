@@ -1,9 +1,11 @@
 // The default form state, and `coerceState`, which turns anything (saved browser
 // state from an older version, or a request body) into a well-formed `State`.
 import {
+  ALBUM_TYPES,
   knownRecTypes,
   MB_ATTRIBUTES,
   parseDate,
+  SINGLE_CLASS,
   TRACK_TYPES,
   type AlbumMb,
   type Disc,
@@ -379,7 +381,7 @@ export function coerceState(raw: unknown): State {
       : typeof a.artists === "string" && s.splitArtists !== false
         ? splitArtists(a.artists, isObj(r.artists) ? Object.keys(r.artists) : [])
         : [str(a.artists).trim()].filter(Boolean),
-    type: a.type === "Q169930" ? "Q169930" : "Q482994",
+    type: ALBUM_TYPES.find(([q]) => q === a.type)?.[0] ?? "Q482994",
     form: str(a.form, EMPTY.album.form),
     ids: {
       spotify: str(ids.spotify),
@@ -393,7 +395,7 @@ export function coerceState(raw: unknown): State {
     release: "",
     mb: coerceAlbumMb(a.mb),
   };
-  if (album.form && !/^Q\d+$/.test(album.form)) album.form = "";
+  if ((album.form && !/^Q\d+$/.test(album.form)) || album.type === SINGLE_CLASS) album.form = "";
   // A form saved before the release was kept on its own has it only in a new album's references.
   album.release = matching(a.release, MBID_PATTERN) || (album.mb?.release ?? "");
   const discs = (Array.isArray(r.discs) ? r.discs : []).filter(isObj).map((disc): Disc => ({

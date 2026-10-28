@@ -217,7 +217,7 @@ export async function lookupRelease(
   const ids = releaseIds(release);
   const [albums, artists, recordings, works, iswcs, spotify, appleMusic, deezer, tidal] =
     await Promise.all([
-      lookup("P436", [ids.releaseGroup], ["album", "ep"]),
+      lookup("P436", [ids.releaseGroup], ["album", "ep", "single"]),
       lookup("P434", ids.artists, ["artist"]),
       lookup("P4404", ids.recordings, ["track"]),
       lookup("P435", ids.works, ["work"]),

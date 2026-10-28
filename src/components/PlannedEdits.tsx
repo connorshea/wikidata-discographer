@@ -69,7 +69,10 @@ export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] 
               onClick={() => pick(k.kind)}
             >
               <i className="sw" style={{ background: `var(--${k.edge})` }} aria-hidden="true" />
-              {k.label} {count(k.kind)}
+              {k.kind === "album" && edits.some((e) => e.kind === "album" && e.noun === "single")
+                ? "Single"
+                : k.label}{" "}
+              {count(k.kind)}
             </button>
           ))}
         </div>
@@ -104,7 +107,7 @@ export default function PlannedEdits({ edits }: { edits: readonly PreviewEdit[] 
 /** What the card's pill says: what the edit does to its item. */
 function action(edit: PreviewEdit): string {
   const name = KIND.get(edit.kind)!.name;
-  if (edit.creates) return `New ${edit.heading.startsWith("Create EP") ? "EP" : name}`;
+  if (edit.creates) return `New ${edit.noun}`;
   return edit.kind === "album" ? "Adds statements" : `Reused ${name}`;
 }
 

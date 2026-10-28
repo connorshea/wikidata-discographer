@@ -921,13 +921,6 @@ const RUN_STATUS: Record<SubmissionStatus, { label: string; tone: string }> = {
 /** Done rows shown under the edit in progress before "Show all N". */
 const LATEST = 3;
 
-/** An edit's item as the log names it, e.g. "composition". */
-function kindName(edit: PreviewEdit): string {
-  if (edit.kind === "comp") return "composition";
-  if (edit.kind === "album") return edit.heading.startsWith("Create EP") ? "EP" : "album";
-  return edit.kind;
-}
-
 function StatusIcon({ status }: { status: "done" | "fail" | "unknown" }) {
   const label = { done: "Done", fail: "Failed", unknown: "Outcome unknown" }[status];
   const cls = { done: "ok", fail: "fail", unknown: "problem" }[status];
@@ -1054,13 +1047,13 @@ function NextRow({ edit }: { edit: PreviewEdit }) {
       <span className="run-log-text">
         {edit.creates ? (
           <>
-            Creating {kindName(edit)} <b>{edit.title}</b>
+            Creating {edit.noun} <b>{edit.title}</b>
           </>
         ) : edit.kind === "album" ? (
-          "Adding the album tracklist"
+          `Adding the ${edit.title.toLowerCase()}`
         ) : (
           <>
-            Adding statements to {kindName(edit)} <b>{edit.title}</b>
+            Adding statements to {edit.noun} <b>{edit.title}</b>
           </>
         )}
       </span>
@@ -1089,7 +1082,7 @@ function LogRow({
   const what =
     e.op === "create" && edit ? (
       <>
-        {kindName(edit)} <b>{edit.title}</b>
+        {edit.noun} <b>{edit.title}</b>
       </>
     ) : (
       e.what

@@ -8,6 +8,7 @@ import {
   type Claim,
   COMPOSITION_CLASS,
   describeOp,
+  KIND_NAMES,
   LABEL_LANGS,
   LANGS,
   NO_LINGUISTIC_CONTENT,
@@ -92,6 +93,8 @@ export interface PreviewEdit {
   kind: PreviewKind;
   /** Whether it creates the item, or adds statements to one that exists or was just made. */
   creates: boolean;
+  /** What the item is, as a noun: "album", "EP", "single", "composition" or "track". */
+  noun: string;
   /** The item's title, e.g. "After All", or "Album tracklist" for the tracklist edit. */
   title: string;
   /** The track row it's for: its disc (from 1) and position. */
@@ -211,7 +214,8 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
 
 function groupOf(op: Op, albumQid: string | null): PreviewGroupId {
   if (op.op === "create") {
-    if (op.kind === "album" || op.kind === "ep") return "album";
+    // The release a run is for, whether it's an album, an EP or a single.
+    if (op.key === "album") return "album";
     if (op.kind === "work") return "comp";
     if (op.kind === "track") return op.kind;
     return "existing";
@@ -247,7 +251,14 @@ function aboutOp(
       title: row.title,
       place: { disc: at.di + 1, n: at.n },
     };
-  return { kind: "album", creates: false, title: "Album tracklist", place: null };
+  // "Album tracklist", or "Single tracklist" for a new single.
+  const title = op.what.endsWith(" tracklist") ? op.what : "album tracklist";
+  return {
+    kind: "album",
+    creates: false,
+    title: title[0].toUpperCase() + title.slice(1),
+    place: null,
+  };
 }
 
 /** The plan's operations as grouped, labelled edits. */
@@ -289,15 +300,21 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
   });
 
   const albumQid = state.album.mode === "existing" ? state.album.qid.trim() : null;
+  // The release a new one is created as. An existing one is called an album.
+  const release = plan.ops.find((o) => o.op === "create" && o.key === "album");
+  const releaseNoun = release?.op === "create" ? KIND_NAMES[release.kind] : "album";
   const groups = new Map<PreviewGroupId, PreviewEdit[]>();
   plan.ops.forEach((op, i) => {
     const g = groupOf(op, albumQid);
     const about = aboutOp(op, g, plan.tracks);
+    const noun =
+      about.kind === "album" ? releaseNoun : about.kind === "comp" ? "composition" : about.kind;
     const edit: PreviewEdit =
       op.op === "create"
         ? {
             n: i + 1,
             ...about,
+            noun,
             heading: `Create ${describeOp(op)}`,
             target: null,
             terms: [
@@ -317,6 +334,7 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
         : {
             n: i + 1,
             ...about,
+            noun,
             heading: describeOp(op),
             target: value("", { type: "item", ...op.target }),
             terms: [],

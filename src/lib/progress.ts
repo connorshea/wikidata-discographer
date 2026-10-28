@@ -12,6 +12,7 @@ import {
   type Settings,
   type StartingPoint,
   type State,
+  releaseNoun,
 } from "./plan.ts";
 
 export type StepId = "start" | "album" | "settings" | "tracks" | "performers" | "create";
@@ -141,8 +142,13 @@ function albumSummary(state: State): string | null {
   if (A.mode === "existing") return A.qid.trim() ? `Existing · ${A.qid.trim()}` : null;
   const title = A.title.trim();
   if (!title && !albumArtists(state).length) return null;
-  return title ? `New · ${title}` : "New album";
+  return title ? `New · ${title}` : `New ${newNoun(state)}`;
 }
+
+/** A new release's noun, "single" or "album". An existing one is called an album. */
+const newNoun = (state: State) =>
+  state.album.mode === "create" ? releaseNoun(state.album.type) : "album";
+const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** What each starting point is called once the form is started from it. */
 export const START_NAMES: Record<StartingPoint, string> = {
@@ -178,18 +184,18 @@ export function startSummary(
     mb: "Started from MusicBrainz",
     existing: "Started from an album QID",
     search: "Found by searching",
-    new: "New album from scratch",
+    new: `New ${newNoun(state)} from scratch`,
   }[start];
   const title =
     A.mode === "existing" ? (albumLabel ?? A.qid.trim()) || "No album picked" : A.title.trim();
   return {
     from,
-    title: title || "Untitled album",
+    title: title || `Untitled ${newNoun(state)}`,
     details: [
       ...(artists.length ? [artists.join(", ")] : []),
       ...(trackCount ? [plural(discCount, "disc"), plural(trackCount, "track")] : []),
       ...(start === "mb" && A.mode === "create"
-        ? ["not on Wikidata yet, so a new album will be created"]
+        ? [`not on Wikidata yet, so a new ${newNoun(state)} will be created`]
         : []),
     ],
   };
@@ -246,7 +252,7 @@ export function railSteps(p: ProgressInput): Step[] {
       : { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" },
     {
       id: "album",
-      name: "Album",
+      name: capital(newNoun(state)),
       summary: album ?? "Not set",
       status: album
         ? status(blockedAt(plan, "album") || hasTracklist || notAlbum, true)
@@ -352,7 +358,7 @@ export function createCounts(state: State, plan: Plan): CreateCount[] {
     },
     {
       kind: "album",
-      label: state.album.mode === "create" ? "Album" : "Album tracklist",
+      label: state.album.mode === "create" ? capital(newNoun(state)) : "Album tracklist",
       edge: "disc-edge",
       count: rows.length ? 1 : 0,
       reused: 0,
@@ -399,7 +405,7 @@ export function runChecks(
                 ok: true,
                 text:
                   state.album.mode === "create"
-                    ? "New album filled in"
+                    ? `New ${newNoun(state)} filled in`
                     : "Album has no tracklist yet",
                 at: null,
               },

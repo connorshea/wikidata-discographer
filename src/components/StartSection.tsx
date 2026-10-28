@@ -34,19 +34,19 @@ const OPTIONS: { id: StartingPoint; title: string; desc: string; icon: string }[
   {
     id: "existing",
     title: "Existing album QID",
-    desc: "An album on Wikidata with no tracklist yet",
+    desc: "An album or single on Wikidata with no tracklist yet",
     icon: "M4 4h12v12H4zM7 10l2 2 4-4",
   },
   {
     id: "search",
     title: "Search by name",
-    desc: "Find an album or EP already on Wikidata",
+    desc: "Find an album, EP or single already on Wikidata",
     icon: "M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM13.5 13.5L17 17",
   },
   {
     id: "new",
     title: "New album from scratch",
-    desc: "Create the album item along with its tracks",
+    desc: "Create the album or single along with its tracks",
     icon: "M10 4v12M4 10h12",
   },
 ];
@@ -275,7 +275,7 @@ function ExistingPanel({ state, update }: Omit<SectionProps, "plan">) {
         });
       }}
     >
-      <label htmlFor={id}>Album QID or Wikidata URL</label>
+      <label htmlFor={id}>Album or single QID, or Wikidata URL</label>
       <div className="row">
         <QidInput
           id={id}
@@ -294,8 +294,8 @@ function ExistingPanel({ state, update }: Omit<SectionProps, "plan">) {
         </button>
       </div>
       <span className="sub" id={`${id}-sub`}>
-        The album must not have a tracklist yet. If it's on MusicBrainz, you'll be offered to load
-        it from there.
+        It must not have a tracklist yet. If it's on MusicBrainz, you'll be offered to load it from
+        there.
       </span>
       <FieldErr id={id} msg={error} />
     </form>
@@ -312,7 +312,7 @@ type Refresh =
   | { status: "failed"; error: string };
 
 /**
- * A search of the albums and EPs already on Wikidata (as of the mirror), by
+ * A search of the albums, EPs and singles already on Wikidata (as of the mirror), by
  * title. Picking one does what ExistingPanel does, with `start` "search". The
  * mirror can be a week behind, so the album card checks the pick live.
  */
@@ -367,7 +367,7 @@ function SearchPanel({
   useEffect(() => {
     if (!q) return;
     let cancelled = false;
-    const params = new URLSearchParams({ q, kind: "album,ep" });
+    const params = new URLSearchParams({ q, kind: "album,ep,single" });
     api<SearchResponse>(`/api/items/search?${params}`)
       .then((r) => !cancelled && setResult({ q, items: r.items }))
       .catch(() => !cancelled && setResult({ q, items: null }));
@@ -390,7 +390,7 @@ function SearchPanel({
   };
   return (
     <div className="start-panel">
-      <label htmlFor={id}>Album or EP title</label>
+      <label htmlFor={id}>Album, EP or single title</label>
       <div className="search-field">
         <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true">
           <path d="M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM13.5 13.5L17 17" />
@@ -405,7 +405,7 @@ function SearchPanel({
       </div>
       <div id={`${id}-status`} role="status" className="search-status">
         {!typed ? (
-          <span className="sub">Albums and EPs already on Wikidata</span>
+          <span className="sub">Albums, EPs and singles already on Wikidata</span>
         ) : searching ? (
           <span className="search-state">
             <span className="spinner" aria-hidden="true" />
@@ -415,14 +415,17 @@ function SearchPanel({
           <span className="search-state">Couldn't search Wikidata. Try again in a moment.</span>
         ) : items?.length === 0 ? (
           <span className="search-state">
-            No albums or EPs match "{typed}".{" "}
+            Nothing matches "{typed}".{" "}
             <button type="button" className="link" onClick={() => create(typed)}>
               Create it as a new album
             </button>
           </span>
         ) : (
           <span className="sub">
-            {items?.length === 1 ? "1 album or EP" : `${items?.length} albums and EPs`} on Wikidata
+            {items?.length === 1
+              ? "1 album, EP or single"
+              : `${items?.length} albums, EPs and singles`}{" "}
+            on Wikidata
           </span>
         )}
       </div>
@@ -430,7 +433,7 @@ function SearchPanel({
         <ul className="search-results" ref={resultsRef}>
           {items.map((i) => {
             const tracks = i.album?.tracks ?? 0;
-            const type = i.kind === "ep" ? "EP" : "Album";
+            const type = i.kind === "ep" ? "EP" : i.kind === "single" ? "Single" : "Album";
             const label = i.label ?? i.qid;
             const refreshing = refreshes.get(i.qid);
             return (
@@ -463,7 +466,7 @@ function SearchPanel({
                     <span className="search-result-err" id={`${id}-${i.qid}-err`}>
                       {refreshing?.status === "done"
                         ? "It still has a tracklist on Wikidata, so Discographer can't modify it, sorry!"
-                        : "Discographer can't modify an album that already has a tracklist, sorry!"}
+                        : `Discographer can't modify ${type === "Single" ? "a single" : "an album"} that already has a tracklist, sorry!`}
                       {/* The search is of the mirror, which can be behind Wikidata. Refreshing needs a login. */}
                       {user && refreshing?.status !== "done" && (
                         <>
@@ -504,7 +507,7 @@ function SearchPanel({
                       })
                     }
                   >
-                    Use this {type === "EP" ? "EP" : "album"}
+                    Use this {type === "Album" ? "album" : type === "EP" ? "EP" : "single"}
                   </button>
                   {tracks > 0 && (
                     <a href={`${wikiBaseUrl}/wiki/${i.qid}`} target="_blank" rel="noreferrer">

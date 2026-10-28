@@ -48,7 +48,9 @@ export function editShares(edits: readonly PreviewEdit[], albumName: string): Ed
           edge,
           edits: mine.length,
           count: 1,
-          text: made ? "new album with its tracklist" : `tracklist added to ${albumName}`,
+          text: made
+            ? `new ${mine[0].noun === "single" ? "single" : "album"} with its tracklist`
+            : `tracklist added to ${albumName}`,
           extra: null,
         },
       ];
@@ -150,6 +152,8 @@ export function timeLeft(seconds: number): string {
 
 /** A log entry's kind from what the server logged, for runs whose plan can't be rebuilt. */
 export function entryKind(e: EditLogEntry): PreviewKind {
+  // A new single is the release itself, not one of the singles old runs made per track.
+  if (e.key === "album") return "album";
   if (e.kind === "work") return "comp";
   if (e.kind === "track" || e.kind === "single") return e.kind;
   return "album";

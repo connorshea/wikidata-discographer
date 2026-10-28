@@ -180,22 +180,22 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
 }
 
 /**
- * Why the existing album isn't an album or EP, or null if it is. Only that
+ * Why the existing album isn't an album, EP or single, or null if it is. Only that
  * item's “instance of” statements are fetched.
  */
 async function checkAlbumKind(qid: string): Promise<string | null> {
   const classes = await getStatementItems(qid, "P31", { retries: 1 });
   if (classes.some((c) => ALBUM_CLASSES.has(c))) return null;
   if (classes.length === 0)
-    return `The existing album: ${qid} has no “instance of” statement, so it can't be checked to be an album or EP.`;
-  return `The existing album: ${qid} is an instance of ${classes.join(", ")}, not an album or EP. Check the QID.`;
+    return `The existing album: ${qid} has no “instance of” statement, so it can't be checked to be an album, EP or single.`;
+  return `The existing album: ${qid} is an instance of ${classes.join(", ")}, not an album, EP or single. Check the QID.`;
 }
 
 /** Why the existing album can't take a tracklist, or null if it has none yet. */
 async function checkAlbumTracklist(qid: string): Promise<string | null> {
   const n = (await getStatementItems(qid, "P658", { retries: 1 })).length;
   if (n === 0) return null;
-  return `The existing album: ${qid} already has a tracklist (P658) with ${n} track${n === 1 ? "" : "s"}. The app only adds tracklists to albums without one.`;
+  return `The existing album: ${qid} already has a tracklist (P658) with ${n} track${n === 1 ? "" : "s"}. The app only adds tracklists to albums and singles without one.`;
 }
 
 /**
