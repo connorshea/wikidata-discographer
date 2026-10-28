@@ -93,6 +93,7 @@ describe.skipIf(!process.env.DB_TESTS)("GET /api/artists/:qid", () => {
         label: "Fireflies",
         released: "2009-03-17",
         tracks: 0,
+        parts: null,
         takenFrom: [],
       },
       {
@@ -100,6 +101,7 @@ describe.skipIf(!process.env.DB_TESTS)("GET /api/artists/:qid", () => {
         label: "Good Time",
         released: "2012-06-26",
         tracks: 2,
+        parts: null,
         takenFrom: [
           { qid: `Q${OTHERS_ALBUM}`, label: "Kiss" },
           { qid: `Q${ALBUM}`, label: "Ocean Eyes" },

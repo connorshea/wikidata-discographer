@@ -118,6 +118,7 @@ describe("artistSingles", () => {
     qid,
     label,
     released,
+    parts: null,
   });
   const none = { tracks: new Map(), takenFrom: new Map(), labels: new Map() };
 
@@ -146,8 +147,14 @@ describe("artistSingles", () => {
       label: "Fireflies",
       released: "2009",
       tracks: 2,
+      parts: null,
       takenFrom: [],
     });
+  });
+
+  it("passes on its number of parts", () => {
+    const [s] = artistSingles([{ ...single(1, "Fireflies", "2009"), parts: 3 }], none);
+    expect(s.parts).toBe(3);
   });
 
   it("resolves the albums it's taken from, by label", () => {
