@@ -436,7 +436,7 @@ function releaseCheck(p: CheckInput): Check {
   if (albumSummary(state) === null) return todo(`Choose or create the ${noun}`, "album");
   if (p.hasTracklist) return problem(`${capital(noun)} already has a tracklist`, "album");
   if (state.album.mode === "create") return done(`New ${noun} filled in`);
-  if (p.albumPending) return todo("Checking the album on Wikidata…", "album");
+  if (p.albumPending) return todo("Checking the QID on Wikidata…", "album");
   return done(`${capital(noun)} has no tracklist yet`);
 }
 

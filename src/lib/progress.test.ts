@@ -192,7 +192,7 @@ describe("runChecks", () => {
     });
     expect(list.find((c) => c.at === "album")).toMatchObject({
       ok: false,
-      text: "Checking the album on Wikidata…",
+      text: "Checking the QID on Wikidata…",
     });
   });
 
