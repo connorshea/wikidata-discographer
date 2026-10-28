@@ -234,6 +234,7 @@ export interface SingleRow {
   qid: number;
   label: string | null;
   released: string | null;
+  parts: number | null;
 }
 
 /**
@@ -255,6 +256,7 @@ export function artistSingles(
       label: r.label,
       released: r.released,
       tracks: facts.tracks.get(r.qid) ?? 0,
+      parts: r.parts,
       takenFrom: (facts.takenFrom.get(r.qid) ?? [])
         .map((n) => ({ qid: toQid(n), label: facts.labels.get(n) ?? null }))
         .sort((a, b) => (a.label ?? a.qid).localeCompare(b.label ?? b.qid)),

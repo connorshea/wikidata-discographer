@@ -255,6 +255,8 @@ export interface ArtistSingle {
   released: string | null;
   /** How many tracks its tracklist (P658) lists. */
   tracks: number;
+  /** How many tracks its number of parts (P2635) says it has. */
+  parts: number | null;
   /** The albums it's taken from (P13602), by label. Not always the artist's. */
   takenFrom: { qid: string; label: string | null }[];
 }

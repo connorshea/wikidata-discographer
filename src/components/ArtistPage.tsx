@@ -416,13 +416,24 @@ function ArtistSingles({
                   )}
                 </td>
                 <td>
-                  {s.tracks > 0 ? (
-                    <span className="pill">
-                      {s.tracks === 1 ? "1 track" : `${s.tracks} tracks`}
-                    </span>
-                  ) : (
-                    <span className="pill ok">No tracklist yet</span>
-                  )}
+                  <span className="pills">
+                    {s.tracks > 0 ? (
+                      <span className="pill">
+                        {s.tracks === 1 ? "1 track" : `${s.tracks} tracks`}
+                      </span>
+                    ) : (
+                      <span className="pill ok">No tracklist yet</span>
+                    )}
+                    {s.tracks > 0 && s.parts !== null && s.parts !== s.tracks && (
+                      <span
+                        className="pill warn"
+                        title={`${s.tracks} listed, but its number of parts (P2635) says ${s.parts}`}
+                      >
+                        <WarnIcon />
+                        Expected {s.parts === 1 ? "1 track" : `${s.parts} tracks`}
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="act">
                   <a href={`${wikiBaseUrl}/wiki/${s.qid}`} target="_blank" rel="noreferrer">
@@ -510,13 +521,13 @@ function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: 
           ) : (
             <span className="pill ok">No tracklist yet</span>
           )}
-          {a.tracks > 0 && a.parts !== null && a.parts > a.tracks && (
+          {a.tracks > 0 && a.parts !== null && a.parts !== a.tracks && (
             <span
               className="pill warn"
               title={`${a.tracks} listed, but its number of parts (P2635) says ${a.parts}`}
             >
               <WarnIcon />
-              Expected {a.parts} tracks
+              Expected {a.parts === 1 ? "1 track" : `${a.parts} tracks`}
             </span>
           )}
         </span>
