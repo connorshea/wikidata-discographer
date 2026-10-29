@@ -222,12 +222,6 @@ function ArtistAlbums({ qid }: { qid: string }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [shown, setShown] = useState(PAGE);
-  // The album a single's Taken from link last jumped to: a new object each
-  // time, so jumping to the same one again scrolls again.
-  const [jump, setJump] = useState<{ qid: string } | null>(null);
-  useEffect(() => {
-    if (jump) document.getElementById(albumRowId(jump.qid))?.scrollIntoView({ block: "center" });
-  }, [jump]);
   useEffect(() => {
     const ctl = new AbortController();
     api<ArtistResponse>(`/api/artists/${encodeURIComponent(qid)}`, { signal: ctl.signal })
@@ -267,12 +261,6 @@ function ArtistAlbums({ qid }: { qid: string }) {
   // More than one is usually a mistake on the item: like the albums' release groups, link none.
   const mbid = artist.musicBrainzIds.length === 1 ? artist.musicBrainzIds[0] : null;
   const listed = albums.filter(FILTERS.find((f) => f.id === filter)!.keep);
-  /** Show the album's row, under All so a filter can't hide it, and scroll to it. */
-  const jumpTo = (qid: string) => {
-    setFilter("all");
-    setShown(Math.max(shown, albums.findIndex((a) => a.qid === qid) + 1));
-    setJump({ qid });
-  };
   return (
     <>
       <section className="block artist">
@@ -385,13 +373,7 @@ function ArtistAlbums({ qid }: { qid: string }) {
         )}
       </section>
       {data.singles.length > 0 && (
-        <ArtistSingles
-          name={name}
-          singles={data.singles}
-          truncated={data.singlesTruncated}
-          albums={new Set(albums.map((a) => a.qid))}
-          onJump={jumpTo}
-        />
+        <ArtistSingles name={name} singles={data.singles} truncated={data.singlesTruncated} />
       )}
     </>
   );
@@ -402,15 +384,10 @@ function ArtistSingles({
   name,
   singles,
   truncated,
-  albums,
-  onJump,
 }: {
   name: string;
   singles: ArtistSingle[];
   truncated: boolean;
-  /** The artist's listed albums, whose rows a Taken from link goes to. */
-  albums: ReadonlySet<string>;
-  onJump: (qid: string) => void;
 }) {
   const { wikiBaseUrl } = useAuth();
   const [all, setAll] = useState(false);
@@ -464,21 +441,9 @@ function ArtistSingles({
                     s.takenFrom.map((a, i) => (
                       <Fragment key={a.qid}>
                         {i > 0 && " · "}
-                        {albums.has(a.qid) ? (
-                          <a
-                            href={`#${albumRowId(a.qid)}`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              onJump(a.qid);
-                            }}
-                          >
-                            {a.label ?? a.qid}
-                          </a>
-                        ) : (
-                          <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
-                            {a.label ?? a.qid}
-                          </a>
-                        )}
+                        <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
+                          {a.label ?? a.qid}
+                        </a>
                       </Fragment>
                     ))
                   )}
@@ -506,11 +471,6 @@ function ArtistSingles({
   );
 }
 
-/** The id of an album's row, for a single's Taken from link to go to. */
-function albumRowId(qid: string): string {
-  return `album-${qid}`;
-}
-
 function WarnIcon() {
   return (
     <svg className="warn-icon" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
@@ -527,7 +487,7 @@ function AlbumRow({ album: a, wikiBaseUrl }: { album: ArtistAlbum; wikiBaseUrl: 
   const label = a.label ?? a.qid;
   const running = a.run?.status === "running";
   return (
-    <tr id={albumRowId(a.qid)} className={a.tracks > 0 || running ? "taken" : undefined}>
+    <tr className={a.tracks > 0 || running ? "taken" : undefined}>
       <td className="year" title={a.released ?? "No release date on Wikidata"}>
         {a.released ? a.released.slice(0, 4) : "—"}
       </td>
