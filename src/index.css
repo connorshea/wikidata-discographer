@@ -161,7 +161,6 @@ h1.wordmark {
   color: var(--muted);
 }
 .record-icon .vinyl {
-  fill: url(#record-sheen);
   stroke: var(--line);
 }
 .record-icon .sheen-hi {
@@ -3427,6 +3426,20 @@ button.album-card-reload:hover:not(:disabled) {
   border-top-color: var(--accent);
   animation: spinner-turn 0.8s linear infinite;
 }
+/* The Albums page's first page loading. The record is concentric circles, so it's the
+   sheen going round that shows it turning. */
+.record-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.record-icon.spinning {
+  animation: spinner-turn 1.6s linear infinite;
+}
 @keyframes spinner-turn {
   to {
     transform: rotate(360deg);
@@ -3435,6 +3448,9 @@ button.album-card-reload:hover:not(:disabled) {
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation-duration: 2.4s;
+  }
+  .record-icon.spinning {
+    animation: none;
   }
 }
 .search-results {
