@@ -4,7 +4,6 @@ import { groupAlbums, inputType, mirrorType, type RunEdits, type RunRow } from "
 const run = (id: number, albumQid: number, extra: Partial<RunRow> = {}): RunRow => ({
   id,
   albumQid,
-  userId: 1,
   username: "Alice",
   status: "done",
   title: `Run ${id}`,
@@ -23,7 +22,6 @@ describe("groupAlbums", () => {
       new Map(),
       new Map(),
       new Map(),
-      null,
     );
     expect(albums.map((a) => [a.qid, a.runs.map((r) => r.id)])).toEqual([
       ["Q100", [3, 1]],
@@ -44,7 +42,6 @@ describe("groupAlbums", () => {
       new Map(),
       new Map(),
       new Map(),
-      null,
     );
     expect(created.created).toBe(true);
     expect(created.runs.map((r) => [r.created, r.createdAlbum])).toEqual([
@@ -55,15 +52,7 @@ describe("groupAlbums", () => {
   });
 
   it("counts nothing for a run with no edits", () => {
-    const [album] = groupAlbums(
-      [100],
-      [run(1, 100)],
-      new Map(),
-      new Map(),
-      new Map(),
-      new Map(),
-      null,
-    );
+    const [album] = groupAlbums([100], [run(1, 100)], new Map(), new Map(), new Map(), new Map());
     expect(album.runs[0]).toMatchObject({ created: 0, createdAlbum: false });
   });
 
@@ -76,7 +65,6 @@ describe("groupAlbums", () => {
       new Map([[200, "On Wikidata"]]),
       new Map(),
       new Map(),
-      null,
     );
     expect(albums.map((a) => a.label)).toEqual(["Typed later", "On Wikidata"]);
   });
@@ -89,7 +77,6 @@ describe("groupAlbums", () => {
       new Map(),
       new Map([[100, [{ qid: "Q1", label: "Carly Rae Jepsen" }]]]),
       new Map(),
-      null,
     );
     expect(albums.map((a) => a.artists)).toEqual([[{ qid: "Q1", label: "Carly Rae Jepsen" }], []]);
   });
@@ -102,7 +89,6 @@ describe("groupAlbums", () => {
       new Map(),
       new Map(),
       new Map([[100, "EP"]]),
-      null,
     );
     expect(albums.map((a) => a.type)).toEqual(["EP", null]);
   });
@@ -110,25 +96,21 @@ describe("groupAlbums", () => {
   it("marks the viewer's own runs and keeps every status", () => {
     const [album] = groupAlbums(
       [100],
-      [
-        run(1, 100, { status: "unknown" }),
-        run(2, 100, { userId: 2, username: "Bob", status: "failed" }),
-      ],
+      [run(1, 100, { status: "unknown" }), run(2, 100, { username: "Bob", status: "failed" })],
       new Map(),
       new Map(),
       new Map(),
       new Map(),
-      1,
     );
-    expect(album.runs.map((r) => [r.username, r.status, r.mine])).toEqual([
-      ["Bob", "failed", false],
-      ["Alice", "unknown", true],
+    expect(album.runs.map((r) => [r.username, r.status])).toEqual([
+      ["Bob", "failed"],
+      ["Alice", "unknown"],
     ]);
     expect(album.runs[0].editGroupUrl).toBe("https://editgroups.toolforge.org/b/CB/g2/");
   });
 
   it("skips an album with no runs", () => {
-    expect(groupAlbums([100], [], new Map(), new Map(), new Map(), new Map(), null)).toEqual([]);
+    expect(groupAlbums([100], [], new Map(), new Map(), new Map(), new Map())).toEqual([]);
   });
 });
 

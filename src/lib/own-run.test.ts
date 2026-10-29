@@ -7,7 +7,6 @@ import {
   applyCreated,
   createdAny,
   formOfRun,
-  initialRunId,
   isGone,
   loadOwnRun,
   OWN_RUN_KEY,
@@ -84,17 +83,6 @@ describe("adoptOwnRun", () => {
     expect(adoptOwnRun(mine, null)).toBe(mine);
     expect(adoptOwnRun(mine, "junk")).toBe(mine);
     expect(adoptOwnRun(null, null)).toBeNull();
-  });
-});
-
-describe("initialRunId", () => {
-  it("shows the album list's run, else the own run", () => {
-    const own = { run: 7, form: "f" };
-    expect(initialRunId("?run=12", own)).toBe(12);
-    expect(initialRunId("", own)).toBe(7);
-    expect(initialRunId("?run=abc", own)).toBe(7);
-    expect(initialRunId("?run=-3", null)).toBeNull();
-    expect(initialRunId("", null)).toBeNull();
   });
 });
 

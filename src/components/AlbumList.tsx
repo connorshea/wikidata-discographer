@@ -214,16 +214,8 @@ function RunSummary({ run }: { run: AlbumRun }) {
 
 function RunLinks({ run }: { run: AlbumRun }) {
   return (
-    <>
-      <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
-        EditGroups
-      </a>
-      {run.mine && (
-        <>
-          {" · "}
-          <Link href={`/?run=${run.id}`}>Open run</Link>
-        </>
-      )}
-    </>
+    <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
+      EditGroups
+    </a>
   );
 }

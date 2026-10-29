@@ -151,7 +151,6 @@ artistRoutes.get("/search", async (c) => {
 export interface ArtistRunRow {
   id: number;
   albumQid: number;
-  userId: number;
   status: string;
   editGroup: string;
   createdAt: string;
@@ -178,9 +177,8 @@ export function artistAlbums(
     releaseGroups: ReadonlyMap<number, string[]>;
     runs: ArtistRunRow[];
   },
-  userId: number | null,
 ): ArtistAlbum[] {
-  const runOf = latestRuns(facts.runs, userId);
+  const runOf = latestRuns(facts.runs);
   return rows
     .map((r): ArtistAlbum => ({
       qid: toQid(r.qid),
@@ -196,7 +194,7 @@ export function artistAlbums(
 }
 
 /** The latest run on each album or single, as the artist page shows it. */
-function latestRuns(runs: ArtistRunRow[], userId: number | null) {
+function latestRuns(runs: ArtistRunRow[]) {
   const latest = new Map<number, ArtistRunRow>();
   for (const r of runs) if ((latest.get(r.albumQid)?.id ?? 0) < r.id) latest.set(r.albumQid, r);
   return (qid: number): ArtistAlbum["run"] => {
@@ -205,7 +203,6 @@ function latestRuns(runs: ArtistRunRow[], userId: number | null) {
       ? {
           id: run.id,
           status: run.status as SubmissionStatus,
-          mine: run.userId === userId,
           createdAt: run.createdAt,
           editGroupUrl: editGroupUrl(run.editGroup),
         }
@@ -247,9 +244,8 @@ export function artistSingles(
     releaseGroups: ReadonlyMap<number, string[]>;
     runs: ArtistRunRow[];
   },
-  userId: number | null,
 ): ArtistSingle[] {
-  const runOf = latestRuns(facts.runs, userId);
+  const runOf = latestRuns(facts.runs);
   return rows
     .map((r): ArtistSingle => ({
       qid: toQid(r.qid),
@@ -359,7 +355,6 @@ artistRoutes.get("/:qid", async (c) => {
           .select({
             id: submissions.id,
             albumQid: submissions.albumQid,
-            userId: submissions.userId,
             status: submissions.status,
             editGroup: submissions.editGroup,
             createdAt: submissions.createdAt,
@@ -378,28 +373,20 @@ artistRoutes.get("/:qid", async (c) => {
   c.header("Cache-Control", "no-store");
   return c.json({
     artist: { ...artist, musicBrainzIds: mbids.map((r) => r.value) },
-    albums: artistAlbums(
-      albums,
-      {
-        parts: new Map(albums.map((r) => [r.qid, r.parts])),
-        tracks: trackCounts,
-        releaseGroups,
-        runs: artistRuns,
-      },
-      c.get("user")?.id ?? null,
-    ),
+    albums: artistAlbums(albums, {
+      parts: new Map(albums.map((r) => [r.qid, r.parts])),
+      tracks: trackCounts,
+      releaseGroups,
+      runs: artistRuns,
+    }),
     truncated,
-    singles: artistSingles(
-      singles,
-      {
-        tracks: trackCounts,
-        takenFrom,
-        labels: new Map(fromLinks.map((r) => [r.target, r.label])),
-        releaseGroups,
-        runs: artistRuns,
-      },
-      c.get("user")?.id ?? null,
-    ),
+    singles: artistSingles(singles, {
+      tracks: trackCounts,
+      takenFrom,
+      labels: new Map(fromLinks.map((r) => [r.target, r.label])),
+      releaseGroups,
+      runs: artistRuns,
+    }),
     singlesTruncated: singleRows.length > MAX_ARTIST_SINGLES,
   } satisfies ArtistResponse);
 });

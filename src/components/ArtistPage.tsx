@@ -525,13 +525,9 @@ function ReleaseAction({ release: a, wikiBaseUrl }: { release: Release; wikiBase
   const releaseGroup = a.releaseGroups.length === 1 ? a.releaseGroups[0] : null;
   const runLink = a.run && (
     <>
-      {a.run.mine ? (
-        <Link href={`/?run=${a.run.id}`}>Open run</Link>
-      ) : (
-        <a href={a.run.editGroupUrl} target="_blank" rel="noreferrer">
-          EditGroups ↗
-        </a>
-      )}
+      <a href={a.run.editGroupUrl} target="_blank" rel="noreferrer">
+        EditGroups ↗
+      </a>
       <a href={`${wikiBaseUrl}/wiki/${a.qid}`} target="_blank" rel="noreferrer">
         Open on Wikidata ↗
       </a>

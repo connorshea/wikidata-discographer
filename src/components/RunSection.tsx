@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useSearch } from "wouter";
+import { Link } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
@@ -18,7 +18,6 @@ import {
   afterOwnRun,
   applyCreated,
   formOfRun,
-  initialRunId,
   isGone,
   loadOwnRun,
   OWN_RUN_KEY,
@@ -135,13 +134,10 @@ export default function RunSection({
   onRunning: (r: RunningInfo | null) => void;
   /** Told while the run's QIDs are checked before it starts, so the form is locked then too. */
   onStarting: (starting: boolean) => void;
-  /** Told whether a run is on show, e.g. one opened from the album list. */
+  /** Told whether a run is on show, e.g. one opened from the recent runs. */
   onShowing: (showing: boolean) => void;
 }) {
   const { user } = useAuth();
-  // The album list's "Open run" links here with ?run=<id>.
-  const search = useSearch();
-  const [, navigate] = useLocation();
   // Only a run started from this form writes its QIDs back into it.
   const [ownRun, setOwnRun] = useState(loadOwnRun);
   const ownRunRef = useRef(ownRun);
@@ -153,7 +149,7 @@ export default function RunSection({
   // The form was cleared because its run is done: the run stays on show.
   const [cleared, setCleared] = useState(false);
   const keepRun = useRef(false);
-  const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
+  const [runId, setRunId] = useState(() => ownRun?.run ?? null);
   const showing = runId !== null;
   useEffect(() => onShowing(showing), [showing, onShowing]);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
@@ -194,11 +190,6 @@ export default function RunSection({
     if (was === null && state.start !== null && run && run.status !== "running") closeRun();
   }, [state.start, run, closeRun]);
   const sectionRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (!new URLSearchParams(search).has("run")) return;
-    navigate("/", { replace: true });
-    sectionRef.current?.scrollIntoView();
-  }, [search, navigate]);
   const [starting, setStarting] = useState(false);
   useEffect(() => onStarting(starting), [starting, onStarting]);
   // What the user has confirmed so far for this start, so confirming one

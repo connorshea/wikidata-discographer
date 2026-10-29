@@ -13,7 +13,6 @@ describe("artistStart", () => {
 
   it("is null without an album QID", () => {
     expect(artistStart("")).toBeNull();
-    expect(artistStart("?run=3")).toBeNull();
     expect(artistStart("?album=Owl")).toBeNull();
   });
 });
