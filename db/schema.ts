@@ -235,6 +235,8 @@ export const wikidataEdits = mysqlTable(
   },
   (t) => [
     index("idx_wikidata_edits_submission").on(t.submissionId, t.id),
+    // Covers the album list's count of what each run created (server/albums.ts).
+    index("idx_wikidata_edits_created").on(t.submissionId, t.op, t.ok, t.qid, t.key),
     index("idx_wikidata_edits_user").on(t.userId),
     index("idx_wikidata_edits_qid").on(t.qid),
   ],
