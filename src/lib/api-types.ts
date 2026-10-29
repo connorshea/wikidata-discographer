@@ -119,6 +119,14 @@ export interface SubmissionInfo {
   edits: EditLogEntry[];
   /** The form the run was started from, so the client can tell whether it's still the one open. */
   input: State;
+  /** The album's artists, to link to their pages once the run is done. Empty until then. */
+  artists: RunArtist[];
+}
+
+/** One of a run's album artists, with the name to show for it. */
+export interface RunArtist {
+  qid: string;
+  label: string;
 }
 
 /** Body of POST /api/submissions. */
@@ -181,7 +189,7 @@ export interface UnknownRunConflict {
 }
 
 export interface SubmissionListResponse {
-  submissions: Omit<SubmissionInfo, "edits" | "total" | "waitingUntil" | "input">[];
+  submissions: Omit<SubmissionInfo, "edits" | "total" | "waitingUntil" | "input" | "artists">[];
 }
 
 /** One run in the album list. */

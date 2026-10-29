@@ -2431,6 +2431,9 @@ button.go circle + circle {
 .run-links .hint {
   margin: 0;
 }
+.run-next {
+  margin-top: 0;
+}
 .run-log {
   border: 1px solid var(--line);
   border-radius: 9px;

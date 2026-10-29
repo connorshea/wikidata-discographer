@@ -41,6 +41,7 @@ function runOf(done: number, status: SubmissionInfo["status"] = "running"): Subm
       error: null,
     })),
     input: EXAMPLE,
+    artists: [],
   };
 }
 

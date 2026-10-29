@@ -26,7 +26,7 @@ import {
   saveOwnRun,
   settleOwnRun,
 } from "../lib/own-run.ts";
-import { type Plan, releaseNoun, type State } from "../lib/plan.ts";
+import { EP_CLASS, type Plan, releaseNoun, type State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type { PreviewEdit } from "../lib/preview.ts";
 import type { RunningInfo } from "../lib/progress.ts";
@@ -1010,6 +1010,7 @@ function RunProgress({
       {run.status === "interrupted" && (
         <p className="msg warn">The server restarted during this run. Start it again to finish.</p>
       )}
+      {run.status === "done" && run.artists.length > 0 && <MoreFromArtists run={run} />}
       {!running && (
         <div className="row run-links">
           <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
@@ -1017,7 +1018,7 @@ function RunProgress({
           </a>
           {run.albumQid && (
             <span className="hint">
-              Album <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
+              {releaseKind(run.input)} <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
             </span>
           )}
           <button type="button" className="ghost small" onClick={onClose}>
@@ -1039,6 +1040,25 @@ function RunProgress({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** What the run's release is, to label its QID: "Album", "EP" or "Single". */
+function releaseKind({ album }: State): string {
+  if (releaseNoun(album) === "single") return "Single";
+  return album.mode === "create" && album.type === EP_CLASS ? "EP" : "Album";
+}
+
+/** Once a run is done, links to its artists' pages, to go on to their other releases. */
+function MoreFromArtists({ run }: { run: SubmissionInfo }) {
+  return (
+    <div className="row run-next">
+      {run.artists.map((a) => (
+        <Link key={a.qid} className="btn" href={`/artists/${a.qid}`}>
+          See more from {a.label}
+        </Link>
+      ))}
     </div>
   );
 }

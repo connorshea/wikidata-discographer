@@ -5,9 +5,16 @@
 // CI runs it in the db job.
 import { afterAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db, pool } from "./db.ts";
-import { musicExternalIds, musicItems, submissions, users, wikidataEdits } from "../db/schema.ts";
+import {
+  musicExternalIds,
+  musicItems,
+  musicLinks,
+  submissions,
+  users,
+  wikidataEdits,
+} from "../db/schema.ts";
 import { submissionRoutes } from "./submissions.ts";
 import { SINGLE_CLASS, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
@@ -76,11 +83,17 @@ function newAlbum(title: string): State {
 /** An album in the mirror with a Spotify album ID, for the duplicate-ID check. */
 const TAKEN = { qid: 990000166, spotify: "0123456789abcdefABCDEF" };
 
+/** A run's album in the mirror, with one performer that has a label and one that isn't mirrored. */
+const RUN_ALBUM = { qid: 990000167, artist: 990000168, unmirrored: 990000169 };
+
 if (process.env.DB_TESTS) afterAll(() => pool.end());
 
 async function clear() {
   await db.delete(musicExternalIds).where(eq(musicExternalIds.qid, TAKEN.qid));
-  await db.delete(musicItems).where(eq(musicItems.qid, TAKEN.qid));
+  await db.delete(musicLinks).where(eq(musicLinks.qid, RUN_ALBUM.qid));
+  await db
+    .delete(musicItems)
+    .where(inArray(musicItems.qid, [TAKEN.qid, RUN_ALBUM.qid, RUN_ALBUM.artist]));
   await db.delete(wikidataEdits).where(eq(wikidataEdits.userId, USER.id));
   await db.delete(submissions).where(eq(submissions.userId, USER.id));
   await db.delete(users).where(eq(users.id, USER.id));
@@ -193,5 +206,60 @@ describe.skipIf(!process.env.DB_TESTS)("the duplicate-ID check", () => {
     expect(res.error).toBe(
       `Q${TAKEN.qid} already has Spotify album ID ${TAKEN.spotify}. Use that album instead.`,
     );
+  });
+});
+
+describe.skipIf(!process.env.DB_TESTS)("a run's artists", () => {
+  beforeEach(clear);
+  afterAll(clear);
+
+  /** A run on the existing RUN_ALBUM that ended `status`. */
+  async function run(status: string): Promise<number> {
+    await db.insert(users).values({ id: USER.id, username: USER.username });
+    const input = coerceState(structuredClone(EXAMPLE));
+    input.album.mode = "existing";
+    input.album.qid = `Q${RUN_ALBUM.qid}`;
+    const [res] = await db.insert(submissions).values({
+      userId: USER.id,
+      editGroup: "0123456789abcdef",
+      status,
+      title: `Q${RUN_ALBUM.qid}`,
+      albumQid: RUN_ALBUM.qid,
+      input,
+    });
+    return res.insertId;
+  }
+
+  async function artists(id: number) {
+    const res = await app.request(`/api/submissions/${id}`);
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { artists: unknown }).artists;
+  }
+
+  beforeEach(async () => {
+    await db.insert(musicItems).values([
+      { qid: RUN_ALBUM.qid, kind: "album", label: "Homogenic", instanceOf: [] },
+      { qid: RUN_ALBUM.artist, kind: "artist", label: "Björk", instanceOf: [] },
+    ]);
+    await db.insert(musicLinks).values(
+      [RUN_ALBUM.artist, RUN_ALBUM.unmirrored].map((target) => ({
+        qid: RUN_ALBUM.qid,
+        property: 175,
+        target,
+      })),
+    );
+  });
+
+  it("lists the album's performers in the mirror once the run is done", async () => {
+    expect(await artists(await run("done"))).toEqual([
+      { qid: `Q${RUN_ALBUM.artist}`, label: "Björk" },
+      { qid: `Q${RUN_ALBUM.unmirrored}`, label: `Q${RUN_ALBUM.unmirrored}` },
+    ]);
+  });
+
+  it("lists none while the run goes, or when it failed", async () => {
+    expect(await artists(await run("running"))).toEqual([]);
+    await clear();
+    expect(await artists(await run("failed"))).toEqual([]);
   });
 });
