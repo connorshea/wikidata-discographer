@@ -26,7 +26,7 @@ import {
   saveOwnRun,
   settleOwnRun,
 } from "../lib/own-run.ts";
-import { type Plan, releaseNoun, type State } from "../lib/plan.ts";
+import { EP_CLASS, type Plan, releaseNoun, type State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type { PreviewEdit } from "../lib/preview.ts";
 import type { RunningInfo } from "../lib/progress.ts";
@@ -1018,7 +1018,7 @@ function RunProgress({
           </a>
           {run.albumQid && (
             <span className="hint">
-              Album <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
+              {releaseKind(run.input)} <WikiLink base={wikiBaseUrl} qid={run.albumQid} />
             </span>
           )}
           <button type="button" className="ghost small" onClick={onClose}>
@@ -1042,6 +1042,12 @@ function RunProgress({
       )}
     </div>
   );
+}
+
+/** What the run's release is, to label its QID: "Album", "EP" or "Single". */
+function releaseKind({ album }: State): string {
+  if (releaseNoun(album) === "single") return "Single";
+  return album.mode === "create" && album.type === EP_CLASS ? "EP" : "Album";
 }
 
 /** Once a run is done, links to its artists' pages, to go on to their other releases. */
