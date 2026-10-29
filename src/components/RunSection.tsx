@@ -1056,7 +1056,7 @@ function MoreFromArtists({ run }: { run: SubmissionInfo }) {
     <div className="row run-next">
       {run.artists.map((a) => (
         <Link key={a.qid} className="btn" href={`/artists/${a.qid}`}>
-          See more albums from {a.label}
+          See more from {a.label}
         </Link>
       ))}
     </div>
