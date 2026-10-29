@@ -130,7 +130,7 @@ function blank(s: State, key: string): boolean {
 }
 
 /**
- * How the form compares with an opened run's: "other" if it's another form,
+ * How the form compares with a run's: "other" if it's another form,
  * "behind" if it's the run's form but lacks QIDs the run created, or "same"
  * if it's the run's form with them all. A QID put in by hand where the run
  * created another makes it "other", so writing back never replaces one.

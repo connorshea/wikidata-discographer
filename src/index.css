@@ -2528,28 +2528,15 @@ button.run-log-more:hover {
 .recent-runs ul {
   gap: 2px;
 }
-.recent-runs button {
+.recent-runs li {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  width: 100%;
   min-height: 36px;
   padding: 2px 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font-weight: 400;
-  text-align: left;
 }
-.recent-runs button:hover > span:first-child {
-  color: var(--accent);
-  text-decoration: underline;
-}
-.recent-runs button[aria-current="true"] > span:first-child {
-  font-weight: 650;
-}
-.recent-runs button .pill {
+.recent-runs li .pill {
   flex: none;
 }
 .recent-runs > a {
