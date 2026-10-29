@@ -619,17 +619,29 @@ async function checkRecreate(
     : null;
 }
 
+/** When to read the album again after its edit, until Wikidata shows the edit. */
+const REFRESH_AT_MS = [5_000, 30_000, 120_000];
+
 /**
- * Read `qid` from Wikidata again and write it to the mirror. A failure only logs.
- * Tried once, briefly, as the run's end waits on it.
+ * Read `qid` from Wikidata at each of `at` and, once it has a revision newer than
+ * `after`, write that to the mirror. A read straight after an unanswered edit can
+ * come before Wikidata has saved it, or from a lagging replica. A failure only logs.
  */
-async function refreshMirror(qid: string): Promise<void> {
-  try {
-    const entity = (await getEntities([qid], { retries: 0, timeoutMs: 10_000 })).get(qid);
-    const row = entity?.id === qid ? entityToRow(entity) : null;
-    if (row) await upsertRows([row], { source: "app" });
-  } catch (e) {
-    console.error("mirror write failed", e);
+async function refreshMirror(qid: string, after: number, at: readonly number[]): Promise<void> {
+  const start = Date.now();
+  for (const ms of at) {
+    await new Promise((r) => setTimeout(r, Math.max(0, start + ms - Date.now())));
+    try {
+      const entity = (await getEntities([qid], { retries: 0 })).get(qid);
+      // Deleted or merged since: the dump will settle it.
+      if (entity?.id !== qid) return;
+      if ((entity.lastrevid ?? 0) <= after) continue;
+      const row = entityToRow(entity);
+      if (row) await upsertRows([row], { source: "app" });
+      return;
+    } catch (e) {
+      console.error(`mirror refresh of ${qid} failed`, e);
+    }
   }
 }
 
@@ -643,7 +655,10 @@ export async function runPlan(
   ops: readonly Op[],
   editGroup: string,
   albumQid: string | null,
-  { retryMs = [2_000, 10_000] }: { retryMs?: readonly number[] } = {},
+  {
+    retryMs = [2_000, 10_000],
+    refreshAtMs = REFRESH_AT_MS,
+  }: { retryMs?: readonly number[]; refreshAtMs?: readonly number[] } = {},
 ): Promise<boolean> {
   const editUser: EditUser = { id: user.id, username: user.username };
   const created = new Map<string, string>();
@@ -665,9 +680,9 @@ export async function runPlan(
   let status: SubmissionStatus = "done";
   let error: string | null = null;
   let album = albumQid;
-  // Whether an edit to the album was sent but its mirror row wasn't written after,
-  // as the edit failed or went unanswered.
-  let albumStale = false;
+  // The album's revid before an edit to it that may have been saved but whose
+  // mirror row wasn't written, as it went unanswered or the write failed.
+  let albumStale: number | null = null;
   for (const op of ops) {
     const what = describeOp(op);
     // A create's log row, until it's settled, and whether the item may exist.
@@ -774,31 +789,37 @@ export async function runPlan(
           await log({ op: "addClaims", what, qid, ok: true, skipped });
           continue;
         }
-        if (qid === album) albumStale = true;
-        const body = await editRequest(editUser, {
-          action: "wbeditentity",
-          id: qid,
-          baserevid: String(entity.lastrevid ?? ""),
-          data: JSON.stringify({ claims: fresh }),
-          // Counting what's sent, not what was planned: the log says how many were already there.
-          summary: editSummary(describeOp(op, fresh.length), editGroup),
-        });
+        const base = entity.lastrevid ?? 0;
+        let body: Awaited<ReturnType<typeof editRequest>>;
+        try {
+          body = await editRequest(editUser, {
+            action: "wbeditentity",
+            id: qid,
+            baserevid: String(entity.lastrevid ?? ""),
+            data: JSON.stringify({ claims: fresh }),
+            // Counting what's sent, not what was planned: the log says how many were already there.
+            summary: editSummary(describeOp(op, fresh.length), editGroup),
+          });
+        } catch (err) {
+          if (qid === album && err instanceof WikidataEditError && err.ambiguous) albumStale = base;
+          throw err;
+        }
         const revid = (body.entity as { lastrevid?: number } | undefined)?.lastrevid ?? null;
         await log({ op: "addClaims", what, qid, revid, ok: true, skipped });
         // Refresh its mirror row (e.g. a reused track's new P2550), so matches see it
         // before the next dump. Wikidata's answer has only the statements sent, so
-        // they're added to the entity read before the edit.
+        // they're added to the entity read before the edit. Without the new revid the
+        // row can't be stamped, and an unstamped row could undo a newer one.
         const claims = { ...entity.claims };
         for (const s of fresh)
           claims[s.mainsnak.property] = [...(claims[s.mainsnak.property] ?? []), s];
-        const row = entityToRow({ ...entity, claims, lastrevid: revid ?? undefined });
+        const row = revid === null ? null : entityToRow({ ...entity, claims, lastrevid: revid });
         if (row)
-          await upsertRows([row], { source: "app" }).then(
-            () => {
-              if (qid === album) albumStale = false;
-            },
-            (e: unknown) => console.error("mirror write failed", e),
-          );
+          await upsertRows([row], { source: "app" }).catch((e: unknown) => {
+            console.error("mirror write failed", e);
+            if (qid === album) albumStale = base;
+          });
+        else if (revid === null && qid === album) albumStale = base;
       }
     } catch (err) {
       if (err instanceof UnknownOutcome) {
@@ -840,9 +861,9 @@ export async function runPlan(
       break;
     }
   }
-  // The album edit may have been saved without an answer. Read the album again,
-  // so its artist page shows the tracklist by the time the run is done.
-  if (album && albumStale) await refreshMirror(album);
+  // The album edit may have been saved without its mirror row. Read the album
+  // again, so its artist page shows the tracklist, without holding up the run's end.
+  if (album && albumStale !== null) void refreshMirror(album, albumStale, refreshAtMs);
   // Whether the run's end was saved. If not, it stays "running" until the
   // next boot's markInterrupted.
   for (let attempt = 0; ; attempt++) {

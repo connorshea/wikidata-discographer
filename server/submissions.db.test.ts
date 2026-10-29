@@ -39,10 +39,18 @@ const FOUND = vi.hoisted(() => ({
 }));
 
 /**
- * Wikidata for runPlan: the album it reads and edits, and whether an edit is saved
- * but its answer lost. Reads and edits throw while there's no album.
+ * Wikidata for runPlan: the album it reads and edits, whether an edit is saved but
+ * its answer lost or Wikidata refuses it, and how many reads after an edit still see the album before it.
+ * Reads and edits throw while there's no album.
  */
-const WIKIDATA = vi.hoisted(() => ({ album: null as Entity | null, answerLost: false }));
+const WIKIDATA = vi.hoisted(() => ({
+  album: null as Entity | null,
+  before: null as Entity | null,
+  answerLost: false,
+  refused: false,
+  staleReads: 0,
+  reads: 0,
+}));
 
 vi.mock("./auth/session.ts", () => ({
   requireUser: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
@@ -55,32 +63,39 @@ vi.mock("./auth/eligibility.ts", () => ({ editEligibility: () => ({ ok: true }) 
 // A run that gets past the guards stops at the QID check, so it never starts.
 vi.mock("./check-qids.ts", () => ({ checkPlanQids: async () => ["Past the guards."] }));
 vi.mock("./recover.ts", () => ({ findCreated: async () => [], waitForCreated: async () => [] }));
-vi.mock("./wikidata-client.ts", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  // Like Wikidata, the answer has only the statements sent.
-  editRequest: async (_user: unknown, params: { id: string; data: string }) => {
-    const album = WIKIDATA.album;
-    if (!album) throw new Error("No edits from tests");
-    const { claims } = JSON.parse(params.data) as { claims: WikibaseStatement[] };
-    for (const c of claims)
-      (album.claims![c.mainsnak.property] ??= []).push({ ...c, rank: c.rank ?? "normal" });
-    album.lastrevid = (album.lastrevid ?? 0) + 1;
-    if (WIKIDATA.answerLost) throw new Error("socket hang up");
-    return {
-      entity: {
-        id: params.id,
-        lastrevid: album.lastrevid,
-        claims: Object.groupBy(claims, (c) => c.mainsnak.property),
-      },
-    };
-  },
-  getEntities: async (qids: string[]) => {
-    const album = WIKIDATA.album;
-    if (!album) throw new Error("No Wikidata reads from tests");
-    return new Map(qids.includes(album.id) ? [[album.id, structuredClone(album)]] : []);
-  },
-  checkItems: async (qids: string[]) => new Map(qids.map((q) => [q, FOUND.check])),
-}));
+vi.mock("./wikidata-client.ts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./wikidata-client.ts")>();
+  return {
+    ...original,
+    // Like Wikidata, the answer has only the statements sent.
+    editRequest: async (_user: unknown, params: { id: string; data: string }) => {
+      const album = WIKIDATA.album;
+      if (!album) throw new Error("No edits from tests");
+      if (WIKIDATA.refused) throw new original.WikidataEditError("permissiondenied", "Not allowed");
+      WIKIDATA.before = structuredClone(album);
+      const { claims } = JSON.parse(params.data) as { claims: WikibaseStatement[] };
+      for (const c of claims)
+        (album.claims![c.mainsnak.property] ??= []).push({ ...c, rank: c.rank ?? "normal" });
+      album.lastrevid = (album.lastrevid ?? 0) + 1;
+      if (WIKIDATA.answerLost)
+        throw new original.WikidataEditError("http", "socket hang up", { ambiguous: true });
+      return {
+        entity: {
+          id: params.id,
+          lastrevid: album.lastrevid,
+          claims: Object.groupBy(claims, (c) => c.mainsnak.property),
+        },
+      };
+    },
+    getEntities: async (qids: string[]) => {
+      if (!WIKIDATA.album) throw new Error("No Wikidata reads from tests");
+      WIKIDATA.reads++;
+      const seen = WIKIDATA.before && WIKIDATA.staleReads-- > 0 ? WIKIDATA.before : WIKIDATA.album;
+      return new Map(qids.includes(seen.id) ? [[seen.id, structuredClone(seen)]] : []);
+    },
+    checkItems: async (qids: string[]) => new Map(qids.map((q) => [q, FOUND.check])),
+  };
+});
 
 const app = new Hono().route("/api/submissions", submissionRoutes);
 
@@ -315,7 +330,11 @@ describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () 
         ],
       },
     };
+    WIKIDATA.before = null;
     WIKIDATA.answerLost = false;
+    WIKIDATA.refused = false;
+    WIKIDATA.staleReads = 0;
+    WIKIDATA.reads = 0;
   });
   afterAll(async () => {
     WIKIDATA.album = null;
@@ -339,7 +358,11 @@ describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () 
         claims: [{ property: "P658", value: { type: "item", id: `Q${TRACK}` } }],
       },
     ];
-    expect(await runPlan(res.insertId, USER, ops, "0123456789abcdef", albumQid)).toBe(true);
+    expect(
+      await runPlan(res.insertId, USER, ops, "0123456789abcdef", albumQid, {
+        refreshAtMs: [0, 10, 20],
+      }),
+    ).toBe(true);
     return res.insertId;
   }
 
@@ -367,6 +390,28 @@ describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () 
     const id = await runTracklist();
     const [run] = await db.select().from(submissions).where(eq(submissions.id, id));
     expect(run.status).toBe("failed");
-    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
+    // Read again after the run's end, which doesn't wait for it.
+    await vi.waitFor(async () =>
+      expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] }),
+    );
+  });
+
+  it("waits for Wikidata to show an unanswered edit", async () => {
+    WIKIDATA.answerLost = true;
+    WIKIDATA.staleReads = 2;
+    await runTracklist();
+    await vi.waitFor(async () =>
+      expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] }),
+    );
+    // The read before the edit, two that missed it, and the one that found it.
+    expect(WIKIDATA.reads).toBe(4);
+  });
+
+  it("doesn't read the album again when Wikidata refused the edit", async () => {
+    WIKIDATA.refused = true;
+    await runTracklist();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(WIKIDATA.reads).toBe(1);
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 1, links: [] });
   });
 });
