@@ -34,7 +34,6 @@ import {
   editShares,
   type EditShare,
   entryKind,
-  finishedThisWeek,
   KIND_EDGES,
   plannedEdits,
   roughly,
@@ -1048,20 +1047,12 @@ function RunProgress({
 /** Once a run is done, links to its artists' pages, to go on to their other releases. */
 function MoreFromArtists({ run }: { run: SubmissionInfo }) {
   return (
-    <div className="run-next">
-      <div className="row">
-        {run.artists.map((a) => (
-          <Link key={a.qid} className="btn" href={`/artists/${a.qid}`}>
-            See more albums from {a.label}
-          </Link>
-        ))}
-      </div>
-      {finishedThisWeek(run.finishedAt) && (
-        <p className="hint">
-          Discographer's copy of Wikidata is refreshed weekly, so this{" "}
-          {releaseNoun(run.input.album)} may still show Add tracklist there for a few days.
-        </p>
-      )}
+    <div className="row run-next">
+      {run.artists.map((a) => (
+        <Link key={a.qid} className="btn" href={`/artists/${a.qid}`}>
+          See more albums from {a.label}
+        </Link>
+      ))}
     </div>
   );
 }
