@@ -1,0 +1,1 @@
+CREATE INDEX `idx_wikidata_edits_created` ON `wikidata_edits` (`submission_id`,`op`,`ok`,`qid`,`key`);

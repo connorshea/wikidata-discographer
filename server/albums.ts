@@ -7,7 +7,8 @@
 // item's history and on EditGroups. `mine=1` keeps the albums the logged-in
 // user has a run on.
 import { Hono } from "hono";
-import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, lt, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { db } from "./db.ts";
 import { musicItems, musicLinks, submissions, users, wikidataEdits } from "../db/schema.ts";
 import type { AuthEnv } from "./auth/session.ts";
@@ -114,6 +115,9 @@ export function groupAlbums(
   });
 }
 
+/** MariaDB returns JSON as a string. */
+const parseJson = (v: unknown): unknown => (typeof v === "string" ? JSON.parse(v) : v);
+
 /** A run counts an item as created once Wikidata saved it, even if the answer came late. */
 const saved = sql`(${wikidataEdits.ok} OR ${wikidataEdits.qid} IS NOT NULL)`;
 
@@ -127,34 +131,67 @@ albumRoutes.get("/", async (c) => {
 
   // A page of albums, by their latest run. Paging by that run's id, not an
   // offset, so a new run doesn't shift the next page.
-  const latest = sql<number>`max(${submissions.id})`;
-  const page = await db
-    .select({ albumQid: submissions.albumQid, latest })
-    .from(submissions)
-    .where(
-      and(
-        isNotNull(submissions.albumQid),
-        mine
-          ? inArray(
-              submissions.albumQid,
+  const paged = Number.isInteger(before) && before > 0;
+  let page: { albumQid: number; latest: number }[];
+  if (mine) {
+    // Starts from the user's runs, so it reads only as many albums as they have.
+    const latest = sql<number>`max(${submissions.id})`;
+    page = (
+      await db
+        .select({ albumQid: submissions.albumQid, latest })
+        .from(submissions)
+        .where(
+          inArray(
+            submissions.albumQid,
+            db
+              .select({ qid: submissions.albumQid })
+              .from(submissions)
+              .where(and(eq(submissions.userId, user!.id), isNotNull(submissions.albumQid))),
+          ),
+        )
+        .groupBy(submissions.albumQid)
+        .having(paged ? lt(latest, before) : undefined)
+        .orderBy(desc(latest))
+        .limit(ALBUM_PAGE_SIZE + 1)
+    ).map((p) => ({ albumQid: p.albumQid!, latest: Number(p.latest) }));
+  } else {
+    // Walks the runs newest first and keeps each album's latest, so it stops
+    // after a page instead of grouping every album.
+    const newer = alias(submissions, "newer");
+    page = (
+      await db
+        .select({ albumQid: submissions.albumQid, latest: submissions.id })
+        .from(submissions)
+        .where(
+          and(
+            isNotNull(submissions.albumQid),
+            paged ? lt(submissions.id, before) : undefined,
+            notExists(
               db
-                .select({ qid: submissions.albumQid })
-                .from(submissions)
-                .where(eq(submissions.userId, user!.id)),
-            )
-          : undefined,
-      ),
-    )
-    .groupBy(submissions.albumQid)
-    .having(Number.isInteger(before) && before > 0 ? lt(latest, before) : undefined)
-    .orderBy(desc(latest))
-    .limit(ALBUM_PAGE_SIZE + 1);
+                .select({ one: sql`1` })
+                .from(newer)
+                .where(and(eq(newer.albumQid, submissions.albumQid), gt(newer.id, submissions.id))),
+            ),
+          ),
+        )
+        .orderBy(desc(submissions.id))
+        .limit(ALBUM_PAGE_SIZE + 1)
+    ).map((p) => ({ albumQid: p.albumQid!, latest: p.latest }));
+  }
   const more = page.length > ALBUM_PAGE_SIZE;
-  const albumQids = page.slice(0, ALBUM_PAGE_SIZE).map((p) => p.albumQid!);
+  page = page.slice(0, ALBUM_PAGE_SIZE);
+  const albumQids = page.map((p) => p.albumQid);
 
-  const runs: RunRow[] = albumQids.length
-    ? (
-        await db
+  // Everything else only needs the page's albums, so it's read in one go.
+  const [runs, edits, labels, performers, latestInputs]: [
+    RunRow[],
+    { submissionId: number; created: string; createdAlbum: string }[],
+    { qid: number; label: string | null; kind: string; instanceOf: number[] }[],
+    { qid: number; target: number; label: string | null }[],
+    { albumQid: number | null; album: unknown }[],
+  ] = albumQids.length
+    ? await Promise.all([
+        db
           .select({
             id: submissions.id,
             albumQid: submissions.albumQid,
@@ -168,23 +205,21 @@ albumRoutes.get("/", async (c) => {
           .from(submissions)
           .innerJoin(users, eq(users.id, submissions.userId))
           .where(inArray(submissions.albumQid, albumQids))
-      ).map((r) => ({ ...r, albumQid: r.albumQid! }))
-    : [];
-  const runIds = runs.map((r) => r.id);
-  const [edits, labels, performers] = await Promise.all([
-    runIds.length
-      ? db
+          .then((rows) => rows.map((r) => ({ ...r, albumQid: r.albumQid! }))),
+        // Only creates count, and idx_wikidata_edits_created covers them.
+        db
           .select({
             submissionId: wikidataEdits.submissionId,
-            created: sql<string>`sum(${wikidataEdits.op} = 'create' AND ${saved})`,
-            createdAlbum: sql<string>`max(${wikidataEdits.op} = 'create' AND ${wikidataEdits.key} = 'album' AND ${saved})`,
+            created: sql<string>`count(*)`,
+            createdAlbum: sql<string>`max(${wikidataEdits.key} = 'album')`,
           })
           .from(wikidataEdits)
-          .where(inArray(wikidataEdits.submissionId, runIds))
-          .groupBy(wikidataEdits.submissionId)
-      : [],
-    albumQids.length
-      ? db
+          .innerJoin(submissions, eq(submissions.id, wikidataEdits.submissionId))
+          .where(
+            and(inArray(submissions.albumQid, albumQids), eq(wikidataEdits.op, "create"), saved),
+          )
+          .groupBy(wikidataEdits.submissionId),
+        db
           .select({
             qid: musicItems.qid,
             label: musicItems.label,
@@ -192,16 +227,27 @@ albumRoutes.get("/", async (c) => {
             instanceOf: musicItems.instanceOf,
           })
           .from(musicItems)
-          .where(inArray(musicItems.qid, albumQids))
-      : [],
-    albumQids.length
-      ? db
+          .where(inArray(musicItems.qid, albumQids)),
+        db
           .select({ qid: musicLinks.qid, target: musicLinks.target, label: musicItems.label })
           .from(musicLinks)
           .innerJoin(musicItems, eq(musicItems.qid, musicLinks.target))
-          .where(and(inArray(musicLinks.qid, albumQids), eq(musicLinks.property, P175)))
-      : [],
-  ]);
+          .where(and(inArray(musicLinks.qid, albumQids), eq(musicLinks.property, P175))),
+        // Just the form's album, not the whole tracklist.
+        db
+          .select({
+            albumQid: submissions.albumQid,
+            album: sql<unknown>`json_extract(${submissions.input}, '$.album')`.mapWith(parseJson),
+          })
+          .from(submissions)
+          .where(
+            inArray(
+              submissions.id,
+              page.map((p) => p.latest),
+            ),
+          ),
+      ])
+    : [[], [], [], [], []];
   const artists = new Map<number, RunArtist[]>();
   for (const p of performers)
     if (p.label)
@@ -214,18 +260,11 @@ albumRoutes.get("/", async (c) => {
     const type = mirrorType(l.kind, l.instanceOf);
     if (type) types.set(l.qid, type);
   }
-  const latestRuns = page
-    .slice(0, ALBUM_PAGE_SIZE)
-    .filter((p) => !types.has(p.albumQid!))
-    .map((p) => Number(p.latest));
-  if (latestRuns.length)
-    for (const r of await db
-      .select({ albumQid: submissions.albumQid, input: submissions.input })
-      .from(submissions)
-      .where(inArray(submissions.id, latestRuns))) {
-      const type = inputType(r.input);
-      if (type) types.set(r.albumQid!, type);
-    }
+  for (const r of latestInputs) {
+    if (types.has(r.albumQid!)) continue;
+    const type = inputType({ album: r.album });
+    if (type) types.set(r.albumQid!, type);
+  }
 
   c.header("Cache-Control", "no-store");
   return c.json({
@@ -242,6 +281,6 @@ albumRoutes.get("/", async (c) => {
       artists,
       types,
     ),
-    next: more ? Number(page[ALBUM_PAGE_SIZE - 1].latest) : null,
+    next: more ? page[ALBUM_PAGE_SIZE - 1].latest : null,
   } satisfies AlbumListResponse);
 });
