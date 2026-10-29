@@ -2,18 +2,20 @@
 // discography one album at a time:
 //
 //   GET /api/artists/search?q=…   artists by name (exact, then prefix), or by QID or Wikidata URL
+//   GET /api/artists/recent       the artists of the user's latest runs, newest first
 //   GET /api/artists/:qid         the artist and its albums, EPs and singles, oldest first
 import { Hono } from "hono";
-import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "./db.ts";
 import { propertyNumber, qidNumber, toQid } from "./ids.ts";
 import { musicExternalIds, musicItems, musicLinks, submissions } from "../db/schema.ts";
 import type { AuthEnv } from "./auth/session.ts";
 import { searchLabels } from "./items.ts";
-import { editGroupUrl } from "./submissions.ts";
+import { editGroupUrl, runArtists } from "./submissions.ts";
 import { describeItems, WikidataEditError } from "./wikidata-client.ts";
 import { normalizeQid, QID } from "../src/lib/plan.ts";
 import { albumType, BLOCKED_ARTISTS, type MusicKind } from "../src/lib/music.ts";
+import { coerceState } from "../src/lib/state.ts";
 import { labelSearchKey } from "../src/lib/titles.ts";
 import type {
   ArtistAlbum,
@@ -21,6 +23,8 @@ import type {
   ArtistResult,
   ArtistSearchResponse,
   ArtistSingle,
+  RecentArtist,
+  RecentArtistsResponse,
   SubmissionStatus,
 } from "../src/lib/api-types.ts";
 
@@ -145,6 +149,86 @@ artistRoutes.get("/search", async (c) => {
     };
   });
   return c.json({ artists } satisfies ArtistSearchResponse);
+});
+
+/** The most artists GET /recent returns. */
+export const MAX_RECENT_ARTISTS = 8;
+/** The user's latest runs GET /recent takes its artists from. */
+const RECENT_RUNS = 20;
+
+/** One of the user's runs on an album, as read from the database. */
+export interface RecentRunRow {
+  albumQid: number;
+  title: string;
+  createdAt: string;
+  input: unknown;
+}
+
+/**
+ * The artists of the user's runs, newest run first, each once, at most
+ * MAX_RECENT_ARTISTS. A run's artists are its album's performers in the mirror
+ * (`linked`), else the ones its form named, as a done run links to them. The
+ * album is named as the mirror labels it, else by the run's title.
+ */
+export function recentArtists(
+  runs: RecentRunRow[],
+  linked: ReadonlyMap<number, { qid: string; label: string | null }[]>,
+  albumLabels: ReadonlyMap<number, string>,
+): RecentArtist[] {
+  const found = new Map<string, RecentArtist>();
+  for (const r of runs)
+    for (const a of runArtists(coerceState(r.input), linked.get(r.albumQid) ?? []))
+      if (!found.has(a.qid))
+        found.set(a.qid, {
+          ...a,
+          album: { qid: toQid(r.albumQid), label: albumLabels.get(r.albumQid) || r.title },
+          at: r.createdAt,
+        });
+  return [...found.values()].slice(0, MAX_RECENT_ARTISTS);
+}
+
+// Before /:qid, which would take "recent" for a QID.
+artistRoutes.get("/recent", async (c) => {
+  const runs = (
+    await db
+      .select({
+        albumQid: submissions.albumQid,
+        title: submissions.title,
+        createdAt: submissions.createdAt,
+        input: submissions.input,
+      })
+      .from(submissions)
+      .where(and(eq(submissions.userId, c.get("user")!.id), isNotNull(submissions.albumQid)))
+      .orderBy(desc(submissions.id))
+      .limit(RECENT_RUNS)
+  ).map((r) => ({ ...r, albumQid: r.albumQid! }));
+  const albumQids = [...new Set(runs.map((r) => r.albumQid))];
+  const [performers, albums] = albumQids.length
+    ? await Promise.all([
+        db
+          .select({ qid: musicLinks.qid, target: musicLinks.target, label: musicItems.label })
+          .from(musicLinks)
+          .leftJoin(musicItems, eq(musicItems.qid, musicLinks.target))
+          .where(and(inArray(musicLinks.qid, albumQids), eq(musicLinks.property, P175)))
+          .orderBy(musicLinks.target),
+        db
+          .select({ qid: musicItems.qid, label: musicItems.label })
+          .from(musicItems)
+          .where(inArray(musicItems.qid, albumQids)),
+      ])
+    : [[], []];
+  const linked = new Map<number, { qid: string; label: string | null }[]>();
+  for (const p of performers)
+    linked.set(p.qid, [...(linked.get(p.qid) ?? []), { qid: toQid(p.target), label: p.label }]);
+
+  c.header("Cache-Control", "no-store");
+  return c.json({
+    artists: recentArtists(
+      runs,
+      linked,
+      new Map(albums.flatMap((a) => (a.label ? [[a.qid, a.label]] : []))),
+    ),
+  } satisfies RecentArtistsResponse);
 });
 
 /** A run on one of the artist's albums, as read from the database. */

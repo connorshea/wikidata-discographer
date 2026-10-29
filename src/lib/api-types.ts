@@ -240,6 +240,19 @@ export interface ArtistSearchResponse {
   artists: ArtistResult[];
 }
 
+/** An artist of one of the user's latest runs, for the Artists page to suggest. */
+export interface RecentArtist extends RunArtist {
+  /** The album or single the run was on. */
+  album: { qid: string; label: string };
+  /** When the run started, in UTC as "YYYY-MM-DD HH:MM:SS". */
+  at: string;
+}
+
+/** Body of GET /api/artists/recent: newest run first. */
+export interface RecentArtistsResponse {
+  artists: RecentArtist[];
+}
+
 /** One of an artist's albums or EPs, as of the mirror. */
 export interface ArtistAlbum {
   qid: string;

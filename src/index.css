@@ -3949,6 +3949,12 @@ fieldset.lock {
 .artist-results li + li {
   border-top: 1px solid var(--line);
 }
+.recent-artists-head {
+  margin: 16px 0 0;
+}
+.artist-results.recent-artists {
+  margin-top: 8px;
+}
 .artist-result {
   display: flex;
   flex-wrap: wrap;
