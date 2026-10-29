@@ -322,7 +322,7 @@ describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () 
     await clear();
   });
 
-  async function runTracklist(): Promise<number> {
+  async function runTracklist(albumQid: string | null = ALBUM): Promise<number> {
     const [res] = await db.insert(submissions).values({
       userId: USER.id,
       editGroup: "0123456789abcdef",
@@ -339,7 +339,7 @@ describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () 
         claims: [{ property: "P658", value: { type: "item", id: `Q${TRACK}` } }],
       },
     ];
-    expect(await runPlan(res.insertId, USER, ops, "0123456789abcdef", ALBUM)).toBe(true);
+    expect(await runPlan(res.insertId, USER, ops, "0123456789abcdef", albumQid)).toBe(true);
     return res.insertId;
   }
 
@@ -354,6 +354,12 @@ describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () 
     expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
     const [run] = await db.select().from(submissions).where(eq(submissions.id, id));
     expect(run.status).toBe("done");
+  });
+
+  it("has what an edit to any other item adds, without reading it again", async () => {
+    // As no album is given, nothing reads it again after the run.
+    await runTracklist(null);
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
   });
 
   it("has it after a failed run too, as the edit may have been saved", async () => {

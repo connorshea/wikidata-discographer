@@ -151,14 +151,18 @@ function transient(code: string): boolean {
  */
 async function read(
   params: Record<string, string>,
-  { accessToken, retries = MAX_READ_RETRIES }: { accessToken?: string; retries?: number } = {},
+  {
+    accessToken,
+    retries = MAX_READ_RETRIES,
+    timeoutMs,
+  }: { accessToken?: string; retries?: number; timeoutMs?: number } = {},
 ): Promise<ApiResponse> {
   for (let attempt = 0; ; attempt++) {
     // 5 s, 15 s, 45 s.
     const backoff = 5_000 * 3 ** attempt;
     let res: ApiResponse;
     try {
-      res = await call("GET", params, accessToken);
+      res = await call("GET", params, accessToken, timeoutMs);
     } catch (err) {
       if (err instanceof WikidataEditError && transient(err.code) && attempt < retries) {
         await sleep(backoff);
@@ -288,13 +292,13 @@ export interface Entity {
  */
 export async function getEntities(
   qids: readonly string[],
-  { retries }: { retries?: number } = {},
+  { retries, timeoutMs }: { retries?: number; timeoutMs?: number } = {},
 ): Promise<Map<string, Entity>> {
   const out = new Map<string, Entity>();
   if (qids.length === 0) return out;
   const res = await read(
     { action: "wbgetentities", ids: qids.join("|"), props: "info|labels|descriptions|claims" },
-    { retries },
+    { retries, timeoutMs },
   );
   const err = apiError(res);
   if (err) throw new WikidataEditError(err.code, err.text);
