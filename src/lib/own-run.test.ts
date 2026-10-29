@@ -15,6 +15,7 @@ import {
   saveOwnRun,
   settleOwnRun,
 } from "./own-run.ts";
+import { SINGLE_CLASS } from "./plan.ts";
 import { EMPTY, emptyDisc } from "./state.ts";
 import { track } from "./example.fixture.ts";
 import { removeTrack } from "./tracks.ts";
@@ -155,6 +156,20 @@ describe("applyCreated", () => {
     expect(s.discs[1].comp).toEqual({ 2: "Q4" });
   });
 
+  it("records a new single as a single, as the lookup of it will", () => {
+    const s = structuredClone(EMPTY);
+    s.album = { ...s.album, mode: "create", type: SINGLE_CLASS };
+    applyCreated(s, [edit({ key: "album", qid: "Q1" })]);
+    expect(s.album).toMatchObject({ mode: "existing", qid: "Q1", singleQid: "Q1" });
+  });
+
+  it("leaves an album's singleQid empty", () => {
+    const s = structuredClone(EMPTY);
+    s.album = { ...s.album, mode: "create" };
+    applyCreated(s, [edit({ key: "album", qid: "Q1" })]);
+    expect(s.album.singleQid).toBe("");
+  });
+
   it("skips failures, unknowns not found, statement edits and missing discs", () => {
     const s = structuredClone(EMPTY);
     const edits = [
@@ -192,6 +207,15 @@ describe("formOfRun", () => {
     applyCreated(s, edits);
     s.artists = { b: "Q11", a: "Q10" };
     expect(formOfRun(s, run)).toBe("same");
+  });
+
+  it("is the same for a new single once the lookup records it as one", () => {
+    const single = structuredClone(input);
+    single.album.type = SINGLE_CLASS;
+    const s = structuredClone(single);
+    applyCreated(s, edits);
+    s.album.singleQid = "Q1";
+    expect(formOfRun(s, { input: single, edits })).toBe("same");
   });
 
   it("is the same for a run that created nothing", () => {
