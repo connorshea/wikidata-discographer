@@ -13,7 +13,7 @@ import { searchLabels } from "./items.ts";
 import { editGroupUrl } from "./submissions.ts";
 import { describeItems, WikidataEditError } from "./wikidata-client.ts";
 import { normalizeQid, QID } from "../src/lib/plan.ts";
-import { albumType, type MusicKind } from "../src/lib/music.ts";
+import { albumType, BLOCKED_ARTISTS, type MusicKind } from "../src/lib/music.ts";
 import { labelSearchKey } from "../src/lib/titles.ts";
 import type {
   ArtistAlbum,
@@ -37,15 +37,6 @@ const ALBUM_KINDS: MusicKind[] = ["album", "ep"];
 export const MAX_ARTIST_ALBUMS = 500;
 /** The most singles an artist page lists: the oldest ones, if it has more. */
 export const MAX_ARTIST_SINGLES = 500;
-
-/**
- * Performers the artist page won't open, by QID, with the name its error
- * gives. "Various artists" (Q3108914) isn't a real artist, and is the
- * performer of so many compilations that its page would list all of them.
- */
-export const BLOCKED_ARTISTS: ReadonlyMap<string, string> = new Map([
-  ["Q3108914", "Various artists"],
-]);
 
 /** The query's QID, if it's one or a Wikidata URL. */
 export function queryQid(q: string): string | null {

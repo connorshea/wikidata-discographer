@@ -50,6 +50,15 @@ export const CLASS_KINDS: readonly (readonly [string, MusicKind])[] = [
   ["Q2088357", "artist"], // musical ensemble
 ];
 
+/**
+ * Performers the artist page won't open, by QID, with the name its error
+ * gives. "Various artists" (Q3108914) isn't a real artist, and is the
+ * performer of so many compilations that its page would list all of them.
+ */
+export const BLOCKED_ARTISTS: ReadonlyMap<string, string> = new Map([
+  ["Q3108914", "Various artists"],
+]);
+
 /** Any item holding one of these is mirrored as an artist (people included). */
 export const ARTIST_ID_PROPERTIES = ["P434", "P1902", "P2850", "P1953", "P2722", "P1728"] as const;
 

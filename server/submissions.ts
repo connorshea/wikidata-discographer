@@ -21,7 +21,13 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db.ts";
-import { musicExternalIds, musicItems, submissions, wikidataEdits } from "../db/schema.ts";
+import {
+  musicExternalIds,
+  musicItems,
+  musicLinks,
+  submissions,
+  wikidataEdits,
+} from "../db/schema.ts";
 import { editEligibility } from "./auth/eligibility.ts";
 import { type AuthEnv, type AuthUser, requireUser } from "./auth/session.ts";
 import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
@@ -43,9 +49,15 @@ import {
   toStatement,
   WikidataEditError,
 } from "./wikidata-client.ts";
-import { buildPlan, describeOp, type Op, type State } from "../src/lib/plan.ts";
+import { albumArtists, buildPlan, describeOp, type Op, QID, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
-import { ALBUM_ID_FIELDS, ID_PROPERTIES, KIND_NOUNS, type MusicKind } from "../src/lib/music.ts";
+import {
+  ALBUM_ID_FIELDS,
+  BLOCKED_ARTISTS,
+  ID_PROPERTIES,
+  KIND_NOUNS,
+  type MusicKind,
+} from "../src/lib/music.ts";
 import type {
   EditLogEntry,
   SubmissionInfo,
@@ -53,6 +65,7 @@ import type {
   SubmissionRequest,
   SubmissionStatus,
   RecreateConflict,
+  RunArtist,
   TakenIdsConflict,
   UnknownRunConflict,
 } from "../src/lib/api-types.ts";
@@ -305,6 +318,16 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
     .orderBy(wikidataEdits.id);
   c.header("Cache-Control", "no-store");
   const input = coerceState(row.input);
+  // Only a done run links to its artists, so a running one isn't asked each poll.
+  const performers =
+    row.status === "done" && row.albumQid != null
+      ? await db
+          .select({ target: musicLinks.target, label: musicItems.label })
+          .from(musicLinks)
+          .leftJoin(musicItems, eq(musicItems.qid, musicLinks.target))
+          .where(and(eq(musicLinks.qid, row.albumQid), eq(musicLinks.property, P175)))
+          .orderBy(musicLinks.target)
+      : [];
   return c.json({
     id: row.id,
     status: row.status as SubmissionStatus,
@@ -332,8 +355,47 @@ submissionRoutes.get("/:id", requireUser, async (c) => {
         error: e.errorText,
       })),
     input,
+    artists:
+      row.status === "done"
+        ? runArtists(
+            input,
+            performers.map((p) => ({ qid: toQid(p.target), label: p.label })),
+          )
+        : [],
   } satisfies SubmissionInfo);
 });
+
+const P175 = propertyNumber("P175");
+
+/** The most artists a done run links to, for a collaboration album. */
+export const MAX_RUN_ARTISTS = 3;
+
+/**
+ * A done run's album artists, to link to their pages: the album's performers
+ * (P175) in the mirror, `linked`, which has the items a run creates too. Those
+ * a new album's form names come first, in its order, named as the mirror
+ * labels them, else as the form does. A new album the mirror doesn't have
+ * falls back to the form's artists.
+ */
+export function runArtists(
+  input: State,
+  linked: { qid: string; label: string | null }[],
+): RunArtist[] {
+  const named = new Map<string, string>();
+  if (input.album.mode === "create")
+    for (const name of albumArtists(input)) {
+      const qid = (input.artists[name] ?? "").trim();
+      if (QID.test(qid) && !named.has(qid)) named.set(qid, name);
+    }
+  const labels = new Map(linked.map((l) => [l.qid, l.label]));
+  const qids = linked.length
+    ? [...[...named.keys()].filter((q) => labels.has(q)), ...labels.keys()]
+    : [...named.keys()];
+  return [...new Set(qids)]
+    .filter((q) => !BLOCKED_ARTISTS.has(q))
+    .slice(0, MAX_RUN_ARTISTS)
+    .map((qid) => ({ qid, label: labels.get(qid) ?? named.get(qid) ?? qid }));
+}
 
 /** When a running run's next edit goes out, while it waits its turn (server/edit-pace.ts). */
 function waitingUntil(status: string, userId: number): string | null {

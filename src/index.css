@@ -2431,6 +2431,12 @@ button.go circle + circle {
 .run-links .hint {
   margin: 0;
 }
+.run-next .row {
+  margin-top: 0;
+}
+.run-next .hint {
+  margin: 6px 0 0;
+}
 .run-log {
   border: 1px solid var(--line);
   border-radius: 9px;

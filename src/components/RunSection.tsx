@@ -34,6 +34,7 @@ import {
   editShares,
   type EditShare,
   entryKind,
+  finishedThisWeek,
   KIND_EDGES,
   plannedEdits,
   roughly,
@@ -1010,6 +1011,7 @@ function RunProgress({
       {run.status === "interrupted" && (
         <p className="msg warn">The server restarted during this run. Start it again to finish.</p>
       )}
+      {run.status === "done" && run.artists.length > 0 && <MoreFromArtists run={run} />}
       {!running && (
         <div className="row run-links">
           <a href={run.editGroupUrl} target="_blank" rel="noreferrer">
@@ -1038,6 +1040,27 @@ function RunProgress({
             </button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Once a run is done, links to its artists' pages, to go on to their other releases. */
+function MoreFromArtists({ run }: { run: SubmissionInfo }) {
+  return (
+    <div className="run-next">
+      <div className="row">
+        {run.artists.map((a) => (
+          <Link key={a.qid} className="btn" href={`/artists/${a.qid}`}>
+            See more albums from {a.label}
+          </Link>
+        ))}
+      </div>
+      {finishedThisWeek(run.finishedAt) && (
+        <p className="hint">
+          Discographer's copy of Wikidata is refreshed weekly, so this{" "}
+          {releaseNoun(run.input.album)} may still show Add tracklist there for a few days.
+        </p>
       )}
     </div>
   );

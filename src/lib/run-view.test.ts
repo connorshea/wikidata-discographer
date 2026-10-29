@@ -5,6 +5,7 @@ import { buildPlan, describeOp, EP_CLASS } from "./plan.ts";
 import {
   editShares,
   entryKind,
+  finishedThisWeek,
   roughly,
   runEdits,
   runProgress,
@@ -41,6 +42,7 @@ function runOf(done: number, status: SubmissionInfo["status"] = "running"): Subm
       error: null,
     })),
     input: EXAMPLE,
+    artists: [],
   };
 }
 
@@ -146,5 +148,19 @@ describe("roughly", () => {
     expect(roughly(20)).toBe("less than a minute");
     expect(roughly(70)).toBe("about a minute");
     expect(roughly(200)).toBe("about 3 minutes");
+  });
+});
+
+describe("finishedThisWeek", () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+
+  it("is true for a run that ended in the last week", () => {
+    expect(finishedThisWeek("2026-10-17 10:00:00", now)).toBe(true);
+  });
+
+  it("is false for an older run, or one with no end", () => {
+    expect(finishedThisWeek("2026-10-01 10:00:00", now)).toBe(false);
+    expect(finishedThisWeek(null, now)).toBe(false);
+    expect(finishedThisWeek("not a date", now)).toBe(false);
   });
 });

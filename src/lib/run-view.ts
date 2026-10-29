@@ -162,6 +162,19 @@ export function entryKind(e: EditLogEntry): PreviewKind {
   return "album";
 }
 
+/** How often the mirror is refreshed from Wikidata's dump. */
+const MIRROR_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a run ended since the mirror was last refreshed, as far as can be
+ * told: within its week. Its edits may not show in the mirror yet.
+ */
+export function finishedThisWeek(finishedAt: string | null, now = new Date()): boolean {
+  if (!finishedAt) return false;
+  const d = new Date(`${finishedAt.replace(" ", "T")}Z`);
+  return !Number.isNaN(d.getTime()) && now.getTime() - d.getTime() < MIRROR_REFRESH_MS;
+}
+
 /** The run's start in the viewer's time, with the date unless it's today. */
 export function startedAt(createdAt: string, now = new Date()): string {
   const d = new Date(`${createdAt.replace(" ", "T")}Z`);
