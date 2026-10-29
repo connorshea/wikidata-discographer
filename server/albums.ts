@@ -16,7 +16,12 @@ import { editGroupUrl } from "./submissions.ts";
 import { albumType, type MusicKind } from "../src/lib/music.ts";
 import { EP_CLASS, SINGLE_CLASS } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
-import type { AlbumListEntry, AlbumListResponse, SubmissionStatus } from "../src/lib/api-types.ts";
+import type {
+  AlbumListEntry,
+  AlbumListResponse,
+  RunArtist,
+  SubmissionStatus,
+} from "../src/lib/api-types.ts";
 
 const P175 = propertyNumber("P175");
 
@@ -68,7 +73,7 @@ export function inputType(input: unknown): string | null {
 /**
  * One entry per album, in the order of `albumQids`, with its runs newest
  * first. The label is the mirror's, else the title of the album's latest run.
- * The artists are the album's performers (P175) in the mirror, by label, and
+ * The artists are the album's performers (P175) in the mirror that have a label, and
  * the type is the mirror's or what the latest run's form said.
  */
 export function groupAlbums(
@@ -76,7 +81,7 @@ export function groupAlbums(
   runs: RunRow[],
   edits: Map<number, RunEdits>,
   labels: Map<number, string>,
-  artists: Map<number, string[]>,
+  artists: Map<number, RunArtist[]>,
   types: Map<number, string>,
   userId: number | null,
 ): AlbumListEntry[] {
@@ -195,15 +200,16 @@ albumRoutes.get("/", async (c) => {
       : [],
     albumQids.length
       ? db
-          .select({ qid: musicLinks.qid, label: musicItems.label })
+          .select({ qid: musicLinks.qid, target: musicLinks.target, label: musicItems.label })
           .from(musicLinks)
           .innerJoin(musicItems, eq(musicItems.qid, musicLinks.target))
           .where(and(inArray(musicLinks.qid, albumQids), eq(musicLinks.property, P175)))
       : [],
   ]);
-  const artists = new Map<number, string[]>();
+  const artists = new Map<number, RunArtist[]>();
   for (const p of performers)
-    if (p.label) artists.set(p.qid, [...(artists.get(p.qid) ?? []), p.label]);
+    if (p.label)
+      artists.set(p.qid, [...(artists.get(p.qid) ?? []), { qid: toQid(p.target), label: p.label }]);
 
   // A release the run just created isn't in the mirror until the next dump, so
   // go by what its latest run's form said it was.
