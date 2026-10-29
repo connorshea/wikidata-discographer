@@ -6,6 +6,7 @@ import type { AlbumListEntry, AlbumListResponse, AlbumRun, RunArtist } from "../
 import { useAuth } from "../lib/auth-context.ts";
 import { api } from "../lib/client.ts";
 import { BLOCKED_ARTISTS } from "../lib/music.ts";
+import RecordIcon from "./RecordIcon.tsx";
 
 const STATUS: Record<AlbumRun["status"], { label: string; tone: string }> = {
   running: { label: "Running", tone: "" },
@@ -98,6 +99,9 @@ export default function AlbumList() {
             checked={mine}
             onChange={(e) => {
               setMine(e.target.checked);
+              // The other filter's albums go, so the spinner takes their place.
+              setAlbums([]);
+              setNext(null);
               setBusy(true);
               setError(null);
             }}
@@ -106,6 +110,13 @@ export default function AlbumList() {
         </label>
       )}
       {error && <p className="msg err">{error}</p>}
+      {/* The first page. Show more says it's loading on its button instead. */}
+      {busy && !albums.length && (
+        <div className="record-loading" role="status">
+          <RecordIcon size={64} className="spinning" />
+          <span className="visually-hidden">Loading albums</span>
+        </div>
+      )}
       {!busy && !error && !albums.length && (
         <p className="hint">{onlyMine ? "You haven't run any albums yet." : "No albums yet."}</p>
       )}
