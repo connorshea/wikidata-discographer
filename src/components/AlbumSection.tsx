@@ -267,14 +267,15 @@ export default function AlbumSection({
 
 /**
  * The album a single is taken from (P13602), with its label once Wikidata has been asked.
- * A single already taken from other albums keeps them, and gets this one as well.
+ * A single already taken from an album keeps it, and the field is locked: it's changed on
+ * Wikidata, not here.
  */
 function TakenFrom({ state, update, plan, already }: SectionProps & { already: string[] }) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
   const qid = A.takenFrom.trim();
-  const others = already.filter((q) => q !== qid);
-  const lookup = useItemSummaries([qid, ...others], state.settings.lang);
+  const locked = already.length > 0;
+  const lookup = useItemSummaries([qid, ...already], state.settings.lang);
   const found = lookup(qid);
   const ok = found?.status === "ok" ? found : null;
   const err = plan.fieldErrs.takenFrom;
@@ -291,6 +292,7 @@ function TakenFrom({ state, update, plan, already }: SectionProps & { already: s
         className={warning ? "mono warn" : "mono"}
         placeholder="Q… or Wikidata URL"
         value={A.takenFrom}
+        disabled={locked}
         aria-invalid={!!err || found?.status === "missing" || found?.status === "redirect"}
         aria-describedby="takenFrom-err takenFrom-sub"
         onChange={(v) => update((s) => void (s.album.takenFrom = v))}
@@ -343,23 +345,18 @@ function TakenFrom({ state, update, plan, already }: SectionProps & { already: s
             </span>
             From the single's “single from” relationship on MusicBrainz
           </>
-        ) : qid && already.includes(qid) ? (
-          "The single is already taken from this album, so nothing is added."
-        ) : others.length ? (
+        ) : locked ? (
           <span>
             Already taken from{" "}
-            {others.map((q, i) => (
+            {already.map((q, i) => (
               <Fragment key={q}>
-                {i > 0 && (i === others.length - 1 ? " and " : ", ")}
+                {i > 0 && (i === already.length - 1 ? " and " : ", ")}
                 <a href={`${wikiBaseUrl}/wiki/${q}`} target="_blank" rel="noreferrer">
                   {name(q)}
                 </a>
               </Fragment>
             ))}
-            .{" "}
-            {qid
-              ? `That stays, and this adds ${ok?.label ?? qid}, since a single can be on more than one album.`
-              : "That stays. Add another album here, or leave it empty."}
+            . Change it on Wikidata.
           </span>
         ) : (
           "Optional. The album's QID or Wikidata link. Left empty, nothing is added."

@@ -69,7 +69,7 @@ export interface AlbumState {
   singleQid: string;
   /**
    * The album a single is taken from (P13602), a QID. Only a single gets it, a new one or one
-   * already on Wikidata. Empty for none.
+   * already on Wikidata that isn't taken from an album yet. Empty for none.
    */
   takenFrom: string;
 }
@@ -1526,8 +1526,8 @@ export function buildPlan(state: State): Plan {
         ? []
         : [
             ...[...counts, ...albumRecAt].map((c): Claim => ({ ...c, ifMissing: true })),
-            // Not ifMissing: a single can be taken from more than one album, so one taken from
-            // another still gets this one. One already taken from it isn't given it twice.
+            // The form clears the field for a single already taken from an album, so this is
+            // only ever a single's first.
             ...takenFromClaims,
           ]),
     ],

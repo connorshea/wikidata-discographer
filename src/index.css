@@ -595,6 +595,10 @@ button:focus-visible {
 input[aria-invalid="true"] {
   border-color: var(--err);
 }
+input[type="text"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .mono {
   font-family: var(--mono);
 }

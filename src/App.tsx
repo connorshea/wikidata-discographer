@@ -367,6 +367,12 @@ function Form() {
     update((s) => {
       s.album.singleQid = singleQid;
     });
+  // A single already taken from an album isn't given another, such as one a MusicBrainz
+  // import read, so the plan, the server and the run all leave it as it is.
+  if (takenFrom.length && state.album.takenFrom)
+    update((s) => {
+      s.album.takenFrom = "";
+    });
   const startRef = useRef<StartHandle>(null);
   const loadedRg = useRef(false);
   useEffect(() => {
