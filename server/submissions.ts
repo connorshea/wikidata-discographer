@@ -258,13 +258,14 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
     return c.json({ error: taken.join(" "), takenIds: taken } satisfies TakenIdsConflict, 409);
 
   const editGroup = randomBytes(8).toString("hex");
+  const albumQid = state.album.mode === "create" ? null : state.album.qid.trim();
   const [res] = await db.insert(submissions).values({
     userId: user.id,
     editGroup,
     status: "running",
     title: state.album.mode === "create" ? state.album.title.trim() : state.album.qid.trim(),
     // buildPlan has checked it's a QID.
-    albumQid: state.album.mode === "create" ? null : qidNumber(state.album.qid.trim()),
+    albumQid: albumQid == null ? null : qidNumber(albumQid),
     input: state,
   });
   const id = res.insertId;
@@ -272,7 +273,7 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
   // still says "running" and the form never got its QIDs, so another run of
   // the same form would create them again. It's held until the next boot's
   // markInterrupted.
-  void runPlan(id, user, plan.ops, editGroup).then(
+  void runPlan(id, user, plan.ops, editGroup, albumQid).then(
     (saved) => {
       if (saved) running.delete(user.id);
     },
@@ -618,12 +619,27 @@ async function checkRecreate(
     : null;
 }
 
-/** Execute the plan's operations in order as `user`. Stops at the first failure. */
+/** Read `qid` from Wikidata again and write it to the mirror. A failure only logs. */
+async function refreshMirror(qid: string): Promise<void> {
+  try {
+    const entity = (await getEntities([qid])).get(qid);
+    const row = entity?.id === qid ? entityToRow(entity) : null;
+    if (row) await upsertRows([row], { source: "app" });
+  } catch (e) {
+    console.error("mirror write failed", e);
+  }
+}
+
+/**
+ * Execute the plan's operations in order as `user`. Stops at the first failure.
+ * `albumQid` is the existing album the run adds to, or null for a new one.
+ */
 export async function runPlan(
   submissionId: number,
   user: AuthUser,
   ops: readonly Op[],
   editGroup: string,
+  albumQid: string | null,
   { retryMs = [2_000, 10_000] }: { retryMs?: readonly number[] } = {},
 ): Promise<boolean> {
   const editUser: EditUser = { id: user.id, username: user.username };
@@ -645,6 +661,9 @@ export async function runPlan(
 
   let status: SubmissionStatus = "done";
   let error: string | null = null;
+  let album = albumQid;
+  // Whether an edit to the album was sent, even if it then failed or went unanswered.
+  let albumEdited = false;
   for (const op of ops) {
     const what = describeOp(op);
     // A create's log row, until it's settled, and whether the item may exist.
@@ -719,11 +738,13 @@ export async function runPlan(
           })
           .where(eq(wikidataEdits.id, pendingId));
         pendingId = null;
-        if (op.key === "album")
+        if (op.key === "album") {
+          album = entity.id;
           await db
             .update(submissions)
             .set({ albumQid: qidNumber(entity.id) })
             .where(eq(submissions.id, submissionId));
+        }
         // Add it to the mirror now, so duplicate checks see it before the next dump.
         const row = entityToRow(entity);
         if (row)
@@ -749,6 +770,7 @@ export async function runPlan(
           await log({ op: "addClaims", what, qid, ok: true, skipped });
           continue;
         }
+        if (qid === album) albumEdited = true;
         const body = await editRequest(editUser, {
           action: "wbeditentity",
           id: qid,
@@ -811,6 +833,10 @@ export async function runPlan(
       break;
     }
   }
+  // Wikidata's answer to an edit has only the statements sent, so the row
+  // refreshed from it above is skipped for want of P31. Read the album again,
+  // so its artist page shows the tracklist by the time the run is done.
+  if (album && albumEdited) await refreshMirror(album);
   // Whether the run's end was saved. If not, it stays "running" until the
   // next boot's markInterrupted.
   for (let attempt = 0; ; attempt++) {

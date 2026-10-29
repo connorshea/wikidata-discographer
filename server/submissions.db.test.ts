@@ -15,8 +15,9 @@ import {
   users,
   wikidataEdits,
 } from "../db/schema.ts";
-import { submissionRoutes } from "./submissions.ts";
-import { SINGLE_CLASS, type State } from "../src/lib/plan.ts";
+import { runPlan, submissionRoutes } from "./submissions.ts";
+import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
+import { type Op, SINGLE_CLASS, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
 
@@ -37,6 +38,12 @@ const FOUND = vi.hoisted(() => ({
   check: { status: "missing" } as { status: "ok" | "missing" } | { status: "redirect"; to: string },
 }));
 
+/**
+ * Wikidata for runPlan: the album it reads and edits, and whether an edit is saved
+ * but its answer lost. Reads and edits throw while there's no album.
+ */
+const WIKIDATA = vi.hoisted(() => ({ album: null as Entity | null, answerLost: false }));
+
 vi.mock("./auth/session.ts", () => ({
   requireUser: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
     c.set("user", USER);
@@ -50,11 +57,27 @@ vi.mock("./check-qids.ts", () => ({ checkPlanQids: async () => ["Past the guards
 vi.mock("./recover.ts", () => ({ findCreated: async () => [], waitForCreated: async () => [] }));
 vi.mock("./wikidata-client.ts", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  editRequest: async () => {
-    throw new Error("No edits from tests");
+  // Like Wikidata, the answer has only the statements sent.
+  editRequest: async (_user: unknown, params: { id: string; data: string }) => {
+    const album = WIKIDATA.album;
+    if (!album) throw new Error("No edits from tests");
+    const { claims } = JSON.parse(params.data) as { claims: WikibaseStatement[] };
+    for (const c of claims)
+      (album.claims![c.mainsnak.property] ??= []).push({ ...c, rank: c.rank ?? "normal" });
+    album.lastrevid = (album.lastrevid ?? 0) + 1;
+    if (WIKIDATA.answerLost) throw new Error("socket hang up");
+    return {
+      entity: {
+        id: params.id,
+        lastrevid: album.lastrevid,
+        claims: Object.groupBy(claims, (c) => c.mainsnak.property),
+      },
+    };
   },
-  getEntities: async () => {
-    throw new Error("No Wikidata reads from tests");
+  getEntities: async (qids: string[]) => {
+    const album = WIKIDATA.album;
+    if (!album) throw new Error("No Wikidata reads from tests");
+    return new Map(qids.includes(album.id) ? [[album.id, structuredClone(album)]] : []);
   },
   checkItems: async (qids: string[]) => new Map(qids.map((q) => [q, FOUND.check])),
 }));
@@ -261,5 +284,83 @@ describe.skipIf(!process.env.DB_TESTS)("a run's artists", () => {
     expect(await artists(await run("running"))).toEqual([]);
     await clear();
     expect(await artists(await run("failed"))).toEqual([]);
+  });
+});
+
+describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () => {
+  const ALBUM = `Q${RUN_ALBUM.qid}`;
+  const TRACK = 990000170;
+
+  beforeEach(async () => {
+    await clear();
+    await db.insert(users).values({ id: USER.id, username: USER.username });
+    // The mirror has the album as of the last dump, with no tracklist.
+    await db
+      .insert(musicItems)
+      .values({ qid: RUN_ALBUM.qid, kind: "album", label: "Homogenic", instanceOf: [], revid: 1 });
+    WIKIDATA.album = {
+      id: ALBUM,
+      lastrevid: 1,
+      labels: { en: { language: "en", value: "Homogenic" } },
+      claims: {
+        P31: [
+          {
+            mainsnak: {
+              snaktype: "value",
+              property: "P31",
+              datavalue: { type: "wikibase-entityid", value: { id: "Q482994" } },
+            },
+            rank: "normal",
+          },
+        ],
+      },
+    };
+    WIKIDATA.answerLost = false;
+  });
+  afterAll(async () => {
+    WIKIDATA.album = null;
+    await clear();
+  });
+
+  async function runTracklist(): Promise<number> {
+    const [res] = await db.insert(submissions).values({
+      userId: USER.id,
+      editGroup: "0123456789abcdef",
+      status: "running",
+      title: ALBUM,
+      albumQid: RUN_ALBUM.qid,
+      input: newAlbum("Homogenic"),
+    });
+    const ops: Op[] = [
+      {
+        op: "addClaims",
+        target: { id: ALBUM },
+        what: "album tracklist",
+        claims: [{ property: "P658", value: { type: "item", id: `Q${TRACK}` } }],
+      },
+    ];
+    expect(await runPlan(res.insertId, USER, ops, "0123456789abcdef", ALBUM)).toBe(true);
+    return res.insertId;
+  }
+
+  async function mirrored() {
+    const [row] = await db.select().from(musicItems).where(eq(musicItems.qid, RUN_ALBUM.qid));
+    const links = await db.select().from(musicLinks).where(eq(musicLinks.qid, RUN_ALBUM.qid));
+    return { label: row.label, revid: row.revid, links: links.map((l) => [l.property, l.target]) };
+  }
+
+  it("has the tracklist the run added", async () => {
+    const id = await runTracklist();
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
+    const [run] = await db.select().from(submissions).where(eq(submissions.id, id));
+    expect(run.status).toBe("done");
+  });
+
+  it("has it after a failed run too, as the edit may have been saved", async () => {
+    WIKIDATA.answerLost = true;
+    const id = await runTracklist();
+    const [run] = await db.select().from(submissions).where(eq(submissions.id, id));
+    expect(run.status).toBe("failed");
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
   });
 });
