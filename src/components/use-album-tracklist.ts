@@ -23,6 +23,8 @@ export interface ExistingAlbum {
    * exactly one and no tracklist.
    */
   releaseGroup: string | null;
+  /** The albums it's a single taken from (P13602). Empty while unknown. */
+  takenFrom: string[];
 }
 
 const UNKNOWN: ExistingAlbum = {
@@ -30,6 +32,7 @@ const UNKNOWN: ExistingAlbum = {
   pending: false,
   tracklist: null,
   releaseGroup: null,
+  takenFrom: [],
 };
 
 /**
@@ -81,6 +84,7 @@ function existingAlbum(
       pending: false,
       tracklist: { qid, tracks: r.tracks },
       releaseGroup: null,
+      takenFrom: r.takenFrom,
     };
   // More than one is usually a mistake on the item: suggest none of them.
   return {
@@ -88,5 +92,6 @@ function existingAlbum(
     pending: false,
     tracklist: null,
     releaseGroup: r.releaseGroups.length === 1 ? r.releaseGroups[0] : null,
+    takenFrom: r.takenFrom,
   };
 }

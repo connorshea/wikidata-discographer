@@ -266,10 +266,13 @@ items.get("/:qid/tracklist", async (c) => {
   if (!/^Q\d+$/.test(qid)) return c.json({ error: "Not a QID" }, 400);
   try {
     // Asked live, not from the mirror: a tracklist added since the last dump counts.
-    const { P658, P436 } = await getStatementValues(qid, ["P658", "P436"], { retries: 0 });
+    const { P658, P436, P13602 } = await getStatementValues(qid, ["P658", "P436", "P13602"], {
+      retries: 0,
+    });
     return c.json({
       tracks: P658,
       releaseGroups: [...new Set(P436.filter((v) => MBID_RE.test(v)).map((v) => v.toLowerCase()))],
+      takenFrom: P13602,
     } satisfies TracklistResponse);
   } catch (err) {
     if (err instanceof WikidataEditError) return c.json({ error: err.message }, 502);

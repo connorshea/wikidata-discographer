@@ -133,6 +133,14 @@ export function kindOf(
   return null;
 }
 
+/**
+ * The kind of the item a single is taken from (P13602), from its P31 values. A person (Q5) counts
+ * as an artist here, since only their P31 is fetched, not the identifiers that mark them as one.
+ */
+export function takenFromKind(instanceOf: readonly string[]): MusicKind | null {
+  return kindOf(instanceOf, []) ?? (instanceOf.includes("Q5") ? "artist" : null);
+}
+
 /** The formats of the identifiers a MusicBrainz import adds to new tracks and compositions. */
 export const MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;

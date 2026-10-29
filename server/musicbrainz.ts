@@ -32,6 +32,7 @@ import {
   releaseChoices,
   releaseIds,
   releaseToForm,
+  singleFrom,
   wikidataLink,
 } from "../src/lib/musicbrainz.ts";
 import type { MusicKind } from "../src/lib/music.ts";
@@ -40,7 +41,7 @@ import type { MusicBrainzReleaseGroupResponse, MusicBrainzResponse } from "../sr
 const API_URL = () =>
   (process.env.MUSICBRAINZ_API_URL ?? "https://musicbrainz.org/ws/2").replace(/\/+$/, "");
 const RELEASE_INC =
-  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+release-group-level-rels+isrcs+place-rels";
+  "recordings+artist-credits+release-groups+work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+release-group-level-rels+release-group-rels+isrcs+place-rels";
 /** MusicBrainz's largest page, and how many pages of a release group's releases to read. */
 const PAGE_SIZE = 100;
 const MAX_PAGES = 3;
@@ -239,24 +240,41 @@ export async function lookupRelease(
   album?: { qid: string; releaseGroup: string },
 ): Promise<MbLookups> {
   const ids = releaseIds(release);
-  const [albums, artists, recordings, works, iswcs, spotify, appleMusic, deezer, tidal] =
-    await Promise.all([
-      // An album and a single sometimes both have the group's ID, so its type picks one.
-      lookup(
-        "P436",
-        [ids.releaseGroup],
-        ["album", "ep", "single"],
-        GROUP_KINDS[release["release-group"]["primary-type"] ?? ""],
-      ),
-      lookup("P434", ids.artists, ["artist"]),
-      lookup("P4404", ids.recordings, ["track"]),
-      lookup("P435", ids.works, ["work"]),
-      lookup("P1827", ids.iswcs, ["work"]),
-      lookup("P2207", ids.spotifyTracks, ["track"]),
-      lookup("P10110", ids.appleMusicTracks, ["track"]),
-      lookup("P2724", ids.deezerTracks, ["track"]),
-      lookup("P4578", ids.tidalTracks, ["track"]),
-    ]);
+  const [
+    albums,
+    fromAlbums,
+    artists,
+    recordings,
+    works,
+    iswcs,
+    spotify,
+    appleMusic,
+    deezer,
+    tidal,
+  ] = await Promise.all([
+    // An album and a single sometimes both have the group's ID, so its type picks one.
+    lookup(
+      "P436",
+      [ids.releaseGroup],
+      ["album", "ep", "single"],
+      GROUP_KINDS[release["release-group"]["primary-type"] ?? ""],
+    ),
+    // The albums and EPs a single is from, by their release groups.
+    lookup(
+      "P436",
+      singleFrom(release["release-group"]).map((g) => g.id),
+      ["album", "ep"],
+      "album",
+    ),
+    lookup("P434", ids.artists, ["artist"]),
+    lookup("P4404", ids.recordings, ["track"]),
+    lookup("P435", ids.works, ["work"]),
+    lookup("P1827", ids.iswcs, ["work"]),
+    lookup("P2207", ids.spotifyTracks, ["track"]),
+    lookup("P10110", ids.appleMusicTracks, ["track"]),
+    lookup("P2724", ids.deezerTracks, ["track"]),
+    lookup("P4578", ids.tidalTracks, ["track"]),
+  ]);
   // MusicBrainz's own Wikidata link names a wikidata.org item, which is
   // only right when that's where the edits go.
   const onWikidata = /^(?:www\.)?wikidata\.org$/.test(new URL(wikidataApiUrl()).host);
@@ -283,6 +301,7 @@ export async function lookupRelease(
       ...tidal.taken,
     ],
     misplacedWorks: works.elsewhere,
+    takenFrom: fromAlbums.unique,
   };
 }
 

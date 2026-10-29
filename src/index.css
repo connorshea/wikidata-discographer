@@ -3232,6 +3232,44 @@ section.block.locked-step {
 .album-card.bad {
   border-color: var(--danger-edge);
 }
+/* The album a single is taken from, as Wikidata describes it. */
+.taken-from-hit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-weight: 400;
+  font-size: 13.5px;
+  padding: 8px 11px;
+  border-radius: 7px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.taken-from-hit b {
+  font-weight: 600;
+}
+.taken-from-hit .muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+input.warn {
+  border-color: var(--warn-edge);
+}
+.taken-from-warn {
+  align-items: flex-start;
+  font-weight: 400;
+  font-size: 12.5px;
+}
+.taken-from-warn svg {
+  margin-top: 2px;
+}
+.taken-from-warn path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .album-card-text {
   flex: 1 1 280px;
   min-width: 0;
