@@ -207,6 +207,11 @@ export interface AlbumListEntry {
   label: string;
   /** Its performers' labels, as of the mirror. */
   artists: string[];
+  /**
+   * "Album", "EP", "Single", "Live album" and so on (albumType, src/lib/music.ts), as of
+   * the mirror, else as the latest run's form said. Null when neither says.
+   */
+  type: string | null;
   /** Whether the tool created the album, not just added to an existing one. */
   created: boolean;
   runs: AlbumRun[];
