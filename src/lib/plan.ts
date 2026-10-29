@@ -67,6 +67,11 @@ export interface AlbumState {
    * form, the plan and the run. Empty for anything else. It stops counting once `qid` changes.
    */
   singleQid: string;
+  /**
+   * The album a single is taken from (P13602), a QID. Only a single gets it, a new one or one
+   * already on Wikidata. Empty for none.
+   */
+  takenFrom: string;
 }
 
 /** A value a MusicBrainz import filled in, and the MusicBrainz entity it was read from. */
@@ -92,6 +97,8 @@ export interface AlbumMb {
   date: MbCited | null;
   /** The album identifiers imported from MusicBrainz's links, by field. */
   ids: Partial<Record<AlbumIdKey, MbCited>>;
+  /** The album a single is taken from, by its "single from" relationship. Null without one. */
+  takenFrom: MbCited | null;
 }
 
 /**
@@ -1023,8 +1030,17 @@ export function buildPlan(state: State): Plan {
         });
     }
   }
+  // Only a single is taken from an album, so what's left in the field for another release is ignored.
+  const takenFrom = noun === "single" ? A.takenFrom.trim() : "";
+  fieldErrs.takenFrom =
+    takenFrom && !QID.test(takenFrom)
+      ? `"${takenFrom}" isn't a QID.`
+      : !creatingAlbum && takenFrom === A.qid.trim()
+        ? "That's this single. Use the album it's taken from."
+        : "";
   const albumErr =
     !!(fieldErrs.albumQid || fieldErrs.albumTitle || fieldErrs.albumArtists) ||
+    !!fieldErrs.takenFrom ||
     blocking(fieldErrs.albumDesc) ||
     ALBUM_ID_FIELDS.some((f) => !!fieldErrs[`albumId-${f.key}`]);
   const album: ItemRef = creatingAlbum ? { ref: "album" } : { id: A.qid.trim() };
@@ -1325,6 +1341,11 @@ export function buildPlan(state: State): Plan {
       ]
     : [];
 
+  // Cited to the release group, whose "single from" relationship it was read from.
+  const takenFromClaims: Claim[] = takenFrom
+    ? [{ ...claim("P13602", item(takenFrom)), ...albumMbRef(state, A.mb?.takenFrom, takenFrom) }]
+    : [];
+
   // 1. The album, without its tracklist (the tracks don't exist yet).
   if (creatingAlbum) {
     ops.push({
@@ -1344,6 +1365,7 @@ export function buildPlan(state: State): Plan {
         ...counts,
         ...albumIds,
         ...streaming,
+        ...takenFromClaims,
       ],
     });
   }
@@ -1462,7 +1484,12 @@ export function buildPlan(state: State): Plan {
       ),
       ...(creatingAlbum
         ? []
-        : [...counts, ...albumRecAt].map((c): Claim => ({ ...c, ifMissing: true }))),
+        : [
+            ...[...counts, ...albumRecAt].map((c): Claim => ({ ...c, ifMissing: true })),
+            // Not ifMissing: a single can be taken from more than one album, so one taken from
+            // another still gets this one. One already taken from it isn't given it twice.
+            ...takenFromClaims,
+          ]),
     ],
   });
 
@@ -1511,6 +1538,14 @@ export function buildPlan(state: State): Plan {
     ].join(". ") + ".",
   ]);
   return { tracks, fieldErrs, rowErrs, messages, blockers, ops, ready: ops.length > 0 };
+}
+
+/** The album the plan says the single is taken from (P13602), or null if it says none. */
+export function takenFromOf(ops: readonly Op[]): string | null {
+  for (const op of ops)
+    for (const c of op.claims)
+      if (c.property === "P13602" && c.value.type === "item" && "id" in c.value) return c.value.id;
+  return null;
 }
 
 // ---------------------------------------------------------------------------

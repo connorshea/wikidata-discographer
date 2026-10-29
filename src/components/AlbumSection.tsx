@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import { api } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
@@ -18,9 +18,15 @@ import {
 import { isIdReason } from "../lib/matches.ts";
 import { ALBUM_ID_FIELDS, type AlbumIdKey, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
-import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
+import { FieldErr, InfoTip, Pids, QidInput, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { albumProblem, type ItemLookup, releaseKind } from "./use-item-summaries.ts";
+import {
+  albumProblem,
+  type ItemLookup,
+  releaseKind,
+  takenFromProblem,
+  useItemSummaries,
+} from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
 
@@ -32,6 +38,7 @@ export default function AlbumSection({
   albumTracklist,
   checked,
   releaseGroup,
+  takenFrom,
   reloading,
   onReload,
   onLoadReleaseGroup,
@@ -44,6 +51,8 @@ export default function AlbumSection({
   checked: boolean;
   /** The existing album's MusicBrainz release group, to suggest loading it. */
   releaseGroup: string | null;
+  /** The albums the existing single is already taken from. */
+  takenFrom: string[];
   /** Whether the existing album is being looked up on Wikidata. */
   reloading: boolean;
   /** Look the existing album up on Wikidata again, after it's been fixed there. */
@@ -154,6 +163,11 @@ export default function AlbumSection({
               </button>
             </div>
           )}
+          {noun === "single" && !problem && !albumTracklist && (
+            <div className="grid">
+              <TakenFrom state={state} update={update} plan={plan} already={takenFrom} />
+            </div>
+          )}
         </>
       ) : (
         <div className="album-new">
@@ -188,6 +202,9 @@ export default function AlbumSection({
                   ))}
                 </select>
               </label>
+            )}
+            {A.type === SINGLE_CLASS && (
+              <TakenFrom state={state} update={update} plan={plan} already={[]} />
             )}
           </div>
           <div className="f">
@@ -234,12 +251,118 @@ export default function AlbumSection({
                 "P1476, P175, P577 (publication date), P407, the identifiers above, P437 music " +
                 "streaming when there's a Spotify, Apple Music, Deezer or Tidal ID, and P2635 " +
                 "number of tracks: one statement per disc qualified with its part when every disc " +
-                "has a part, otherwise one total."}
+                "has a part, otherwise one total." +
+                (A.type === SINGLE_CLASS && A.takenFrom.trim()
+                  ? " A single also gets P13602, the album it's taken from."
+                  : "")}
             </Pids>
           </p>
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The album a single is taken from (P13602), with its label once Wikidata has been asked.
+ * A single already taken from other albums keeps them, and gets this one as well.
+ */
+function TakenFrom({ state, update, plan, already }: SectionProps & { already: string[] }) {
+  const { wikiBaseUrl } = useAuth();
+  const A = state.album;
+  const qid = A.takenFrom.trim();
+  const others = already.filter((q) => q !== qid);
+  const lookup = useItemSummaries([qid, ...others], state.settings.lang);
+  const found = lookup(qid);
+  const ok = found?.status === "ok" ? found : null;
+  const err = plan.fieldErrs.takenFrom;
+  const warning = ok && !err ? takenFromProblem(ok.classes) : null;
+  const name = (q: string) => {
+    const f = lookup(q);
+    return f?.status === "ok" && f.label ? f.label : q;
+  };
+  return (
+    <div className="f taken-from">
+      <label htmlFor="takenFrom">Taken from</label>
+      <QidInput
+        id="takenFrom"
+        className={warning ? "mono warn" : "mono"}
+        value={A.takenFrom}
+        aria-invalid={!!err || found?.status === "missing" || found?.status === "redirect"}
+        aria-describedby="takenFrom-err takenFrom-sub"
+        onChange={(v) => update((s) => void (s.album.takenFrom = v))}
+      />
+      {ok && !err && (
+        <span className="taken-from-hit">
+          <b>{ok.label ?? qid}</b>
+          {ok.description && <span className="muted">{ok.description}</span>}
+          <a
+            href={`${wikiBaseUrl}/wiki/${qid}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${qid} on Wikidata`}
+          >
+            ↗
+          </a>
+        </span>
+      )}
+      {warning && (
+        <span className="warn-note taken-from-warn">
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 1.5l7 12.5H1z" />
+            <path d="M8 6.2v3.6M8 11.8v.2" />
+          </svg>
+          {warning}
+        </span>
+      )}
+      {found?.status === "redirect" && !err ? (
+        <span className="field-err" id="takenFrom-err" aria-live="polite">
+          {qid} redirects to <WikiLink base={wikiBaseUrl} qid={found.to} />.{" "}
+          <button
+            type="button"
+            className="link"
+            onClick={() => update((s) => void (s.album.takenFrom = found.to))}
+          >
+            Use {found.to}
+          </button>
+        </span>
+      ) : (
+        <FieldErr
+          id="takenFrom"
+          msg={err || (found?.status === "missing" ? `${qid} doesn't exist on Wikidata.` : "")}
+        />
+      )}
+      <span className="sub with-badge" id="takenFrom-sub">
+        {citesMb(state, A.mb?.takenFrom, qid) ? (
+          <>
+            <span className="mb-badge" aria-hidden="true">
+              MB
+            </span>
+            From the single's “single from” relationship on MusicBrainz
+          </>
+        ) : qid && already.includes(qid) ? (
+          "The single is already taken from this album, so nothing is added."
+        ) : others.length ? (
+          <span>
+            Already taken from{" "}
+            {others.map((q, i) => (
+              <Fragment key={q}>
+                {i > 0 && (i === others.length - 1 ? " and " : ", ")}
+                <a href={`${wikiBaseUrl}/wiki/${q}`} target="_blank" rel="noreferrer">
+                  {name(q)}
+                </a>
+              </Fragment>
+            ))}
+            .{" "}
+            {qid
+              ? `That stays, and this adds ${ok?.label ?? qid}, since a single can be on more than one album.`
+              : "That stays. Add another album here, or leave it empty."}
+          </span>
+        ) : (
+          "Optional. The album's QID or Wikidata link. Left empty, nothing is added."
+        )}
+      </span>
+    </div>
   );
 }
 

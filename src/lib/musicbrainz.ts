@@ -156,7 +156,9 @@ export function releaseChoices(releases: MbReleaseListing[]): ReleaseChoice[] {
 // The parts of MusicBrainz's release JSON the import reads. The lookup is
 //   /ws/2/release/<mbid>?inc=recordings+artist-credits+release-groups+
 //     work-rels+recording-level-rels+work-level-rels+artist-rels+url-rels+
-//     release-group-level-rels+isrcs+place-rels
+//     release-group-level-rels+release-group-rels+isrcs+place-rels
+// release-group-rels with release-group-level-rels brings the release group's
+// relationships to other release groups, a single's "single from" among them.
 // work-level-rels and artist-rels bring each work's own artist relations,
 // its composers and lyricists among them. place-rels brings the places each
 // recording was recorded at, without their links, so the server looks each
@@ -175,6 +177,9 @@ export interface MbRelation {
   url?: { resource: string };
   artist?: { id: string; name: string; disambiguation?: string };
   place?: { id: string; name: string };
+  release_group?: { id: string; title: string };
+  /** "forward" when the entity the relation is on is its source, e.g. the single in "single from". */
+  direction?: "forward" | "backward";
   work?: {
     id: string;
     title: string;
@@ -246,6 +251,24 @@ export function releaseIds(release: MbRelease) {
     tidalTracks: [...new Set(tracks.flatMap((t) => trackLinkOf(t, "tidal")))],
     places: [...new Set(tracks.flatMap((t) => placesOf(t).map((p) => p.id)))],
   };
+}
+
+/**
+ * The release groups a release group is a single from, by its "single from" relationships,
+ * each once. Those pointing the other way are singles taken from it.
+ */
+export function singleFrom(rg: MbRelease["release-group"]): { id: string; title: string }[] {
+  const out = new Map<string, { id: string; title: string }>();
+  for (const r of rg.relations ?? [])
+    if (
+      r.type === "single from" &&
+      r["target-type"] === "release_group" &&
+      r.direction === "forward" &&
+      r.release_group &&
+      !out.has(r.release_group.id)
+    )
+      out.set(r.release_group.id, { id: r.release_group.id, title: r.release_group.title.trim() });
+  return [...out.values()];
 }
 
 /** The places a track's recording was recorded at, each once. Events are left out. */
@@ -323,6 +346,8 @@ export interface MbLookups {
   taken: string[];
   /** P435 work ID → items that have it but aren't compositions, usually singles. */
   misplacedWorks?: Record<string, { qid: string; kind: MusicKind }[]>;
+  /** P436 release group ID → album or EP, for the release groups a single is from. */
+  takenFrom?: Record<string, string>;
 }
 
 /** An identifier the import adds, and to how many items. */
@@ -366,6 +391,11 @@ export interface MbReport {
   references: string[];
   /** Things the user should check in the form, in plain sentences. */
   notes: string[];
+  /**
+   * The release groups MusicBrainz says the single is from, when no album on Wikidata has
+   * any of them, so "Taken from" is left empty.
+   */
+  takenFromMissing: { releaseGroup: string; title: string }[];
 }
 
 /** What the import fills in. Settings other than the date and language are left as they are. */
@@ -802,6 +832,18 @@ export function releaseToForm(
           ? ""
           : STUDIO_ALBUM;
 
+  // A single taken from several albums gets the first one on Wikidata, as the field takes one.
+  const fromGroups = type === SINGLE_CLASS ? singleFrom(rg) : [];
+  const fromAlbums = fromGroups.flatMap((g) => {
+    const qid = lookups.takenFrom?.[g.id];
+    return qid ? [{ ...g, qid }] : [];
+  });
+  const takenFrom = fromAlbums[0]?.qid ?? "";
+  if (fromAlbums.length > 1)
+    notes.push(
+      `MusicBrainz says this single is also from ${joinList(fromAlbums.slice(1).map((a) => `${a.title} (${a.qid})`))}. Taken from has room for one, so add ${fromAlbums.length === 2 ? "that one" : "those"} on Wikidata after the run.`,
+    );
+
   const albumQid = lookups.albumQid;
   const ids: AlbumState["ids"] = {
     spotify: "",
@@ -852,6 +894,7 @@ export function releaseToForm(
       ? { value: date, from: rg["first-release-date"] ? "releaseGroup" : "release" }
       : null,
     ids: citedIds,
+    takenFrom: takenFrom ? { value: takenFrom, from: "releaseGroup" } : null,
   };
   const linkedIds = ALBUM_ID_FIELDS.filter((f) => f.key !== "musicbrainz" && ids[f.key]).map(
     (f) => f.label,
@@ -905,6 +948,9 @@ export function releaseToForm(
       albumIds: albumQid ? 0 : linkedIds.length,
     }),
     notes,
+    takenFromMissing: takenFrom
+      ? []
+      : fromGroups.map((g) => ({ releaseGroup: g.id, title: g.title })),
   };
 
   return {
@@ -922,6 +968,7 @@ export function releaseToForm(
       mb: albumQid ? null : albumMb,
       // The form looks the album up, and records it if it's a single.
       singleQid: "",
+      takenFrom,
     },
     artists,
     discs: discs.length ? discs : [emptyDisc()],
@@ -986,7 +1033,9 @@ export function reportCounts(r: MbReport) {
       ...extended.compositions,
     ].reduce((n, c) => n + c.n, added.album.length),
     // Something to fix on Wikidata or check in the form, so the report stays open.
-    attention: r.misplaced.length + r.notes.length + r.severalAlbumLinks.length > 0,
+    attention:
+      r.misplaced.length + r.notes.length + r.severalAlbumLinks.length + r.takenFromMissing.length >
+      0,
   };
 }
 

@@ -48,6 +48,7 @@ function stubWiki({
   tracklist = [],
   compositions = {},
   classes = {},
+  fromClasses = {},
   terms = {},
 }: {
   missing?: string[];
@@ -61,6 +62,8 @@ function stubWiki({
   compositions?: Record<string, string[]>;
   /** P31 values of items fetched with their claims. */
   classes?: Record<string, string[]>;
+  /** P31 values of other items asked for only those, such as the album a single is taken from. */
+  fromClasses?: Record<string, string[]>;
   /** English label and description, and any mul label, of items fetched for their terms. */
   terms?: Record<string, [string | undefined, string, string?]>;
 }) {
@@ -72,7 +75,11 @@ function stubWiki({
     const q = new URL(url).searchParams;
     if (q.get("action") === "wbgetclaims") {
       const property = q.get("property")!;
-      const values = { P31: instanceOf, P658: tracklist }[property];
+      const entity = q.get("entity")!;
+      const values =
+        property === "P31" && entity in fromClasses
+          ? fromClasses[entity]
+          : { P31: instanceOf, P658: tracklist }[property];
       expect(values).toBeDefined();
       return Response.json({
         claims: {
@@ -411,6 +418,37 @@ describe("checkPlanQids", () => {
     ]);
     stubWiki({ instanceOf: [] });
     expect((await checkPlanQids(plan.ops, EXAMPLE))[0]).toMatch(/has no “instance of” statement/);
+  });
+
+  describe("the album a single is taken from", () => {
+    const single = structuredClone(EXAMPLE);
+    single.album.singleQid = single.album.qid;
+    single.album.takenFrom = "Q21003456";
+    const ops = buildPlan(single).ops;
+
+    it("accepts an album or EP, and one of a class the app doesn't know", async () => {
+      for (const classes of [["Q208569"], ["Q169930"], ["Q5"]]) {
+        forgetCheckedQids();
+        stubWiki({ instanceOf: ["Q134556"], fromClasses: { Q21003456: classes } });
+        expect(await checkPlanQids(ops, single)).toEqual([]);
+      }
+    });
+
+    it("refuses a single, track or composition", async () => {
+      stubWiki({ instanceOf: ["Q134556"], fromClasses: { Q21003456: ["Q134556"] } });
+      expect(await checkPlanQids(ops, single)).toEqual([
+        "The single's “Taken from”: Q21003456 is a single, not an album or EP. Use the album the single is taken from.",
+      ]);
+      stubWiki({ instanceOf: ["Q134556"], fromClasses: { Q21003456: ["Q105543609"] } });
+      expect((await checkPlanQids(ops, single))[0]).toMatch(/is a composition, not an album/);
+    });
+
+    it("names it by its field when it's missing", async () => {
+      stubWiki({ instanceOf: ["Q134556"], missing: ["Q21003456"] });
+      expect(await checkPlanQids(ops, single)).toEqual([
+        "The single's “Taken from”: Q21003456 doesn't exist.",
+      ]);
+    });
   });
 
   it("treats an id past the newest item as missing and checks the rest", async () => {

@@ -365,13 +365,21 @@ function Form() {
   const {
     tracklist: albumTracklist,
     releaseGroup,
+    takenFrom,
     checked,
     pending: tracklistPending,
     reload: reloadTracklist,
   } = useAlbumTracklist(state);
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
-  const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
+  // The album a single is taken from, for the plan panel, once it's a QID the plan takes.
+  const typedFrom = state.album.takenFrom.trim();
+  const takenFromQid =
+    releaseNoun(state.album) === "single" && QID.test(typedFrom) && !plan.fieldErrs.takenFrom
+      ? typedFrom
+      : null;
+  const lookupAlbum = useItemSummaries([existingQid, takenFromQid ?? ""], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
+  const takenFromFound = takenFromQid ? lookupAlbum(takenFromQid) : undefined;
   // Record what Wikidata says the existing release is once it's been asked, so the plan, the
   // server and the run all call a single one. A QID still being looked up, or whose lookup
   // failed, keeps what it had.
@@ -483,6 +491,7 @@ function Form() {
                       albumTracklist={albumTracklist}
                       checked={checked}
                       releaseGroup={releaseGroup}
+                      takenFrom={takenFrom}
                       reloading={albumFound?.status === "loading" || tracklistPending}
                       onReload={() => {
                         lookupAlbum.reload(existingQid);
@@ -552,6 +561,15 @@ function Form() {
             slot={setSlot}
             sideSlot={setSideSlot}
             running={!!running}
+            takenFrom={
+              takenFromQid
+                ? {
+                    qid: takenFromQid,
+                    label:
+                      (takenFromFound?.status === "ok" && takenFromFound.label) || takenFromQid,
+                  }
+                : null
+            }
           />
         </div>
         <Footer />

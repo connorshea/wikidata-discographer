@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
-import { CLASS_KINDS, type MusicKind } from "../lib/music.ts";
+import { CLASS_KINDS, KIND_NOUNS, kindOf, type MusicKind } from "../lib/music.ts";
 import { ALBUM_CLASSES, QID } from "../lib/plan.ts";
 import type { DescribeResponse, ItemSummary } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
@@ -104,3 +104,20 @@ export function releaseKind(classes: string[]): "Album" | "EP" | "Single" {
 /** Whether the existing release is a single on Wikidata, so it's called one in the form. */
 export const existingSingle = (qid: string, found: ItemLookup | undefined): boolean =>
   found?.status === "ok" && !albumProblem(qid, found) && releaseKind(found.classes) === "Single";
+
+/**
+ * Why the album a single is taken from looks wrong, from its classes, or null if it's an album
+ * or EP. One that's a single, track, composition or artist stops the run. One of a class the app
+ * doesn't know may still be an album, so it only gets a warning.
+ */
+export function takenFromProblem(classes: string[]): string | null {
+  const kind = kindOf(classes, []);
+  if (kind === "album" || kind === "ep") return null;
+  if (kind) {
+    const noun = KIND_NOUNS[kind];
+    return `This is ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}, not an album or EP. The run won't start with it.`;
+  }
+  return classes.length
+    ? "This isn't an album or EP that Discographer knows. Check it's the right item."
+    : "This has no “instance of” statement, so it can't be checked to be an album or EP.";
+}

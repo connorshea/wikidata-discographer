@@ -333,8 +333,17 @@ function ReportSection({
 /** What the last MusicBrainz load found and filled in, a section for each kind of thing. */
 export function ImportReport({ id, report }: { id?: string; report: MbReport }) {
   const { wikiBaseUrl } = useAuth();
-  const { misplaced, severalLinks, severalAlbumLinks, found, added, extended, references, notes } =
-    report;
+  const {
+    misplaced,
+    severalLinks,
+    severalAlbumLinks,
+    found,
+    added,
+    extended,
+    references,
+    notes,
+    takenFromMissing,
+  } = report;
   const counts = reportCounts(report);
   const leftOff = severalLinks.reduce((n, l) => n + l.titles.length, severalAlbumLinks.length);
 
@@ -400,6 +409,29 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
               </li>
             ))}
           </ul>
+        </ReportSection>
+      )}
+      {takenFromMissing.length > 0 && (
+        <ReportSection icon="warn" title="“Taken from” will be left empty">
+          <p>
+            MusicBrainz says this single is from{" "}
+            {takenFromMissing.map((g, i) => (
+              <Fragment key={g.releaseGroup}>
+                {i > 0 && (i === takenFromMissing.length - 1 ? " and " : ", ")}
+                <a
+                  href={`https://musicbrainz.org/release-group/${g.releaseGroup}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {g.title || "an album"} ↗
+                </a>
+              </Fragment>
+            ))}
+            , but no album on Wikidata has{" "}
+            {takenFromMissing.length === 1
+              ? "its release group. Add its QID by hand once it's there."
+              : "their release groups. Add one of their QIDs by hand once it's there."}
+          </p>
         </ReportSection>
       )}
       {notes.length > 0 && (

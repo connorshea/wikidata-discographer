@@ -12,6 +12,7 @@ import {
   releaseChoices,
   releaseIds,
   releaseToForm,
+  singleFrom,
   wikidataLink,
 } from "./musicbrainz.ts";
 import { normalizeAlbumId } from "./music.ts";
@@ -181,8 +182,10 @@ describe("releaseToForm", () => {
           deezer: { value: "1076048342", from: "release" },
           discogs: { value: "4348311", from: "releaseGroup" },
         },
+        takenFrom: null,
       },
       singleQid: "",
+      takenFrom: "",
     });
     expect(form.date).toBe("2026-09-18");
     expect(form.p407).toBe("Q1860");
@@ -212,6 +215,7 @@ describe("releaseToForm", () => {
       extended: { tracks: [], compositions: [] },
       references: ["publication date", "album IDs", "durations", "ISRCs", "track IDs"],
       notes: [],
+      takenFromMissing: [],
     });
   });
 
@@ -870,6 +874,72 @@ describe("releaseToForm", () => {
     r["release-group"]["primary-type"] = "Single";
     r["release-group"]["secondary-types"] = [];
     expect(releaseToForm(r, NONE).recTypes).toEqual(["Q15975575"]);
+  });
+
+  describe("the album a single is taken from", () => {
+    const ALBUM_RG = "5537624c-3d2f-4f5c-8099-df916082c85c";
+    const COMP_RG = "6f1e1d60-1f8e-4b55-9a2b-6c1e5a0c2d11";
+    const fromRel = (id: string, title: string, direction: "forward" | "backward" = "forward") => ({
+      type: "single from",
+      "target-type": "release_group",
+      direction,
+      release_group: { id, title },
+    });
+    const single = (...relations: ReturnType<typeof fromRel>[]) => {
+      const r = release();
+      r["release-group"]["primary-type"] = "Single";
+      r["release-group"]["secondary-types"] = [];
+      r["release-group"].relations = [...(r["release-group"].relations ?? []), ...relations];
+      return r;
+    };
+
+    it("reads only the release groups the single is from, not singles taken from it", () => {
+      expect(
+        singleFrom(
+          single(
+            fromRel(ALBUM_RG, " 25 "),
+            fromRel(ALBUM_RG, "25"),
+            fromRel(COMP_RG, "Hello", "backward"),
+          )["release-group"],
+        ),
+      ).toEqual([{ id: ALBUM_RG, title: "25" }]);
+    });
+
+    it("fills it in from the album the mirror has, cited to the release group", () => {
+      const form = releaseToForm(single(fromRel(ALBUM_RG, "25")), {
+        ...NONE,
+        takenFrom: { [ALBUM_RG]: "Q21003456" },
+      });
+      expect(form.album.takenFrom).toBe("Q21003456");
+      expect(form.album.mb?.takenFrom).toEqual({ value: "Q21003456", from: "releaseGroup" });
+      expect(form.report.takenFromMissing).toEqual([]);
+    });
+
+    it("reports the album when Wikidata has none with its release group", () => {
+      const form = releaseToForm(single(fromRel(ALBUM_RG, "25")), NONE);
+      expect(form.album.takenFrom).toBe("");
+      expect(form.album.mb?.takenFrom).toBeNull();
+      expect(form.report.takenFromMissing).toEqual([{ releaseGroup: ALBUM_RG, title: "25" }]);
+      expect(reportCounts(form.report).attention).toBe(true);
+    });
+
+    it("takes the first album on Wikidata, and notes the others", () => {
+      const form = releaseToForm(
+        single(fromRel(COMP_RG, "Greatest Hits"), fromRel(ALBUM_RG, "25"), fromRel("x", "Other")),
+        { ...NONE, takenFrom: { [ALBUM_RG]: "Q1", [COMP_RG]: "Q2" } },
+      );
+      expect(form.album.takenFrom).toBe("Q2");
+      expect(form.report.takenFromMissing).toEqual([]);
+      expect(form.report.notes).toContainEqual(expect.stringContaining("also from 25 (Q1)"));
+    });
+
+    it("gives an album none, even with the relationship", () => {
+      const r = single(fromRel(ALBUM_RG, "25"));
+      r["release-group"]["primary-type"] = "Album";
+      const form = releaseToForm(r, { ...NONE, takenFrom: { [ALBUM_RG]: "Q1" } });
+      expect(form.album.takenFrom).toBe("");
+      expect(form.report.takenFromMissing).toEqual([]);
+    });
   });
 
   it("cites the release's own date when the release group has none", () => {

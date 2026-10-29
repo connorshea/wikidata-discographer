@@ -205,6 +205,8 @@ describe("coerceState", () => {
     expect(coerceState({ album: { mb } }).album.mb).toEqual({
       ...mb,
       ids: { spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" } },
+      // A form saved before singles were taken from albums has none.
+      takenFrom: null,
     });
     expect(coerceState({ album: { mb: { ...mb, date: { value: "" } } } }).album.mb?.date).toBe(
       null,

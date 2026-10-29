@@ -11,6 +11,10 @@
 // album or EP classes the app knows. And it mustn't have a tracklist yet, or
 // the run would add a second one beside it.
 //
+// The album a single is taken from (P13602) mustn't be a single, track,
+// composition or artist. One of a class the app doesn't know may still be an
+// album, so the form only warns about it.
+//
 // A reused track mustn't record a different composition than the one the run
 // links it to, or it would end up with two (P2550). When what it records is
 // a single, album or EP rather than a composition, the track itself needs
@@ -30,7 +34,7 @@ import {
   type Entity,
 } from "./wikidata-client.ts";
 import { findByTerms } from "./mirror.ts";
-import { kindOf, type MusicKind } from "../src/lib/music.ts";
+import { KIND_NOUNS, kindOf, type MusicKind } from "../src/lib/music.ts";
 import {
   ALBUM_CLASSES,
   buildPlan,
@@ -39,6 +43,7 @@ import {
   type Op,
   QID,
   type State,
+  takenFromOf,
   type Value,
 } from "../src/lib/plan.ts";
 import { PROPERTY_LABELS } from "../src/lib/preview.ts";
@@ -82,6 +87,7 @@ function formSources(state: State): Map<string, string[]> {
     add(state.album.type, "The album type");
     add(state.album.form, "The album form");
   }
+  add(state.album.takenFrom, "The single's “Taken from”");
   add(state.settings.p407, "The language of work");
   add(state.settings.trackType, "The track type");
   const roles = new Map(performerRows(state, buildPlan(state)).map((r) => [r.name, r]));
@@ -167,6 +173,11 @@ export async function checkPlanQids(ops: readonly Op[], state: State): Promise<s
     const problem = (await checkAlbumKind(album)) ?? (await checkAlbumTracklist(album));
     if (problem) problems.unshift(problem);
   }
+  const takenFrom = takenFromOf(ops);
+  if (takenFrom && results.get(takenFrom)?.status === "ok") {
+    const problem = await checkTakenFromKind(takenFrom);
+    if (problem) problems.unshift(problem);
+  }
   const tracks = new Map<string, Entity>();
   problems.push(...(await checkTrackCompositions(ops, sources, results, tracks)));
   if (problems.length === 0)
@@ -189,6 +200,14 @@ async function checkAlbumKind(qid: string): Promise<string | null> {
   if (classes.length === 0)
     return `The existing album: ${qid} has no “instance of” statement, so it can't be checked to be an album, EP or single.`;
   return `The existing album: ${qid} is an instance of ${classes.join(", ")}, not an album, EP or single. Check the QID.`;
+}
+
+/** Why a single can't be taken from this item, or null if it may be an album or EP. */
+async function checkTakenFromKind(qid: string): Promise<string | null> {
+  const kind = kindOf(await getStatementItems(qid, "P31", { retries: 1 }), []);
+  if (!kind || kind === "album" || kind === "ep") return null;
+  const noun = KIND_NOUNS[kind];
+  return `The single's “Taken from”: ${qid} is ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}, not an album or EP. Use the album the single is taken from.`;
 }
 
 /** Why the existing album can't take a tracklist, or null if it has none yet. */

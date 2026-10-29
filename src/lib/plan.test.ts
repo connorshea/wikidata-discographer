@@ -980,6 +980,7 @@ describe("buildPlan", () => {
             spotify: { value: "4aawyAB9vmqN3uQ7FjRGTy", from: "release" },
             discogs: { value: "4348311", from: "releaseGroup" },
           },
+          takenFrom: null,
         },
       };
       return state;
@@ -1274,6 +1275,94 @@ describe("buildPlan", () => {
       "err",
       "Add the album's tracks, or load them from MusicBrainz.",
     ]);
+  });
+
+  describe("the album a single is taken from", () => {
+    const RG = "b012a117-afa3-4ea3-879f-eeb61b974b0a";
+    const newSingle = () => {
+      const state = structuredClone(EXAMPLE);
+      state.album.mode = "create";
+      setAlbumType(state, "Q134556");
+      state.album.takenFrom = "Q21003456";
+      return state;
+    };
+    const existingSingle = () => {
+      const state = structuredClone(EXAMPLE);
+      state.album.singleQid = state.album.qid;
+      state.album.takenFrom = "Q21003456";
+      return state;
+    };
+    const takenFrom = (state: typeof EXAMPLE) =>
+      buildPlan(state)
+        .ops.flatMap((o) => o.claims)
+        .filter((c) => c.property === "P13602");
+
+    it("is said on a new single", () => {
+      const created = find(buildPlan(newSingle()).ops, "album");
+      expect(created?.claims.filter((c) => c.property === "P13602")).toEqual([
+        { property: "P13602", value: { type: "item", id: "Q21003456" } },
+      ]);
+    });
+
+    it("is cited to the release group while it's the album MusicBrainz gave", () => {
+      const state = newSingle();
+      state.album.ids.musicbrainz = RG;
+      state.album.mb = {
+        releaseGroup: RG,
+        release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+        releaseGroupName: "Soft",
+        retrieved: "2026-10-04",
+        date: null,
+        ids: {},
+        takenFrom: { value: "Q21003456", from: "releaseGroup" },
+      };
+      expect(takenFrom(state)[0].references?.[0]).toContainEqual({
+        property: "P436",
+        value: { type: "string", value: RG },
+      });
+      state.album.takenFrom = "Q1";
+      expect(takenFrom(state)[0]).not.toHaveProperty("references");
+    });
+
+    it("is added to an existing single with its tracklist, even beside another album", () => {
+      const tracklist = buildPlan(existingSingle()).ops.find(
+        (o) => o.op === "addClaims" && o.what === "single tracklist",
+      );
+      // Not ifMissing: a single taken from another album gets this one too. The run skips it
+      // when the single already says this album.
+      expect(tracklist?.claims.find((c) => c.property === "P13602")).toEqual({
+        property: "P13602",
+        value: { type: "item", id: "Q21003456" },
+      });
+    });
+
+    it("is left out when empty, and for anything but a single", () => {
+      const empty = newSingle();
+      empty.album.takenFrom = " ";
+      expect(takenFrom(empty)).toEqual([]);
+      const album = newSingle();
+      setAlbumType(album, "Q482994");
+      expect(takenFrom(album)).toEqual([]);
+      const existing = existingSingle();
+      existing.album.singleQid = "";
+      expect(takenFrom(existing)).toEqual([]);
+      expect(buildPlan(existing).fieldErrs.takenFrom).toBe("");
+    });
+
+    it("must be a QID other than the single's own", () => {
+      const typo = newSingle();
+      typo.album.takenFrom = "Day and Night";
+      expect(buildPlan(typo).fieldErrs.takenFrom).toBe(`"Day and Night" isn't a QID.`);
+      expect(buildPlan(typo).ready).toBe(false);
+      const itself = existingSingle();
+      itself.album.takenFrom = itself.album.qid;
+      const plan = buildPlan(itself);
+      expect(plan.fieldErrs.takenFrom).toBe("That's this single. Use the album it's taken from.");
+      expect(plan.messages).toContainEqual([
+        "err",
+        "Fix the single details at the top of the page.",
+      ]);
+    });
   });
 
   it("blocks on a bad performer QID", () => {

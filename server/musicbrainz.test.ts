@@ -39,6 +39,8 @@ describe("createMusicBrainzClient", () => {
     expect(await client.release(ID)).toMatchObject({ title: "Day and Night" });
     expect(calls[0].url).toMatch(new RegExp(`/release/${ID}\\?inc=recordings\\+artist-credits`));
     expect(calls[0].url).toContain("release-group-level-rels");
+    // The release group's "single from" relationships, for the album a single is taken from.
+    expect(calls[0].url).toContain("+release-group-rels+");
     expect(calls[0].url).toContain("place-rels");
     expect(calls[0].agent).toBe(userAgent());
   });

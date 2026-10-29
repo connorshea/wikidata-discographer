@@ -32,8 +32,8 @@ function Prop({ id, children }: { id: string; children: string }) {
   );
 }
 
-/** How the items the app makes link together. */
-function ItemModel() {
+/** How the items the app makes link together, and the album a single is taken from. */
+function ItemModel({ takenFrom }: { takenFrom: { qid: string; label: string } | null }) {
   return (
     <div className="model">
       <div className="kicker">Data model</div>
@@ -52,6 +52,15 @@ function ItemModel() {
           </span>{" "}
           <Kind edge="cmp-edge">Composition</Kind>
         </li>
+        {takenFrom && (
+          <li>
+            <Kind edge="rg-edge">Single</Kind>{" "}
+            <span>
+              <Prop id="P13602">taken from</Prop> →
+            </span>{" "}
+            <Kind edge="disc-edge">{takenFrom.label}</Kind>
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -86,6 +95,7 @@ export default function PlanPanel({
   slot,
   sideSlot,
   running,
+  takenFrom,
 }: {
   counts: CreateCount[];
   checks: Check[];
@@ -94,6 +104,8 @@ export default function PlanPanel({
   /** Where RunSection puts its cards. */
   sideSlot: Ref<HTMLDivElement>;
   running: boolean;
+  /** The album the single is taken from, when the run says one. */
+  takenFrom: { qid: string; label: string } | null;
 }) {
   const nothing = counts.every((c) => !c.count && !c.reused);
   return (
@@ -130,7 +142,7 @@ export default function PlanPanel({
                 ))}
               </ul>
             )}
-            <ItemModel />
+            <ItemModel takenFrom={takenFrom} />
           </div>
           <div className="card">
             <ul className="checks-list">

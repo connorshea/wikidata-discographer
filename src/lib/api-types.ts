@@ -84,6 +84,8 @@ export interface TracklistResponse {
   tracks: string[];
   /** Its MusicBrainz release group IDs (P436), lowercased. */
   releaseGroups: string[];
+  /** The albums it's a single taken from (P13602). */
+  takenFrom: string[];
 }
 
 export interface EditLogEntry {

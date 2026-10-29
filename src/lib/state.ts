@@ -76,6 +76,7 @@ export const EMPTY: State = {
     release: "",
     mb: null,
     singleQid: "",
+    takenFrom: "",
   },
   artists: {},
   places: {},
@@ -322,6 +323,7 @@ function coerceAlbumMb(v: unknown): AlbumMb | null {
     retrieved,
     date: coerceCited(v.date),
     ids,
+    takenFrom: coerceCited(v.takenFrom),
   };
 }
 
@@ -397,6 +399,8 @@ export function coerceState(raw: unknown): State {
     release: "",
     mb: coerceAlbumMb(a.mb),
     singleQid: matching(a.singleQid, QID),
+    // A form saved before singles could be taken from an album has none.
+    takenFrom: str(a.takenFrom),
   };
   if ((album.form && !/^Q\d+$/.test(album.form)) || album.type === SINGLE_CLASS) album.form = "";
   // A form saved before the release was kept on its own has it only in a new album's references.
