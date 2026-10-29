@@ -91,7 +91,7 @@ export default function AlbumList() {
   return (
     <section className="block">
       <h2>Albums</h2>
-      <p className="hint">All recent albums created with Discographer.</p>
+      <p className="hint">All recent albums, EPs, and singles created with Discographer.</p>
       {user && (
         <label className="row">
           <input
@@ -114,7 +114,7 @@ export default function AlbumList() {
       {busy && !albums.length && (
         <div className="record-loading" role="status">
           <RecordIcon size={64} className="spinning" />
-          <span className="visually-hidden">Loading albums</span>
+          <span>Loading albums…</span>
         </div>
       )}
       {!busy && !error && !albums.length && (

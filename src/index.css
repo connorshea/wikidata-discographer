@@ -3430,8 +3430,12 @@ button.album-card-reload:hover:not(:disabled) {
    sheen going round that shows it turning. */
 .record-loading {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   padding: 48px 0;
+  font-size: 14px;
+  color: var(--muted);
 }
 .record-icon.spinning {
   animation: spinner-turn 1.6s linear infinite;
