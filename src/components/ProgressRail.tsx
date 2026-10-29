@@ -82,12 +82,15 @@ const STATUS_LABELS = { done: "Done", attention: "Needs attention", pending: "To
 
 export default function ProgressRail({
   steps,
+  noun,
   locked,
   empty,
   clearConfirm,
   onClear,
 }: {
   steps: Step[];
+  /** What the release is called, "album" or "single". */
+  noun: string;
   /** A run is starting or in progress, so the form can't be cleared. */
   locked: boolean;
   /** The form is already as Clear leaves it, with no run on show. */
@@ -100,7 +103,7 @@ export default function ProgressRail({
   const current = steps.find((s) => s.id === scrolled)?.locked ? "start" : scrolled;
   return (
     <nav className="rail" aria-label="Form sections">
-      <div className="kicker">This album</div>
+      <div className="kicker">This {noun}</div>
       <ol>
         {steps.map((s, i) => {
           // A locked step is no link: its section has nothing to fill in yet.

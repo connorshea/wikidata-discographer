@@ -26,7 +26,7 @@ import {
   saveOwnRun,
   settleOwnRun,
 } from "../lib/own-run.ts";
-import type { Plan, State } from "../lib/plan.ts";
+import { type Plan, releaseNoun, type State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type { PreviewEdit } from "../lib/preview.ts";
 import type { RunningInfo } from "../lib/progress.ts";
@@ -349,6 +349,7 @@ export default function RunSection({
   const count = plan.ops.length;
   const n = `${count} edit${count === 1 ? "" : "s"}`;
   const edits = useMemo(() => runEdits(plan, state), [plan, state]);
+  const noun = releaseNoun(state.album);
   // The run can't start until everything in the checklist is done.
   const blocked = !checklistDone || !user || !plan.ready || stale;
   const disabled = blocked || finished || running || starting;
@@ -374,7 +375,7 @@ export default function RunSection({
     return (found?.status === "ok" && found.label) || title;
   };
   const doneHint = user && !stale && finished && (
-    <p className="hint">This run is done. Start a new album to make more edits.</p>
+    <p className="hint">This run is done. Start a new one to make more edits.</p>
   );
   const staleHint = user && stale && (
     <p className="hint">The form was changed in another tab. Reload this page first.</p>
@@ -398,7 +399,7 @@ export default function RunSection({
           <h2>Create on Wikidata</h2>
         )}
         {user && cleared && !stale && (
-          <p className="hint">The run is done, so the form was cleared for the next album.</p>
+          <p className="hint">The run is done, so the form was cleared for the next run.</p>
         )}
         {run && (
           <RunProgress
@@ -480,6 +481,7 @@ export default function RunSection({
           {recreate && (
             <RecreateGuard
               recreate={recreate}
+              noun={noun}
               disabled={starting}
               onUse={() => {
                 const found = recreate.created.map((c) => ({
@@ -765,11 +767,14 @@ function UnknownRunGuard({
 /** Shown when the run would create items the user's last run already created. */
 function RecreateGuard({
   recreate,
+  noun,
   disabled,
   onUse,
   onConfirm,
 }: {
   recreate: Recreate;
+  /** What the release is called, "album" or "single". */
+  noun: string;
   disabled: boolean;
   onUse: () => void;
   onConfirm: () => void;
@@ -783,7 +788,7 @@ function RecreateGuard({
         <a href={recreate.editGroupUrl} target="_blank" rel="noreferrer">
           last run
         </a>{" "}
-        already created {n === 1 ? "this item" : `these ${n} items`} for this album, maybe from
+        already created {n === 1 ? "this item" : `these ${n} items`} for this {noun}, maybe from
         another browser or device. Use {n === 1 ? "it" : "them"} in the form so{" "}
         {n === 1 ? "it isn't" : "they aren't"} created twice, then start the run again.
       </p>
@@ -921,13 +926,6 @@ const RUN_STATUS: Record<SubmissionStatus, { label: string; tone: string }> = {
 /** Done rows shown under the edit in progress before "Show all N". */
 const LATEST = 3;
 
-/** An edit's item as the log names it, e.g. "composition". */
-function kindName(edit: PreviewEdit): string {
-  if (edit.kind === "comp") return "composition";
-  if (edit.kind === "album") return edit.heading.startsWith("Create EP") ? "EP" : "album";
-  return edit.kind;
-}
-
 function StatusIcon({ status }: { status: "done" | "fail" | "unknown" }) {
   const label = { done: "Done", fail: "Failed", unknown: "Outcome unknown" }[status];
   const cls = { done: "ok", fail: "fail", unknown: "problem" }[status];
@@ -1054,13 +1052,13 @@ function NextRow({ edit }: { edit: PreviewEdit }) {
       <span className="run-log-text">
         {edit.creates ? (
           <>
-            Creating {kindName(edit)} <b>{edit.title}</b>
+            Creating {edit.noun} <b>{edit.title}</b>
           </>
         ) : edit.kind === "album" ? (
-          "Adding the album tracklist"
+          `Adding the ${edit.title.toLowerCase()}`
         ) : (
           <>
-            Adding statements to {kindName(edit)} <b>{edit.title}</b>
+            Adding statements to {edit.noun} <b>{edit.title}</b>
           </>
         )}
       </span>
@@ -1089,7 +1087,7 @@ function LogRow({
   const what =
     e.op === "create" && edit ? (
       <>
-        {kindName(edit)} <b>{edit.title}</b>
+        {edit.noun} <b>{edit.title}</b>
       </>
     ) : (
       e.what

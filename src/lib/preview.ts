@@ -8,11 +8,13 @@ import {
   type Claim,
   COMPOSITION_CLASS,
   describeOp,
+  KIND_NAMES,
   LABEL_LANGS,
   LANGS,
   NO_LINGUISTIC_CONTENT,
   type Op,
   PARTS,
+  releaseNoun,
   type Plan,
   SECOND_UNIT,
   type Snak,
@@ -92,6 +94,8 @@ export interface PreviewEdit {
   kind: PreviewKind;
   /** Whether it creates the item, or adds statements to one that exists or was just made. */
   creates: boolean;
+  /** What the item is, as a noun: "album", "EP", "single", "composition" or "track". */
+  noun: string;
   /** The item's title, e.g. "After All", or "Album tracklist" for the tracklist edit. */
   title: string;
   /** The track row it's for: its disc (from 1) and position. */
@@ -174,7 +178,7 @@ function reusedQids(state: State, tracks: Plan["tracks"]): Set<string> {
 }
 
 /** Names for the items the form knows: its fixed choices, performers and reused items. */
-function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
+function itemNames(state: State, tracks: Plan["tracks"], noun: string): Map<string, string> {
   const fixed: (readonly [string, string])[] = [
     ...ALBUM_TYPES,
     ...ALBUM_FORMS,
@@ -196,7 +200,7 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
     const q = qid?.trim();
     if (q && !names.has(q)) names.set(q, name);
   };
-  if (state.album.mode === "existing") add(state.album.qid, "this album");
+  if (state.album.mode === "existing") add(state.album.qid, `this ${noun}`);
   for (const [name, qid] of Object.entries(state.artists)) add(qid, name);
   tracks.forEach((rows, di) => {
     const disc = state.discs[di];
@@ -211,7 +215,8 @@ function itemNames(state: State, tracks: Plan["tracks"]): Map<string, string> {
 
 function groupOf(op: Op, albumQid: string | null): PreviewGroupId {
   if (op.op === "create") {
-    if (op.kind === "album" || op.kind === "ep") return "album";
+    // The release a run is for, whether it's an album, an EP or a single.
+    if (op.key === "album") return "album";
     if (op.kind === "work") return "comp";
     if (op.kind === "track") return op.kind;
     return "existing";
@@ -226,6 +231,7 @@ function aboutOp(
   op: Op,
   group: PreviewGroupId,
   tracks: Plan["tracks"],
+  single: boolean,
 ): Pick<PreviewEdit, "kind" | "creates" | "title" | "place"> {
   if (op.op === "create") {
     const [, di, n] = op.key.split(":");
@@ -247,12 +253,16 @@ function aboutOp(
       title: row.title,
       place: { disc: at.di + 1, n: at.n },
     };
-  return { kind: "album", creates: false, title: "Album tracklist", place: null };
+  return {
+    kind: "album",
+    creates: false,
+    title: single ? "Single tracklist" : "Album tracklist",
+    place: null,
+  };
 }
 
 /** The plan's operations as grouped, labelled edits. */
 export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): PreviewGroup[] {
-  const names = itemNames(state, plan.tracks);
   const reused = reusedQids(state, plan.tracks);
   const created = new Map<string, string>();
   for (const op of plan.ops) if (op.op === "create") created.set(op.key, `new ${describeOp(op)}`);
@@ -289,15 +299,23 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
   });
 
   const albumQid = state.album.mode === "existing" ? state.album.qid.trim() : null;
+  // The release a new one is created as. An existing one is an album unless it's a single.
+  const release = plan.ops.find((o) => o.op === "create" && o.key === "album");
+  const releaseName =
+    release?.op === "create" ? KIND_NAMES[release.kind] : releaseNoun(state.album);
+  const names = itemNames(state, plan.tracks, releaseName);
   const groups = new Map<PreviewGroupId, PreviewEdit[]>();
   plan.ops.forEach((op, i) => {
     const g = groupOf(op, albumQid);
-    const about = aboutOp(op, g, plan.tracks);
+    const about = aboutOp(op, g, plan.tracks, releaseName === "single");
+    const noun =
+      about.kind === "album" ? releaseName : about.kind === "comp" ? "composition" : about.kind;
     const edit: PreviewEdit =
       op.op === "create"
         ? {
             n: i + 1,
             ...about,
+            noun,
             heading: `Create ${describeOp(op)}`,
             target: null,
             terms: [
@@ -317,6 +335,7 @@ export function previewPlan(plan: Pick<Plan, "ops" | "tracks">, state: State): P
         : {
             n: i + 1,
             ...about,
+            noun,
             heading: describeOp(op),
             target: value("", { type: "item", ...op.target }),
             terms: [],

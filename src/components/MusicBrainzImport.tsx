@@ -195,8 +195,8 @@ export default function MusicBrainzImport({
             </button>
           </form>
           <span className="sub" id={`${inputId}-sub`}>
-            Fills in the album, tracklist, performers and identifiers in one go. A release group
-            asks which of its releases has the tracklist you want.
+            Fills in the album or single, tracklist, performers and identifiers in one go. A release
+            group asks which of its releases has the tracklist you want.
           </span>
           {group && (
             <form
@@ -354,7 +354,7 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
   const foundParts: ReactNode[] = [
     found.album && (
       <>
-        the album <WikiLink base={wikiBaseUrl} qid={found.album} />
+        the {report.noun} <WikiLink base={wikiBaseUrl} qid={found.album} />
       </>
     ),
     found.artists > 0 && plural(found.artists, "artist"),
@@ -363,7 +363,7 @@ export function ImportReport({ id, report }: { id?: string; report: MbReport }) 
   ].filter(Boolean);
 
   const idRows: [string, string[] | MbReport["added"]["tracks"]][] = [
-    ["New album", added.album],
+    [`New ${report.noun}`, added.album],
     ["New tracks", added.tracks],
     ["New compositions", added.compositions],
     ["Found tracks", extended.tracks],

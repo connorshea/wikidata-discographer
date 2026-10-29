@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation, useRoute, useSearch } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { loginHref, useAuth, useLoggedOut } from "./lib/auth-context.ts";
-import { buildPlan, QID, type State } from "./lib/plan.ts";
+import { buildPlan, QID, releaseNoun, type State } from "./lib/plan.ts";
 import { artistStart, existingAlbum } from "./lib/artist-start.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -20,7 +20,7 @@ import { useAlbumTracklist } from "./components/use-album-tracklist.ts";
 import ProgressRail from "./components/ProgressRail.tsx";
 import PlanPanel from "./components/PlanPanel.tsx";
 import StartSection, { type StartHandle } from "./components/StartSection.tsx";
-import { albumProblem, useItemSummaries } from "./components/use-item-summaries.ts";
+import { albumProblem, existingSingle, useItemSummaries } from "./components/use-item-summaries.ts";
 import AlbumList from "./components/AlbumList.tsx";
 import ArtistPage from "./components/ArtistPage.tsx";
 import { Lock } from "./components/common.tsx";
@@ -372,6 +372,17 @@ function Form() {
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   const lookupAlbum = useItemSummaries([existingQid], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
+  // Record what Wikidata says the existing release is once it's been asked, so the plan, the
+  // server and the run all call a single one. A QID still being looked up, or whose lookup
+  // failed, keeps what it had.
+  const singleQid = existingSingle(existingQid, albumFound) ? existingQid : "";
+  const albumKnown =
+    !existingQid ||
+    (!!albumFound && albumFound.status !== "loading" && albumFound.status !== "failed");
+  if (albumKnown && state.album.singleQid !== singleQid)
+    update((s) => {
+      s.album.singleQid = singleQid;
+    });
   const startRef = useRef<StartHandle>(null);
   const loadedRg = useRef(false);
   useEffect(() => {
@@ -429,6 +440,7 @@ function Form() {
         <div className={loggedOut ? "shell logged-out" : "shell"} inert={loggedOut}>
           <ProgressRail
             steps={railSteps(progress)}
+            noun={releaseNoun(state.album)}
             locked={locked}
             empty={empty && !showingRun}
             // An empty form loses nothing, so closing the run needs no asking.
@@ -437,7 +449,7 @@ function Form() {
                 ? null
                 : {
                     title: "Clear the form?",
-                    body: "This removes the album, settings, tracklists, and performers you've entered. It can't be undone.",
+                    body: "This removes the release, settings, tracklists, and performers you've entered. It can't be undone.",
                     action: "Clear the form",
                   }
             }

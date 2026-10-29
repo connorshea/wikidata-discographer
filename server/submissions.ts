@@ -21,7 +21,7 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db.ts";
-import { musicExternalIds, submissions, wikidataEdits } from "../db/schema.ts";
+import { musicExternalIds, musicItems, submissions, wikidataEdits } from "../db/schema.ts";
 import { editEligibility } from "./auth/eligibility.ts";
 import { type AuthEnv, type AuthUser, requireUser } from "./auth/session.ts";
 import { fromSqlDatetime, toSqlDatetime } from "./auth/time.ts";
@@ -45,7 +45,7 @@ import {
 } from "./wikidata-client.ts";
 import { buildPlan, describeOp, type Op, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
-import { ALBUM_ID_FIELDS, ID_PROPERTIES } from "../src/lib/music.ts";
+import { ALBUM_ID_FIELDS, ID_PROPERTIES, KIND_NOUNS, type MusicKind } from "../src/lib/music.ts";
 import type {
   EditLogEntry,
   SubmissionInfo,
@@ -190,8 +190,9 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
     ).filter(([, v]) => v);
     for (const [property, value] of given) {
       const [hit] = await db
-        .select({ qid: musicExternalIds.qid })
+        .select({ qid: musicExternalIds.qid, kind: musicItems.kind })
         .from(musicExternalIds)
+        .leftJoin(musicItems, eq(musicItems.qid, musicExternalIds.qid))
         .where(
           and(
             eq(musicExternalIds.property, propertyNumber(property)),
@@ -202,7 +203,7 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
       if (hit)
         return c.json(
           {
-            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}; use that album instead.`,
+            error: `${toQid(hit.qid)} already has ${ID_PROPERTIES[property]} ${value}. Use that ${hit.kind ? KIND_NOUNS[hit.kind as MusicKind] : "item"} instead.`,
           },
           409,
         );

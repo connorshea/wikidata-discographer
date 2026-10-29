@@ -35,6 +35,8 @@ import {
   type Settings,
   type State,
   type Track,
+  releaseNoun,
+  capitalized,
 } from "../lib/plan.ts";
 import { artistsText, emptyDisc, parseArtists } from "../lib/state.ts";
 import {
@@ -131,7 +133,9 @@ export default function DiscsSection({
         {rows.length > 0 && base.length > 0 && (
           <p className="album-line">
             <span>
-              {ofAlbum ? (base.length > 1 ? "Album artists" : "Album artist") : "On every track"}
+              {ofAlbum
+                ? `${capitalized(releaseNoun(state.album))} artist${base.length > 1 ? "s" : ""}`
+                : "On every track"}
             </span>
             {base.map((a) => (
               <PerformerChip key={a} name={a} linked={QID.test((state.artists[a] ?? "").trim())} />
@@ -415,7 +419,7 @@ function DiscBlock({
           )}
           <FieldErr id={`${ids}-part`} msg={partErr} />
         </label>
-        <span className="sub">Leave as None for a single-disc album.</span>
+        <span className="sub">Leave as None if there's only one disc.</span>
         {state.discs.length > 1 && (
           <ConfirmButton
             label="Remove disc"
@@ -534,9 +538,9 @@ function DiscBlock({
                         linked={linked}
                         placeholder={
                           ofAlbum
-                            ? `${base.join(", ")} (default for album)`
+                            ? `${base.join(", ")} (default for every track)`
                             : creating
-                              ? "Album artist"
+                              ? `${capitalized(releaseNoun(state.album))} artist`
                               : "Artists"
                         }
                         error={title ? errs.artists : undefined}
@@ -887,7 +891,6 @@ function Writers({
 
 /** A track type's name in a sentence, e.g. "music track without lyrics". */
 const typeName = (qid: string) => TRACK_TYPES.find(([q]) => q === qid)?.[1] ?? qid;
-const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * A track's P31, which it takes from the album unless it has its own, or MusicBrainz says
@@ -929,7 +932,7 @@ function TrackType({
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">
-          {`${capitalized(typeName(fallback.qid))} (${fallback.fromMb ? "from MusicBrainz" : "default for album"})`}
+          {`${capitalized(typeName(fallback.qid))} (${fallback.fromMb ? "from MusicBrainz" : "default for every track"})`}
         </option>
         {TRACK_TYPES.filter(([q]) => q !== fallback.qid).map(([q, l]) => (
           <option key={q} value={q}>
@@ -956,7 +959,7 @@ const langNames = (qids: string[]) =>
   qids.length ? capitalized(qids.map(langName).join(" and ")) : "None";
 
 const LANG_SOURCES = {
-  album: "default for album",
+  album: "default for every track",
   mb: "from MusicBrainz",
   type: "as it's without lyrics",
   vocals: "as it has vocals",
@@ -1224,7 +1227,7 @@ function RecTypes({
   const note = linkedTrack
     ? "Added to the existing track only if it has none."
     : overriding
-      ? "Overriding the album default."
+      ? "Overriding the default for every track."
       : null;
   return (
     <div className="f wide" role="group" aria-label={`Track ${n} recording type`}>

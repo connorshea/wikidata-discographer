@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { SubmissionInfo } from "./api-types.ts";
 import { EXAMPLE } from "./example.fixture.ts";
-import { buildPlan, describeOp } from "./plan.ts";
+import { buildPlan, describeOp, EP_CLASS } from "./plan.ts";
 import {
   editShares,
   entryKind,
@@ -69,6 +69,16 @@ describe("editShares", () => {
     );
     expect(album).toMatchObject({ edits: 2, count: 1, text: "new album with its tracklist" });
   });
+
+  it("calls a new EP an EP", () => {
+    const state = structuredClone(EXAMPLE);
+    state.album.mode = "create";
+    state.album.type = EP_CLASS;
+    const album = editShares(runEdits(buildPlan(state), state), "Day and Night").find(
+      (s) => s.kind === "album",
+    );
+    expect(album?.text).toBe("new EP with its tracklist");
+  });
 });
 
 describe("runProgress", () => {
@@ -87,6 +97,14 @@ describe("runProgress", () => {
     const info = runProgress(runOf(plan.ops.length, "done"));
     expect(info.next).toBeNull();
     expect(info.secondsLeft).toBe(0);
+  });
+
+  it("calls an existing single a single, from the form the run was sent", () => {
+    const input = structuredClone(EXAMPLE);
+    input.album.singleQid = input.album.qid;
+    const info = runProgress({ ...runOf(plan.ops.length - 1), input });
+    expect(info.kinds.at(-1)?.label).toBe("Single tracklist");
+    expect(info.next).toMatchObject({ noun: "single", title: "Single tracklist" });
   });
 
   it("doesn't guess when the plan no longer lines up with the run", () => {

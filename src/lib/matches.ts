@@ -8,7 +8,7 @@ import type {
   RowMatches,
   TrackMatch,
 } from "./api-types.ts";
-import type { Disc, Track } from "./plan.ts";
+import { capitalized, type Disc, type Track } from "./plan.ts";
 import { SIMILAR_TITLE } from "./titles.ts";
 
 /**
@@ -16,6 +16,15 @@ import { SIMILAR_TITLE } from "./titles.ts";
  * lyricist. Such a match is only a guess.
  */
 export const NO_ARTIST = "no artist set";
+
+/**
+ * The reason given for a track on the existing release. It says "album" for a
+ * single too, so it's shown with reasonText.
+ */
+export const ON_RELEASE = "on this album";
+
+/** A reason as shown, naming the existing release by `noun`, e.g. "on this single". */
+export const reasonText = (r: string, noun: string) => (r === ON_RELEASE ? `on this ${noun}` : r);
 
 const isTitleReason = (r: string) => r === "same title" || r === SIMILAR_TITLE;
 
@@ -96,13 +105,13 @@ export function slotValue(disc: Disc, n: number, slot: Slot): string {
 export const isStrong = (m: Match) => m.reasons.some((r) => !isTitleReason(r) && r !== NO_ARTIST);
 
 // The order a match's ties beyond its title are shown in, strongest first.
-const TIE_ORDER = ["on this album", "same performer", "same composer or lyricist"];
+const TIE_ORDER = [ON_RELEASE, "same performer", "same composer or lyricist"];
 
 /**
  * What ties a match to the form beyond its title, as chips, e.g. ["Same
- * performer"] or ["On this album", "Recorded as Q42"].
+ * performer"] or ["On this single", "Recorded as Q42"]. `noun` names the existing release.
  */
-export function ties(m: Pick<Match, "reasons">): string[] {
+export function ties(m: Pick<Match, "reasons">, noun: string): string[] {
   const rank = (r: string) => {
     const i = TIE_ORDER.indexOf(r);
     return i === -1 ? TIE_ORDER.length : i;
@@ -110,7 +119,7 @@ export function ties(m: Pick<Match, "reasons">): string[] {
   return m.reasons
     .filter((r) => !isTitleReason(r) && r !== NO_ARTIST)
     .sort((a, b) => rank(a) - rank(b))
-    .map((r) => r[0].toUpperCase() + r.slice(1));
+    .map((r) => capitalized(reasonText(r, noun)));
 }
 
 // Where a description's "by …" phrase ends, e.g. "song by X from the album Y".

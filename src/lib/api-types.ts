@@ -39,7 +39,7 @@ export interface MirrorItem {
   description: string | null;
 }
 
-/** A search result. Albums and EPs also say what the mirror knows of their tracklist. */
+/** A search result. Albums, EPs and singles also say what the mirror knows of their tracklist. */
 export interface SearchItem extends MirrorItem {
   album?: AlbumFacts;
 }
@@ -259,6 +259,10 @@ export interface ArtistSingle {
   parts: number | null;
   /** The albums it's taken from (P13602), by label. Not always the artist's. */
   takenFrom: { qid: string; label: string | null }[];
+  /** Its MusicBrainz release group IDs (P436). */
+  releaseGroups: string[];
+  /** The latest Discographer run on it. */
+  run: ArtistAlbum["run"];
 }
 
 /** GET /api/artists/:qid: the artist and its albums, EPs and singles, oldest first. */

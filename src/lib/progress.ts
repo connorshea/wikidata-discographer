@@ -12,6 +12,8 @@ import {
   type Settings,
   type StartingPoint,
   type State,
+  releaseNoun,
+  capitalized,
 } from "./plan.ts";
 
 export type StepId = "start" | "album" | "settings" | "tracks" | "performers" | "create";
@@ -141,8 +143,11 @@ function albumSummary(state: State): string | null {
   if (A.mode === "existing") return A.qid.trim() ? `Existing · ${A.qid.trim()}` : null;
   const title = A.title.trim();
   if (!title && !albumArtists(state).length) return null;
-  return title ? `New · ${title}` : "New album";
+  return title ? `New · ${title}` : `New ${newNoun(state)}`;
 }
+
+/** A new release's noun, "single" or "album". */
+const newNoun = (state: State) => releaseNoun({ ...state.album, mode: "create" });
 
 /** What each starting point is called once the form is started from it. */
 export const START_NAMES: Record<StartingPoint, string> = {
@@ -178,18 +183,18 @@ export function startSummary(
     mb: "Started from MusicBrainz",
     existing: "Started from an album QID",
     search: "Found by searching",
-    new: "New album from scratch",
+    new: `New ${newNoun(state)} from scratch`,
   }[start];
   const title =
     A.mode === "existing" ? (albumLabel ?? A.qid.trim()) || "No album picked" : A.title.trim();
   return {
     from,
-    title: title || "Untitled album",
+    title: title || `Untitled ${newNoun(state)}`,
     details: [
       ...(artists.length ? [artists.join(", ")] : []),
       ...(trackCount ? [plural(discCount, "disc"), plural(trackCount, "track")] : []),
       ...(start === "mb" && A.mode === "create"
-        ? ["not on Wikidata yet, so a new album will be created"]
+        ? [`not on Wikidata yet, so a new ${newNoun(state)} will be created`]
         : []),
     ],
   };
@@ -229,6 +234,7 @@ export function settingsPills(S: Settings): string[] {
 /** The rail's steps, in page order. */
 export function railSteps(p: ProgressInput): Step[] {
   const { state, plan, unreviewed, hasTracklist, notAlbum, running } = p;
+  const noun = releaseNoun(state.album);
   const S = state.settings;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
   const discCount = plan.tracks.filter((rows) => rows.length).length;
@@ -246,7 +252,7 @@ export function railSteps(p: ProgressInput): Step[] {
       : { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" },
     {
       id: "album",
-      name: "Album",
+      name: capitalized(noun),
       summary: album ?? "Not set",
       status: album
         ? status(blockedAt(plan, "album") || hasTracklist || notAlbum, true)
@@ -303,9 +309,10 @@ export function railSteps(p: ProgressInput): Step[] {
 /** The first thing holding up the run, in a few words. */
 function createBlockedBy(p: ProgressInput, perf: { linked: number; total: number }): string {
   if (!p.state.start) return "pick a starting point";
-  if (p.notAlbum) return "album QID";
-  if (p.hasTracklist) return "album has a tracklist";
-  if (blockedAt(p.plan, "album")) return "album details";
+  const noun = releaseNoun(p.state.album);
+  if (p.notAlbum) return `${noun} QID`;
+  if (p.hasTracklist) return `${noun} has a tracklist`;
+  if (blockedAt(p.plan, "album")) return `${noun} details`;
   if (perf.linked < perf.total) return plural(perf.total - perf.linked, "performer");
   if (p.unreviewed) return plural(p.unreviewed, "match", "matches");
   if (blockedAt(p.plan, "settings")) return "item settings";
@@ -352,7 +359,10 @@ export function createCounts(state: State, plan: Plan): CreateCount[] {
     },
     {
       kind: "album",
-      label: state.album.mode === "create" ? "Album" : "Album tracklist",
+      label:
+        state.album.mode === "create"
+          ? capitalized(newNoun(state))
+          : `${capitalized(releaseNoun(state.album))} tracklist`,
       edge: "disc-edge",
       count: rows.length ? 1 : 0,
       reused: 0,
@@ -369,89 +379,82 @@ export interface Check {
   problem?: boolean;
 }
 
+/** The input `runChecks` needs on top of the rail's. */
+export type CheckInput = ProgressInput & {
+  /** Why the logged-in account can't edit yet, if it can't. */
+  ineligible: string | null;
+  matchesPending: boolean;
+  /** The existing album is still being looked up on Wikidata. */
+  albumPending: boolean;
+};
+
+type CheckAt = Check["at"];
+const done = (text: string): Check => ({ ok: true, text, at: null });
+/** Still to do, but nothing's wrong. */
+const todo = (text: string, at: CheckAt): Check => ({ ok: false, text, at });
+/** Something's wrong that holds the run up. */
+const problem = (text: string, at: CheckAt): Check => ({ ok: false, text, at, problem: true });
+
 /** The run's checklist: each thing that has to be true before it can start. */
-export function runChecks(
-  p: ProgressInput & {
-    /** Why the logged-in account can't edit yet, if it can't. */
-    ineligible: string | null;
-    matchesPending: boolean;
-    /** The existing album is still being looked up on Wikidata. */
-    albumPending: boolean;
-  },
-): Check[] {
-  const { state, plan, unreviewed, hasTracklist } = p;
+export function runChecks(p: CheckInput): Check[] {
+  const { state, plan } = p;
   const trackCount = plan.tracks.reduce((n, rows) => n + rows.length, 0);
-  const perf = linkedPerformers(state, plan);
-  const albumWrong = blockedAt(plan, "album") || p.notAlbum;
-  const albumBlocked = albumWrong || albumSummary(state) === null;
-  const checks: Check[] = [
+  return [
     // Logged out, the form can't be used at all, so a login isn't on the list.
-    ...(p.ineligible ? [{ ok: false, text: p.ineligible, at: null, problem: true }] : []),
-    !state.start
-      ? { ok: false, text: "Pick a starting point", at: "start" }
-      : albumBlocked
-        ? { ok: false, text: "Choose or create the album", at: "album", problem: albumWrong }
-        : hasTracklist
-          ? { ok: false, text: "Album already has a tracklist", at: "album", problem: true }
-          : state.album.mode === "existing" && p.albumPending
-            ? { ok: false, text: "Checking the album on Wikidata…", at: "album" }
-            : {
-                ok: true,
-                text:
-                  state.album.mode === "create"
-                    ? "New album filled in"
-                    : "Album has no tracklist yet",
-                at: null,
-              },
-    trackCount
-      ? blockedAt(plan, "tracks")
-        ? { ok: false, text: "Fix the errors in Tracks", at: "tracks", problem: true }
-        : { ok: true, text: plural(trackCount, "track"), at: null }
-      : { ok: false, text: "Add at least one track", at: "tracks" },
-    perf.linked < perf.total || blockedAt(plan, "performers")
-      ? {
-          ok: false,
-          text:
-            perf.linked < perf.total
-              ? `Link ${plural(perf.total - perf.linked, "more performer")}`
-              : "Fix the QIDs under People",
-          at: "performers",
-          // Once there are tracks, an unlinked performer holds the run up.
-          problem: trackCount > 0 || blockedAt(plan, "performers"),
-        }
-      : {
-          ok: !!perf.total,
-          text: perf.total ? "Every performer has a QID" : "Link every performer",
-          at: perf.total ? null : "performers",
-        },
+    ...(p.ineligible ? [problem(p.ineligible, null)] : []),
+    releaseCheck(p),
+    tracksCheck(plan, trackCount),
+    performersCheck(p, trackCount),
+    ...(trackCount ? [matchesCheck(p)] : []),
+    // Item settings stay locked, so they can't be fixed, until a starting point is picked.
+    ...(state.start && blockedAt(plan, "settings")
+      ? [problem("Fix the errors in Item settings", "settings")]
+      : []),
+    ...(blockedAt(plan, "create")
+      ? [problem("Fix the problems under Create on Wikidata", "create")]
+      : []),
   ];
-  if (trackCount)
-    checks.push(
-      unreviewed
-        ? {
-            ok: false,
-            text: `Review ${plural(unreviewed, "possible match", "possible matches")}`,
-            at: "matches",
-            problem: true,
-          }
-        : p.matchesPending
-          ? { ok: false, text: "Looking for possible matches…", at: "matches" }
-          : { ok: true, text: "All possible matches reviewed", at: null },
+}
+
+/** The album or single: picked or filled in, and with no tracklist yet. */
+function releaseCheck(p: CheckInput): Check {
+  const { state, plan } = p;
+  const noun = releaseNoun(state.album);
+  if (!state.start) return todo("Pick a starting point", "start");
+  const wrong = blockedAt(plan, "album") || p.notAlbum;
+  if (wrong) return problem(`Choose or create the ${noun}`, "album");
+  if (albumSummary(state) === null) return todo(`Choose or create the ${noun}`, "album");
+  if (p.hasTracklist) return problem(`${capitalized(noun)} already has a tracklist`, "album");
+  if (state.album.mode === "create") return done(`New ${noun} filled in`);
+  if (p.albumPending) return todo("Checking the QID on Wikidata…", "album");
+  return done(`${capitalized(noun)} has no tracklist yet`);
+}
+
+function tracksCheck(plan: Plan, trackCount: number): Check {
+  if (!trackCount) return todo("Add at least one track", "tracks");
+  if (blockedAt(plan, "tracks")) return problem("Fix the errors in Tracks", "tracks");
+  return done(plural(trackCount, "track"));
+}
+
+function performersCheck(p: CheckInput, trackCount: number): Check {
+  const { linked, total } = linkedPerformers(p.state, p.plan);
+  const blocked = blockedAt(p.plan, "performers");
+  if (linked < total) {
+    const text = `Link ${plural(total - linked, "more performer")}`;
+    // Once there are tracks, an unlinked performer holds the run up.
+    return trackCount > 0 || blocked ? problem(text, "performers") : todo(text, "performers");
+  }
+  if (blocked) return problem("Fix the QIDs under People", "performers");
+  if (!total) return todo("Link every performer", "performers");
+  return done("Every performer has a QID");
+}
+
+function matchesCheck(p: CheckInput): Check {
+  if (p.unreviewed)
+    return problem(
+      `Review ${plural(p.unreviewed, "possible match", "possible matches")}`,
+      "matches",
     );
-  // Item settings stay locked, so they can't be fixed, until a starting point is picked.
-  if (state.start && blockedAt(plan, "settings"))
-    checks.push({
-      ok: false,
-      text: "Fix the errors in Item settings",
-      at: "settings",
-      problem: true,
-    });
-  if (blockedAt(plan, "create"))
-    checks.push({
-      ok: false,
-      text: "Fix the problems under Create on Wikidata",
-      at: "create",
-      problem: true,
-    });
-  return checks;
+  if (p.matchesPending) return todo("Looking for possible matches…", "matches");
+  return done("All possible matches reviewed");
 }

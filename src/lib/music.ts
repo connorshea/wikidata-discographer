@@ -14,6 +14,16 @@ export const MUSIC_KINDS: readonly MusicKind[] = [
   "track",
 ];
 
+/** What each kind of item is called in a sentence. */
+export const KIND_NOUNS: Readonly<Record<MusicKind, string>> = {
+  artist: "artist",
+  album: "album",
+  ep: "EP",
+  single: "single",
+  work: "composition",
+  track: "track",
+};
+
 /**
  * `instance of` (P31) classes → kind. Exact QIDs, no subclasses. Earlier
  * entries win when an item has several.

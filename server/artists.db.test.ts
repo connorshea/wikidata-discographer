@@ -95,6 +95,8 @@ describe.skipIf(!process.env.DB_TESTS)("GET /api/artists/:qid", () => {
         tracks: 0,
         parts: null,
         takenFrom: [],
+        releaseGroups: [],
+        run: null,
       },
       {
         qid: `Q${SINGLE}`,
@@ -106,6 +108,8 @@ describe.skipIf(!process.env.DB_TESTS)("GET /api/artists/:qid", () => {
           { qid: `Q${OTHERS_ALBUM}`, label: "Kiss" },
           { qid: `Q${ALBUM}`, label: "Ocean Eyes" },
         ],
+        releaseGroups: [],
+        run: null,
       },
     ]);
     expect(res.singlesTruncated).toBe(false);

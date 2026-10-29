@@ -1,7 +1,7 @@
 // What Create on Wikidata shows about a run: how its edits split by item type,
 // before it starts and as it goes, and roughly how long the rest will take.
 import type { EditLogEntry, SubmissionInfo } from "./api-types.ts";
-import { buildPlan, type Plan, type State } from "./plan.ts";
+import { buildPlan, capitalized, type Plan, type State } from "./plan.ts";
 import { type PreviewEdit, type PreviewKind, previewPlan } from "./preview.ts";
 
 /** The plan's edits in run order, each with its item's kind, title and row. */
@@ -48,7 +48,7 @@ export function editShares(edits: readonly PreviewEdit[], albumName: string): Ed
           edge,
           edits: mine.length,
           count: 1,
-          text: made ? "new album with its tracklist" : `tracklist added to ${albumName}`,
+          text: made ? `new ${mine[0].noun} with its tracklist` : `tracklist added to ${albumName}`,
           extra: null,
         },
       ];
@@ -114,8 +114,13 @@ export function runProgress(
     ? ORDER.flatMap((kind) => {
         const all = edits.filter((e) => e.kind === kind);
         if (!all.length) return [];
+        const release = capitalized(all[0].noun);
         const label =
-          kind === "album" && all.some((e) => e.creates) ? "Album" : PROGRESS_LABELS[kind];
+          kind !== "album"
+            ? PROGRESS_LABELS[kind]
+            : all.some((e) => e.creates)
+              ? release
+              : `${release} tracklist`;
         const made = all.filter((e) => e.n <= done).length;
         return [{ kind, edge: KIND_EDGES[kind], label, done: made, total: all.length }];
       })
@@ -150,6 +155,8 @@ export function timeLeft(seconds: number): string {
 
 /** A log entry's kind from what the server logged, for runs whose plan can't be rebuilt. */
 export function entryKind(e: EditLogEntry): PreviewKind {
+  // A new single is the release itself, not one of the singles old runs made per track.
+  if (e.key === "album") return "album";
   if (e.kind === "work") return "comp";
   if (e.kind === "track" || e.kind === "single") return e.kind;
   return "album";

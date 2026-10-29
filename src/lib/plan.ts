@@ -62,6 +62,11 @@ export interface AlbumState {
   release: string;
   /** Where a MusicBrainz import's album details came from. Null without an import. */
   mb: AlbumMb | null;
+  /**
+   * The existing release's QID once Wikidata says it's a single, so it's called one in the
+   * form, the plan and the run. Empty for anything else. It stops counting once `qid` changes.
+   */
+  singleQid: string;
 }
 
 /** A value a MusicBrainz import filled in, and the MusicBrainz entity it was read from. */
@@ -315,6 +320,7 @@ const WD_URL =
 export const ALBUM_TYPES = [
   ["Q482994", "album"],
   ["Q169930", "extended play"],
+  ["Q134556", "single"],
 ] as const;
 
 export const STUDIO_ALBUM = "Q208569";
@@ -328,9 +334,11 @@ export const ALBUM_FORMS = [
   ["Q1138081", "covers album"],
 ] as const;
 
-/** The album and EP classes the app knows. Exact QIDs, no subclasses. */
+/** The album, EP and single classes the app knows. Exact QIDs, no subclasses. */
 export const ALBUM_CLASSES: ReadonlySet<string> = new Set([
-  ...CLASS_KINDS.filter(([, kind]) => kind === "album" || kind === "ep").map(([q]) => q),
+  ...CLASS_KINDS.filter(([, kind]) => kind === "album" || kind === "ep" || kind === "single").map(
+    ([q]) => q,
+  ),
   ...ALBUM_FORMS.map(([q]) => q),
 ]);
 
@@ -583,19 +591,35 @@ export const TRACK_UNIT = "Q7302866";
 export const SECOND_UNIT = "Q11574";
 export const MUSICBRAINZ = "Q14005";
 export const EP_CLASS = "Q169930";
+export const SINGLE_CLASS = "Q134556";
 export const MUSIC_STREAMING = "Q15982450";
 /** Album IDs on streaming services, which mean the album is distributed by music streaming. */
 const STREAMING_ID_PROPERTIES = new Set(["P2205", "P2281", "P2723", "P4577"]);
 
-/** Set a new album's type. An EP isn't a studio album, so switching to EP drops that form. */
+/**
+ * Set a new album's type. An EP isn't a studio album, so switching to EP drops that form,
+ * and a single has no album form at all.
+ */
 export function setAlbumType(s: State, type: string) {
   s.album.type = type;
+  if (type === SINGLE_CLASS) s.album.form = "";
   if (type === EP_CLASS && s.album.form === STUDIO_ALBUM) s.album.form = "";
 }
 
+/** What the release is called in the form: "single", or "album" for an EP too. */
+export const releaseNoun = (A: AlbumState) =>
+  (A.mode === "create" ? A.type === SINGLE_CLASS : !!A.singleQid && A.singleQid === A.qid.trim())
+    ? "single"
+    : "album";
+
+/** The string with its first letter capitalised, e.g. "Single" from "single". */
+export const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** The `{type}` in an album's description: the form's label, or "album" or "EP" when
- * there's no form. An EP says "EP" in place of "album", and a studio EP is just "EP". */
+ * there's no form. An EP says "EP" in place of "album", and a studio EP is just "EP".
+ * A single is always "single". */
 export const descTypeLabel = (type: string, form: string): string => {
+  if (type === SINGLE_CLASS) return "single";
   const ep = type === EP_CLASS;
   const label = ALBUM_FORMS.find(([q]) => q === form)?.[1];
   if (!label) return ep ? "EP" : "album";
@@ -969,6 +993,8 @@ export function buildPlan(state: State): Plan {
   const albumPerf = perfFor(albumNames);
   const albumTitle = creatingAlbum ? straighten(A.title.trim()) : "";
   const albumTypeLabel = descTypeLabel(A.type, A.form);
+  const single = creatingAlbum && A.type === SINGLE_CLASS;
+  const noun = releaseNoun(A);
   Object.assign(fieldErrs, { albumQid: "", albumTitle: "", albumArtists: "", albumDesc: "" });
   const albumIds: Claim[] = [];
   if (!creatingAlbum) {
@@ -976,10 +1002,10 @@ export function buildPlan(state: State): Plan {
     if (!aq) fieldErrs.albumQid = "Enter the album's QID, or choose to create it.";
     else if (!QID.test(aq)) fieldErrs.albumQid = `"${aq}" isn't a QID.`;
   } else {
-    if (!albumTitle) fieldErrs.albumTitle = "Enter the album title.";
+    if (!albumTitle) fieldErrs.albumTitle = `Enter the ${noun} title.`;
     else if (chars(albumTitle) > MAX_TERM_LENGTH)
       fieldErrs.albumTitle = `Wikidata allows ${MAX_TERM_LENGTH} characters at most. This title has ${chars(albumTitle)}.`;
-    if (!albumNames.length) fieldErrs.albumArtists = "Enter at least one album artist.";
+    if (!albumNames.length) fieldErrs.albumArtists = `Enter at least one ${noun} artist.`;
     fieldErrs.albumDesc = checkTemplate(S.albumDesc, date, ["year", "type", "artists"]).join(" ");
     for (const f of ALBUM_ID_FIELDS) {
       const v = (A.ids[f.key] ?? "").trim();
@@ -1104,7 +1130,7 @@ export function buildPlan(state: State): Plan {
       fieldErrs[`part-${di}`] =
         `Disc ${at.find((o) => o !== di)! + 1} has this part too. Each disc needs its own.`;
 
-  if (!items.length) err("Add the album's tracks, or load them from MusicBrainz.", "tracks");
+  if (!items.length) err(`Add the ${noun}'s tracks, or load them from MusicBrainz.`, "tracks");
   tracks.forEach((rows, di) => {
     if (rows.length > MAX_TRACKS_PER_DISC)
       err(
@@ -1120,18 +1146,18 @@ export function buildPlan(state: State): Plan {
         "Split the release into separate runs.",
       "tracks",
     );
-  if (albumErr) err("Fix the album details at the top of the page.", "album");
+  if (albumErr) err(`Fix the ${noun} details at the top of the page.`, "album");
   if (dupes.size) err(`Track numbers repeat within a disc: ${[...dupes].join(", ")}.`, "tracks");
   for (const at of sharedWorks)
     err(
       `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are performances of the same MusicBrainz work. ` +
-        "Discographer can't create this album for now.",
+        `Discographer can't create this ${noun} for now.`,
       "tracks",
     );
   for (const at of sharedRecordings)
     err(
       `Tracks ${at.slice(0, -1).join(", ")} and ${at.at(-1)} are the same MusicBrainz recording. ` +
-        "Discographer can't create this album for now.",
+        `Discographer can't create this ${noun} for now.`,
       "tracks",
     );
   const discList = (ns: number[]) =>
@@ -1304,11 +1330,12 @@ export function buildPlan(state: State): Plan {
     ops.push({
       op: "create",
       key: "album",
-      kind: A.type === EP_CLASS ? "ep" : "album",
+      kind: single ? "single" : A.type === EP_CLASS ? "ep" : "album",
       ...labelled(albumTitle, fillDesc(S.albumDesc, year, albumNames, albumTypeLabel)),
       claims: [
         claim("P31", item(A.type)),
-        ...(A.form ? [claim("P7937", item(A.form))] : []),
+        // A single has no album form, even one left over from a saved form.
+        ...(A.form && !single ? [claim("P7937", item(A.form))] : []),
         title(albumTitle),
         ...albumPerf.map((p) => claim("P175", item(p))),
         ...pubDate,
@@ -1425,7 +1452,7 @@ export function buildPlan(state: State): Plan {
   ops.push({
     op: "addClaims",
     target: album,
-    what: "album tracklist",
+    what: `${noun} tracklist`,
     claims: [
       ...items.map((it) =>
         claim("P658", trackOf(it), [
@@ -1452,7 +1479,7 @@ export function buildPlan(state: State): Plan {
         tooLong.add(
           row
             ? `the ${kind === "comp" ? "composition" : kind} description for ${row} (${chars(t)})`
-            : `the album description (${chars(t)})`,
+            : `the ${noun} description (${chars(t)})`,
         );
   }
   if (tooLong.size) {
@@ -1477,7 +1504,7 @@ export function buildPlan(state: State): Plan {
   messages.push([
     "ok",
     [
-      creatingAlbum ? "Creates the album" : `Adds to ${A.qid.trim()}`,
+      creatingAlbum ? `Creates the ${noun}` : `Adds to ${A.qid.trim()}`,
       `${creates("comp:")} composition(s) to create, ${items.length - creates("comp:")} reused`,
       `${creates("track:")} track(s) to create, ${items.length - creates("track:")} reused`,
       `${items.length} tracklist statement(s)`,

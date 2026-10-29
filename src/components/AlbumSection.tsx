@@ -7,23 +7,22 @@ import {
   ALBUM_FORMS,
   ALBUM_TYPES,
   QID,
+  capitalized,
   citesMb,
   EP_CLASS,
   loadedReleaseGroup,
+  releaseNoun,
   setAlbumType,
+  SINGLE_CLASS,
 } from "../lib/plan.ts";
 import { isIdReason } from "../lib/matches.ts";
-import { ALBUM_ID_FIELDS, type AlbumIdKey, CLASS_KINDS, normalizeAlbumId } from "../lib/music.ts";
+import { ALBUM_ID_FIELDS, type AlbumIdKey, normalizeAlbumId } from "../lib/music.ts";
 import type { DuplicateMatch, DuplicatesRequest, DuplicatesResponse } from "../lib/api-types.ts";
 import { FieldErr, InfoTip, Pids, WikiLink } from "./common.tsx";
 import { useDebounced } from "./use-debounced.ts";
-import { albumProblem, type ItemLookup } from "./use-item-summaries.ts";
+import { albumProblem, type ItemLookup, releaseKind } from "./use-item-summaries.ts";
 import type { SectionProps } from "./types.ts";
 import type { AlbumTracklist } from "./use-album-tracklist.ts";
-
-/** The album's kind, from its classes on Wikidata: "EP" or "Album". */
-const kindOf = (classes: string[]) =>
-  classes.some((c) => CLASS_KINDS.some(([q, k]) => q === c && k === "ep")) ? "EP" : "Album";
 
 export default function AlbumSection({
   state,
@@ -60,19 +59,22 @@ export default function AlbumSection({
   const qid = A.qid.trim();
   const problem = errs.albumQid || notAlbum;
   const ok = found?.status === "ok" ? found : null;
+  // A single is called one throughout. An EP is called an album, as it always has been.
+  const noun = releaseNoun(A);
+  const Noun = capitalized(noun);
   return (
     <section className="block" id="album">
       <div className="album-head">
         <h2>
           <span className="sw" style={{ background: "var(--disc-edge)" }} aria-hidden="true" />
-          Album
+          {Noun}
         </h2>
         <span className="sub">
           {A.mode === "create"
-            ? "New album"
+            ? `New ${noun}`
             : state.start === "mb"
               ? "Found on Wikidata through the MusicBrainz release group"
-              : "Existing album"}
+              : `Existing ${noun}`}
         </span>
       </div>
       {A.mode === "existing" ? (
@@ -97,8 +99,8 @@ export default function AlbumSection({
               </div>
               {ok?.description && <div className="muted">{ok.description}</div>}
               {ok && !notAlbum && (
-                <ul className="pills" aria-label="About this album">
-                  <li className="pill">{kindOf(ok.classes)}</li>
+                <ul className="pills" aria-label={`About this ${noun}`}>
+                  <li className="pill">{releaseKind(ok.classes)}</li>
                   {checked && !albumTracklist && <li className="pill ok">No tracklist yet</li>}
                 </ul>
               )}
@@ -120,10 +122,10 @@ export default function AlbumSection({
             <p className="album-err" id="albumQid-err">
               <span>
                 {albumTracklist
-                  ? `This album already has a tracklist with ${albumTracklist.tracks.length} track${albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs twice, so it can't be used.`
+                  ? `This ${noun} already has a tracklist with ${albumTracklist.tracks.length} track${albumTracklist.tracks.length === 1 ? "" : "s"}. Adding another would list its songs twice, so it can't be used.`
                   : problem}{" "}
                 <button type="button" className="link" onClick={onPickAnother}>
-                  Pick a different album
+                  Pick a different {noun}
                 </button>
               </span>
             </p>
@@ -136,7 +138,7 @@ export default function AlbumSection({
               </span>
               <div className="album-mb-text">
                 <b id="album-mb-head">
-                  This album is on{" "}
+                  This {noun} is on{" "}
                   <a
                     href={`https://musicbrainz.org/release-group/${releaseGroup}`}
                     target="_blank"
@@ -155,7 +157,7 @@ export default function AlbumSection({
         </>
       ) : (
         <div className="album-new">
-          <Duplicates state={state} update={update} />
+          <Duplicates state={state} update={update} noun={noun} />
           <div className="grid">
             <label className="f">
               Title
@@ -170,20 +172,23 @@ export default function AlbumSection({
             </label>
             <ArtistChips state={state} update={update} error={errs.albumArtists} />
             <AlbumTypeSelect state={state} update={update} />
-            <label className="f">
-              Form
-              <select
-                value={A.form}
-                onChange={(e) => update((s) => void (s.album.form = e.target.value))}
-              >
-                <option value="">None</option>
-                {ALBUM_FORMS.map(([q, l]) => (
-                  <option key={q} value={q}>
-                    {l[0].toUpperCase() + l.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/* A single has no album form. */}
+            {A.type !== SINGLE_CLASS && (
+              <label className="f">
+                Form
+                <select
+                  value={A.form}
+                  onChange={(e) => update((s) => void (s.album.form = e.target.value))}
+                >
+                  <option value="">None</option>
+                  {ALBUM_FORMS.map(([q, l]) => (
+                    <option key={q} value={q}>
+                      {l[0].toUpperCase() + l.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="f">
             <div className="f-head">
@@ -196,10 +201,10 @@ export default function AlbumSection({
                   <dt>{"{type}"}</dt>
                   <dd>
                     The form, e.g. “studio album”, or “album” or “EP” when there's no form. An EP
-                    says “EP” in place of “album”, e.g. “live EP”.
+                    says “EP” in place of “album”, e.g. “live EP”. A single is always “single”.
                   </dd>
                   <dt>{"{artists}"}</dt>
-                  <dd>The album artists, joined like “A, B and C”.</dd>
+                  <dd>The {noun} artists, joined like “A, B and C”.</dd>
                 </dl>
               </InfoTip>
             </div>
@@ -225,10 +230,11 @@ export default function AlbumSection({
           <AlbumIds state={state} update={update} plan={plan} />
           <p className="hint">
             <Pids>
-              The album is created first with P31, P7937, P1476, P175, P577 (publication date),
-              P407, the identifiers above, P437 music streaming when there's a Spotify, Apple Music,
-              Deezer or Tidal ID, and P2635 number of tracks: one statement per disc qualified with
-              its part when every disc has a part, otherwise one total.
+              {`The ${noun} is created first with P31, ${A.type === SINGLE_CLASS ? "" : "P7937, "}` +
+                "P1476, P175, P577 (publication date), P407, the identifiers above, P437 music " +
+                "streaming when there's a Spotify, Apple Music, Deezer or Tidal ID, and P2635 " +
+                "number of tracks: one statement per disc qualified with its part when every disc " +
+                "has a part, otherwise one total."}
             </Pids>
           </p>
         </div>
@@ -237,7 +243,7 @@ export default function AlbumSection({
   );
 }
 
-/** A new album's type, Album or EP. */
+/** A new album's type: Album, EP or Single. */
 export function AlbumTypeSelect({ state, update }: Pick<SectionProps, "state" | "update">) {
   return (
     <label className="f">
@@ -248,7 +254,7 @@ export function AlbumTypeSelect({ state, update }: Pick<SectionProps, "state" | 
       >
         {ALBUM_TYPES.map(([q]) => (
           <option key={q} value={q}>
-            {q === EP_CLASS ? "EP" : "Album"}
+            {q === EP_CLASS ? "EP" : q === SINGLE_CLASS ? "Single" : "Album"}
           </option>
         ))}
       </select>
@@ -329,22 +335,21 @@ function AlbumIds({ state, update, plan }: SectionProps) {
   );
 }
 
-const sentence = (s: string) => s[0].toUpperCase() + s.slice(1);
-
 /**
  * Albums in the mirror that share an identifier or the title with the one being
  * created, strongest first. Once the album artists have QIDs, same-title albums
  * by someone else are left out. Any identifier match makes it red, and the
  * first such album gets the primary button.
  */
-function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
+function Duplicates({ state, update, noun }: Omit<SectionProps, "plan"> & { noun: string }) {
   const { wikiBaseUrl } = useAuth();
   const A = state.album;
   // Debounce the serialized request: a fresh object every render would never settle.
   const key = useDebounced(
     JSON.stringify({
       title: A.title,
-      kinds: ["album", "ep"],
+      // A single often shares its title with the album it's taken from, so each looks only at its own kind.
+      kinds: noun === "single" ? ["single"] : ["album", "ep"],
       ids: Object.fromEntries(ALBUM_ID_FIELDS.map((f) => [f.property, A.ids[f.key]])),
       performers: albumArtists(state)
         .map((a) => (state.artists[a] ?? "").trim())
@@ -375,15 +380,15 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
       <div className="dupes-head">
         <b id="dupes-head">
           {byId
-            ? "This album looks like it's already on Wikidata."
+            ? `This ${noun} looks like it's already on Wikidata.`
             : matches.length === 1
-              ? "An album with this title is already on Wikidata."
-              : "Albums with this title are already on Wikidata."}
+              ? `${noun === "single" ? "A single" : "An album"} with this title is already on Wikidata.`
+              : `${noun === "single" ? "Singles" : "Albums"} with this title are already on Wikidata.`}
         </b>
         <span>
           {byId
             ? `${items(byId)} the same identifier${byTitle ? ` and ${byTitle} more ${byTitle === 1 ? "has" : "have"} the same title` : ""}. Use one of these instead of creating a duplicate.`
-            : `Check ${matches.length === 1 ? "it isn't" : "they aren't"} this one before creating a new album.`}
+            : `Check ${matches.length === 1 ? "it isn't" : "they aren't"} this one before creating a new ${noun}.`}
         </span>
       </div>
       <ul className="dupes-list">
@@ -401,7 +406,7 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
                 <ul className="pills" aria-label="Why it matched">
                   {m.reasons.map((r) => (
                     <li key={r} className={isIdReason(r) ? "pill bad" : "pill"}>
-                      {sentence(r)}
+                      {capitalized(r)}
                     </li>
                   ))}
                 </ul>
@@ -420,13 +425,15 @@ function Duplicates({ state, update }: Omit<SectionProps, "plan">) {
                   })
                 }
               >
-                Use this album
+                Use this {noun}
               </button>
             </li>
           );
         })}
       </ul>
-      <span className="dupes-foot">None of these? Keep going and a new album will be created.</span>
+      <span className="dupes-foot">
+        None of these? Keep going and a new {noun} will be created.
+      </span>
     </div>
   );
 }
@@ -457,13 +464,13 @@ export function ArtistChips({
   };
   return (
     <div className="f">
-      <label htmlFor={id}>Album artists</label>
+      <label htmlFor={id}>{capitalized(releaseNoun(state.album))} artists</label>
       <div
         className={`chips${error ? " invalid" : ""}`}
         onClick={(e) => e.target === e.currentTarget && inputRef.current?.focus()}
       >
         {names.length > 0 && (
-          <ul aria-label="Album artists">
+          <ul aria-label={`${capitalized(releaseNoun(state.album))} artists`}>
             {names.map(({ name, i }) => (
               <li className="chip" key={`${i}-${name}`}>
                 {name}

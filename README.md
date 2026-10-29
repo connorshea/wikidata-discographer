@@ -1,6 +1,6 @@
 # Wikidata Discographer
 
-Turns an album's tracklist into Wikidata items, following the
+Turns an album's or a single's tracklist into Wikidata items, following the
 [WikiProject Music](https://www.wikidata.org/wiki/Wikidata:WikiProject_Music) model:
 
 ```
@@ -9,8 +9,8 @@ single —P658 tracklist→ track, single —P13602 single taken from→ album
 ```
 
 Import a release from MusicBrainz, map the artist names to QIDs, and the app
-creates the album (or reuses an existing one), a composition and a track for
-each song, and any singles, all linked together. The edits are made directly with the
+creates the album, EP or single (or reuses an existing one), and a composition
+and a track for each song, all linked together. The edits are made directly with the
 logged-in user's account through OAuth. There is no QuickStatements step. Each
 run is one [EditGroup](https://editgroups.toolforge.org/), so the whole run can
 be reviewed or undone in one place.
@@ -101,14 +101,15 @@ performer, composer and lyricist (P175, P86, P676), recording or performance of
 everything but artists: about a million rows. The lists are in
 `src/lib/music.ts`. The mirror is used to:
 
-- block creating an album whose Spotify, MusicBrainz or Apple Music ID is
-  already on Wikidata, and warn about albums with the same title
+- block creating an album or single whose Spotify, MusicBrainz or Apple Music
+  ID is already on Wikidata, and warn about ones with the same title
 - suggest QIDs for the performers
-- list an artist's albums and EPs on the Artists page (`/artists/<qid>`):
-  the items with the artist as performer (P175), oldest first, with whether
-  each has a tracklist yet and the latest Discographer run on it. "Add
-  tracklist" starts the form from the album (`/?album=<qid>`), or from its
-  MusicBrainz release group when it has exactly one (`&rg=<mbid>`)
+- list an artist's albums, EPs and singles on the Artists page
+  (`/artists/<qid>`): the items with the artist as performer (P175), oldest
+  first, with whether each has a tracklist yet and the latest Discographer run
+  on it. "Add tracklist" starts the form from the album or single
+  (`/?album=<qid>`), or from its MusicBrainz release group when it has exactly
+  one (`&rg=<mbid>`)
 - suggest existing compositions, tracks and singles for each tracklist row
   (`server/matches.ts`): items with the row's title that share one of its
   performers, or that are on the existing album. Titles that differ only in

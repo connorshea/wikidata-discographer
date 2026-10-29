@@ -9,6 +9,7 @@ import {
   ALBUM_FORMS,
   ALBUM_TYPES,
   EP_CLASS,
+  SINGLE_CLASS,
   LIVE_RECORDING,
   MB_ATTRIBUTES,
   type MbAttribute,
@@ -30,7 +31,13 @@ import type {
   State,
   Track,
 } from "./plan.ts";
-import { ALBUM_ID_FIELDS, ISRC_PATTERN, ISWC_PATTERN, type MusicKind } from "./music.ts";
+import {
+  ALBUM_ID_FIELDS,
+  ISRC_PATTERN,
+  ISWC_PATTERN,
+  KIND_NOUNS,
+  type MusicKind,
+} from "./music.ts";
 import { coerceState, emptyDisc } from "./state.ts";
 
 const MBID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
@@ -318,15 +325,6 @@ export interface MbLookups {
   misplacedWorks?: Record<string, { qid: string; kind: MusicKind }[]>;
 }
 
-const KIND_NOUNS: Record<MusicKind, string> = {
-  artist: "artist",
-  album: "album",
-  ep: "EP",
-  single: "single",
-  work: "composition",
-  track: "track",
-};
-
 /** An identifier the import adds, and to how many items. */
 export interface MbIdCount {
   label: string;
@@ -337,6 +335,8 @@ export interface MbIdCount {
 export interface MbReport {
   /** The MusicBrainz release it was loaded from. */
   release: string;
+  /** What the release is called, "single" or "album" (an EP too). */
+  noun: string;
   /** Items on Wikidata with a work ID only a composition should have. */
   misplaced: {
     qid: string;
@@ -424,6 +424,7 @@ const SEVERAL_ALBUM_LINKS = {
 const PRIMARY_TYPES: Record<string, (typeof ALBUM_TYPES)[number][0]> = {
   Album: "Q482994",
   EP: "Q169930",
+  Single: SINGLE_CLASS,
 };
 
 const SECONDARY_FORMS: Record<string, (typeof ALBUM_FORMS)[number][0]> = {
@@ -787,15 +788,19 @@ export function releaseToForm(
   const type = PRIMARY_TYPES[rg["primary-type"] ?? ""];
   if (!type)
     notes.push(
-      `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album or EP. Check the album's type.`,
+      `MusicBrainz lists this as ${rg["primary-type"] ? `a ${rg["primary-type"]}` : "having no type"}, not an album, EP or single. Check the type.`,
     );
   const secondary = rg["secondary-types"] ?? [];
   // "Studio album" is only right for an album, so an EP with no secondary type gets no form.
-  const form = secondary.length
-    ? (secondary.map((s) => SECONDARY_FORMS[s]).find(Boolean) ?? "")
-    : type === EP_CLASS
+  // A single has no album form, even a live one.
+  const form =
+    type === SINGLE_CLASS
       ? ""
-      : STUDIO_ALBUM;
+      : secondary.length
+        ? (secondary.map((s) => SECONDARY_FORMS[s]).find(Boolean) ?? "")
+        : type === EP_CLASS
+          ? ""
+          : STUDIO_ALBUM;
 
   const albumQid = lookups.albumQid;
   const ids: AlbumState["ids"] = {
@@ -861,6 +866,7 @@ export function releaseToForm(
   const songs = media.reduce((n, m) => n + m.tracks!.length, 0);
   const report: MbReport = {
     release: release.id,
+    noun: type === SINGLE_CLASS ? "single" : "album",
     misplaced: misplacedItems,
     severalLinks: (Object.entries(several) as [TrackLinkKey, string[]][])
       .filter(([, titles]) => titles.length)
@@ -914,16 +920,18 @@ export function releaseToForm(
       // Only a new album gets references, so an album already on Wikidata keeps
       // none, even if it's switched to a new one, as the summary says.
       mb: albumQid ? null : albumMb,
+      // The form looks the album up, and records it if it's a single.
+      singleQid: "",
     },
     artists,
     discs: discs.length ? discs : [emptyDisc()],
     date,
     p407,
     // A live album is live, even when it's also a compilation, and a studio album is
-    // studio. The rest may be either.
+    // studio, as is a single with no secondary type. The rest may be either.
     recTypes: secondary.includes("Live")
       ? [LIVE_RECORDING]
-      : form === STUDIO_ALBUM
+      : form === STUDIO_ALBUM || (type === SINGLE_CLASS && !secondary.length)
         ? [STUDIO_RECORDING]
         : [],
     places,

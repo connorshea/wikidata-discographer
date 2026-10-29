@@ -189,32 +189,37 @@ export function artistAlbums(
   },
   userId: number | null,
 ): ArtistAlbum[] {
-  const latest = new Map<number, ArtistRunRow>();
-  for (const r of facts.runs)
-    if ((latest.get(r.albumQid)?.id ?? 0) < r.id) latest.set(r.albumQid, r);
+  const runOf = latestRuns(facts.runs, userId);
   return rows
-    .map((r): ArtistAlbum => {
-      const run = latest.get(r.qid);
-      return {
-        qid: toQid(r.qid),
-        label: r.label,
-        type: albumType(r.kind as MusicKind, r.instanceOf.map(toQid)),
-        released: r.released,
-        tracks: facts.tracks.get(r.qid) ?? 0,
-        parts: facts.parts.get(r.qid) ?? null,
-        releaseGroups: facts.releaseGroups.get(r.qid) ?? [],
-        run: run
-          ? {
-              id: run.id,
-              status: run.status as SubmissionStatus,
-              mine: run.userId === userId,
-              createdAt: run.createdAt,
-              editGroupUrl: editGroupUrl(run.editGroup),
-            }
-          : null,
-      };
-    })
+    .map((r): ArtistAlbum => ({
+      qid: toQid(r.qid),
+      label: r.label,
+      type: albumType(r.kind as MusicKind, r.instanceOf.map(toQid)),
+      released: r.released,
+      tracks: facts.tracks.get(r.qid) ?? 0,
+      parts: facts.parts.get(r.qid) ?? null,
+      releaseGroups: facts.releaseGroups.get(r.qid) ?? [],
+      run: runOf(r.qid),
+    }))
     .sort(byRelease);
+}
+
+/** The latest run on each album or single, as the artist page shows it. */
+function latestRuns(runs: ArtistRunRow[], userId: number | null) {
+  const latest = new Map<number, ArtistRunRow>();
+  for (const r of runs) if ((latest.get(r.albumQid)?.id ?? 0) < r.id) latest.set(r.albumQid, r);
+  return (qid: number): ArtistAlbum["run"] => {
+    const run = latest.get(qid);
+    return run
+      ? {
+          id: run.id,
+          status: run.status as SubmissionStatus,
+          mine: run.userId === userId,
+          createdAt: run.createdAt,
+          editGroupUrl: editGroupUrl(run.editGroup),
+        }
+      : null;
+  };
 }
 
 /** Oldest first, undated last, and ones released the same day by title. */
@@ -239,8 +244,8 @@ export interface SingleRow {
 
 /**
  * The artist's singles, sorted like its albums, each with the albums it's
- * taken from (P13602) by label. An album missing from `labels` (not in the
- * mirror) has no label.
+ * taken from (P13602) by label and the latest run on it. An album missing
+ * from `labels` (not in the mirror) has no label.
  */
 export function artistSingles(
   rows: SingleRow[],
@@ -248,8 +253,12 @@ export function artistSingles(
     tracks: ReadonlyMap<number, number>;
     takenFrom: ReadonlyMap<number, number[]>;
     labels: ReadonlyMap<number, string | null>;
+    releaseGroups: ReadonlyMap<number, string[]>;
+    runs: ArtistRunRow[];
   },
+  userId: number | null,
 ): ArtistSingle[] {
+  const runOf = latestRuns(facts.runs, userId);
   return rows
     .map((r): ArtistSingle => ({
       qid: toQid(r.qid),
@@ -257,6 +266,8 @@ export function artistSingles(
       released: r.released,
       tracks: facts.tracks.get(r.qid) ?? 0,
       parts: r.parts,
+      releaseGroups: facts.releaseGroups.get(r.qid) ?? [],
+      run: runOf(r.qid),
       takenFrom: (facts.takenFrom.get(r.qid) ?? [])
         .map((n) => ({ qid: toQid(n), label: facts.labels.get(n) ?? null }))
         .sort((a, b) => (a.label ?? a.qid).localeCompare(b.label ?? b.qid)),
@@ -341,13 +352,18 @@ artistRoutes.get("/:qid", async (c) => {
           .leftJoin(musicItems, eq(musicItems.qid, musicLinks.target))
           .where(and(inArray(musicLinks.qid, singleQids), eq(musicLinks.property, P13602)))
       : [],
-    qids.length
+    qids.length || singleQids.length
       ? db
           .select({ qid: musicExternalIds.qid, value: musicExternalIds.value })
           .from(musicExternalIds)
-          .where(and(inArray(musicExternalIds.qid, qids), eq(musicExternalIds.property, P436)))
+          .where(
+            and(
+              inArray(musicExternalIds.qid, [...qids, ...singleQids]),
+              eq(musicExternalIds.property, P436),
+            ),
+          )
       : [],
-    qids.length
+    qids.length || singleQids.length
       ? db
           .select({
             id: submissions.id,
@@ -358,7 +374,7 @@ artistRoutes.get("/:qid", async (c) => {
             createdAt: submissions.createdAt,
           })
           .from(submissions)
-          .where(inArray(submissions.albumQid, qids))
+          .where(inArray(submissions.albumQid, [...qids, ...singleQids]))
       : [],
   ]);
   const releaseGroups = new Map<number, string[]>();
@@ -366,6 +382,7 @@ artistRoutes.get("/:qid", async (c) => {
   const takenFrom = new Map<number, number[]>();
   for (const r of fromLinks) takenFrom.set(r.qid, [...(takenFrom.get(r.qid) ?? []), r.target]);
   const trackCounts = new Map(tracks.map((r) => [r.qid, r.n]));
+  const artistRuns = runs.map((r) => ({ ...r, albumQid: r.albumQid! }));
 
   c.header("Cache-Control", "no-store");
   return c.json({
@@ -376,16 +393,22 @@ artistRoutes.get("/:qid", async (c) => {
         parts: new Map(albums.map((r) => [r.qid, r.parts])),
         tracks: trackCounts,
         releaseGroups,
-        runs: runs.map((r) => ({ ...r, albumQid: r.albumQid! })),
+        runs: artistRuns,
       },
       c.get("user")?.id ?? null,
     ),
     truncated,
-    singles: artistSingles(singles, {
-      tracks: trackCounts,
-      takenFrom,
-      labels: new Map(fromLinks.map((r) => [r.target, r.label])),
-    }),
+    singles: artistSingles(
+      singles,
+      {
+        tracks: trackCounts,
+        takenFrom,
+        labels: new Map(fromLinks.map((r) => [r.target, r.label])),
+        releaseGroups,
+        runs: artistRuns,
+      },
+      c.get("user")?.id ?? null,
+    ),
     singlesTruncated: singleRows.length > MAX_ARTIST_SINGLES,
   } satisfies ArtistResponse);
 });

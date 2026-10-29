@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createMusicBrainzClient, MusicBrainzError } from "./musicbrainz.ts";
+import { createMusicBrainzClient, MusicBrainzError, soleHolder } from "./musicbrainz.ts";
 import { userAgent } from "./auth/user-agent.ts";
+import type { MusicKind } from "../src/lib/music.ts";
 
 const ID = "6d42c8a3-69c3-458c-9f18-f8a503780607";
 
@@ -136,5 +137,31 @@ describe("createMusicBrainzClient", () => {
       status: 404,
       message: expect.stringMatching(/^MusicBrainz has no release with that ID\./),
     });
+  });
+});
+
+describe("soleHolder", () => {
+  it("is the only item that has the value", () => {
+    expect(soleHolder(new Map([[1, "single"]]), "album")).toBe(1);
+  });
+
+  it("picks the only item of the preferred kind among several", () => {
+    const holders = new Map<number, MusicKind>([
+      [1, "album"],
+      [2, "single"],
+    ]);
+    expect(soleHolder(holders, "album")).toBe(1);
+    expect(soleHolder(holders, "single")).toBe(2);
+  });
+
+  it("picks none when several or none are of the preferred kind", () => {
+    const holders = new Map<number, MusicKind>([
+      [1, "album"],
+      [2, "album"],
+      [3, "single"],
+    ]);
+    expect(soleHolder(holders, "album")).toBeUndefined();
+    expect(soleHolder(holders, "ep")).toBeUndefined();
+    expect(soleHolder(holders)).toBeUndefined();
   });
 });

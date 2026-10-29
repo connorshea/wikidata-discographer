@@ -5,7 +5,7 @@
 // into that form, not one cleared or loaded with another release since.
 import type { EditLogEntry, SubmissionInfo } from "./api-types.ts";
 import { FetchError } from "./client.ts";
-import type { State } from "./plan.ts";
+import { SINGLE_CLASS, type State } from "./plan.ts";
 import { coerceState } from "./state.ts";
 
 export const OWN_RUN_KEY = "discographer:ownRun";
@@ -95,6 +95,8 @@ export function applyCreated(s: State, edits: readonly Created[]): void {
     const [kind, di, n] = key!.split(":");
     const disc = s.discs[Number(di)];
     if (kind === "album") {
+      // A new single is still a single once it exists, as the form's lookup of it will say.
+      if (s.album.mode === "create" && s.album.type === SINGLE_CLASS) s.album.singleQid = qid!;
       s.album.mode = "existing";
       s.album.qid = qid!;
     } else if (!disc) continue;

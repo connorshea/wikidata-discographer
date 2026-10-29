@@ -22,6 +22,13 @@ const input = (state: State, more: Partial<ProgressInput> = {}): ProgressInput =
   ...more,
 });
 
+/** `state` with its existing release known to be a single on Wikidata. */
+const singleOf = (state: State): State => {
+  const s = structuredClone(state);
+  s.album.singleQid = s.album.qid.trim();
+  return s;
+};
+
 const checks = (p: ProgressInput) =>
   runChecks({ ...p, ineligible: null, matchesPending: false, albumPending: false });
 
@@ -116,8 +123,40 @@ describe("startSummary", () => {
     );
   });
 
+  it("calls a new single a single", () => {
+    const state: State = {
+      ...EXAMPLE,
+      start: "new",
+      album: { ...EXAMPLE.album, mode: "create", title: "", type: "Q134556", form: "" },
+    };
+    expect(startSummary(state, buildPlan(state), null)).toMatchObject({
+      from: "New single from scratch",
+      title: "Untitled single",
+    });
+    const mb: State = { ...state, start: "mb" };
+    expect(startSummary(mb, buildPlan(mb), null)?.details).toContain(
+      "not on Wikidata yet, so a new single will be created",
+    );
+  });
+
   it("has nothing to say before a starting point is picked", () => {
     expect(startSummary(EMPTY, buildPlan(EMPTY), null)).toBeNull();
+  });
+});
+
+describe("an existing single", () => {
+  it("is called a single in the rail, the checklist and the counts", () => {
+    const state = singleOf(EXAMPLE);
+    const p = input(state, { hasTracklist: true });
+    expect(railSteps(p).find((s) => s.id === "album")?.name).toBe("Single");
+    expect(checks(p)[0].text).toBe("Single already has a tracklist");
+    expect(createCounts(state, buildPlan(state)).at(-1)?.label).toBe("Single tracklist");
+  });
+
+  it("is an album again once the QID changes", () => {
+    const state = singleOf(EXAMPLE);
+    state.album.qid = "Q1";
+    expect(createCounts(state, buildPlan(state)).at(-1)?.label).toBe("Album tracklist");
   });
 });
 
@@ -166,7 +205,7 @@ describe("runChecks", () => {
     });
     expect(list.find((c) => c.at === "album")).toMatchObject({
       ok: false,
-      text: "Checking the album on Wikidata…",
+      text: "Checking the QID on Wikidata…",
     });
   });
 

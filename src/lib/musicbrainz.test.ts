@@ -182,6 +182,7 @@ describe("releaseToForm", () => {
           discogs: { value: "4348311", from: "releaseGroup" },
         },
       },
+      singleQid: "",
     });
     expect(form.date).toBe("2026-09-18");
     expect(form.p407).toBe("Q1860");
@@ -193,6 +194,7 @@ describe("releaseToForm", () => {
     ]);
     expect(form.report).toEqual({
       release: RELEASE.id,
+      noun: "album",
       misplaced: [],
       severalLinks: [],
       newTracks: 6,
@@ -853,6 +855,23 @@ describe("releaseToForm", () => {
     expect(album).toMatchObject({ type: "Q169930", form: "" });
   });
 
+  it("reads a single as a single, with no album form even when it's live", () => {
+    const r = release();
+    r["release-group"]["primary-type"] = "Single";
+    r["release-group"]["secondary-types"] = ["Live"];
+    const form = releaseToForm(r, NONE);
+    expect(form.album).toMatchObject({ type: "Q134556", form: "" });
+    expect(form.recTypes).toEqual(["Q56123235"]);
+    expect(form.report.notes).not.toContainEqual(expect.stringContaining("not an album"));
+  });
+
+  it("gives a studio single's tracks the studio recording type", () => {
+    const r = release();
+    r["release-group"]["primary-type"] = "Single";
+    r["release-group"]["secondary-types"] = [];
+    expect(releaseToForm(r, NONE).recTypes).toEqual(["Q15975575"]);
+  });
+
   it("cites the release's own date when the release group has none", () => {
     const r = release();
     delete r["release-group"]["first-release-date"];
@@ -938,7 +957,7 @@ describe("releaseToForm", () => {
 
   it("notes what it can't fill in", () => {
     const r = release();
-    r["release-group"]["primary-type"] = "Single";
+    r["release-group"]["primary-type"] = "Broadcast";
     r["release-group"]["secondary-types"] = ["Mixtape/Street"];
     r["text-representation"] = { language: "fin" };
     r.media[0].tracks![0].length = null;
@@ -949,7 +968,7 @@ describe("releaseToForm", () => {
     expect(form.discs[0].tracks[0].seconds).toBeNull();
     expect(form.report.notes).toEqual([
       "1 track has no length on MusicBrainz, so it gets no duration.",
-      expect.stringContaining("a Single, not an album or EP"),
+      expect.stringContaining("a Broadcast, not an album, EP or single"),
       expect.stringContaining("language (fin)"),
     ]);
   });

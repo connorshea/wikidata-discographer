@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
+import { CLASS_KINDS, type MusicKind } from "../lib/music.ts";
 import { ALBUM_CLASSES, QID } from "../lib/plan.ts";
 import type { DescribeResponse, ItemSummary } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
@@ -86,6 +87,20 @@ export function albumProblem(qid: string, found: ItemLookup | undefined): string
   if (found?.status !== "ok" || found.classes.some((c) => ALBUM_CLASSES.has(c))) return null;
   const name = found.label ? `${qid} (${found.label})` : qid;
   return found.classes.length === 0
-    ? `${name} has no “instance of” statement, so it can't be checked to be an album or EP.`
-    : `${name} isn't an album or EP. Check the QID.`;
+    ? `${name} has no “instance of” statement, so it can't be checked to be an album, EP or single.`
+    : `${name} isn't an album, EP or single. Check the QID.`;
 }
+
+/**
+ * A release's kind, from its classes on Wikidata: "EP" if any class is an EP, else "Single"
+ * if any is a single, else "Album".
+ */
+export function releaseKind(classes: string[]): "Album" | "EP" | "Single" {
+  const is = (kind: MusicKind) =>
+    classes.some((c) => CLASS_KINDS.some(([q, k]) => q === c && k === kind));
+  return is("ep") ? "EP" : is("single") ? "Single" : "Album";
+}
+
+/** Whether the existing release is a single on Wikidata, so it's called one in the form. */
+export const existingSingle = (qid: string, found: ItemLookup | undefined): boolean =>
+  found?.status === "ok" && !albumProblem(qid, found) && releaseKind(found.classes) === "Single";
