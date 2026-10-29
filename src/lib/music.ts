@@ -105,8 +105,9 @@ const ALBUM_TYPES: Readonly<Record<string, string>> = {
   Q963099: "Remix album",
 };
 
-/** An album or EP's type, by its P31 values: "EP", "Live album", or plain "Album". */
+/** A release's type, by its P31 values: "Single", "EP", "Live album", or plain "Album". */
 export function albumType(kind: MusicKind, instanceOf: readonly string[]): string {
+  if (kind === "single") return "Single";
   if (kind === "ep") return "EP";
   for (const qid of instanceOf) if (qid in ALBUM_TYPES) return ALBUM_TYPES[qid];
   return "Album";

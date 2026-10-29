@@ -114,7 +114,8 @@ export default function AlbumList() {
           <table className="album-list">
             <thead>
               <tr>
-                <th>Album</th>
+                <th>Release</th>
+                <th>Type</th>
                 <th>Change</th>
                 <th>Latest run</th>
                 <th>Items created</th>
@@ -152,6 +153,7 @@ function AlbumRow({ album }: { album: AlbumListEntry }) {
         {album.artists.length > 0 && <>by {joinNames(album.artists)} </>}
         <span className="muted">{album.qid}</span>
       </td>
+      <td>{album.type}</td>
       <td>
         <span className="pill">{album.created ? "Created" : "Added to"}</span>
       </td>

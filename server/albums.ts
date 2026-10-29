@@ -13,6 +13,9 @@ import { musicItems, musicLinks, submissions, users, wikidataEdits } from "../db
 import type { AuthEnv } from "./auth/session.ts";
 import { propertyNumber, toQid } from "./ids.ts";
 import { editGroupUrl } from "./submissions.ts";
+import { albumType, type MusicKind } from "../src/lib/music.ts";
+import { EP_CLASS, SINGLE_CLASS } from "../src/lib/plan.ts";
+import { coerceState } from "../src/lib/state.ts";
 import type { AlbumListEntry, AlbumListResponse, SubmissionStatus } from "../src/lib/api-types.ts";
 
 const P175 = propertyNumber("P175");
@@ -39,10 +42,34 @@ export interface RunEdits {
   createdAlbum: boolean;
 }
 
+/** The kinds of item the album list gives a type. */
+const RELEASE_KINDS: readonly MusicKind[] = ["album", "ep", "single"];
+
+/** A mirrored item's type, or null for something that isn't a release. */
+export function mirrorType(kind: string, instanceOf: readonly number[]): string | null {
+  return RELEASE_KINDS.includes(kind as MusicKind)
+    ? albumType(kind as MusicKind, instanceOf.map(toQid))
+    : null;
+}
+
+/**
+ * What a run's form said the release was, for one the mirror doesn't have yet:
+ * a new release's type and form, or "Single" for an existing single. Null when
+ * the form doesn't say.
+ */
+export function inputType(input: unknown): string | null {
+  const { album } = coerceState(input);
+  if (album.mode === "existing")
+    return album.singleQid && album.singleQid === album.qid.trim() ? "Single" : null;
+  if (album.type === SINGLE_CLASS) return "Single";
+  return albumType(album.type === EP_CLASS ? "ep" : "album", album.form ? [album.form] : []);
+}
+
 /**
  * One entry per album, in the order of `albumQids`, with its runs newest
  * first. The label is the mirror's, else the title of the album's latest run.
- * The artists are the album's performers (P175) in the mirror, by label.
+ * The artists are the album's performers (P175) in the mirror, by label, and
+ * the type is the mirror's or what the latest run's form said.
  */
 export function groupAlbums(
   albumQids: number[],
@@ -50,6 +77,7 @@ export function groupAlbums(
   edits: Map<number, RunEdits>,
   labels: Map<number, string>,
   artists: Map<number, string[]>,
+  types: Map<number, string>,
   userId: number | null,
 ): AlbumListEntry[] {
   const byAlbum = new Map<number, RunRow[]>(albumQids.map((q) => [q, []]));
@@ -76,6 +104,7 @@ export function groupAlbums(
         qid: toQid(qid),
         label: labels.get(qid) || albumRuns[0].title,
         artists: artists.get(qid) ?? [],
+        type: types.get(qid) ?? null,
         created: entryRuns.some((r) => r.createdAlbum),
         runs: entryRuns,
       },
@@ -155,7 +184,12 @@ albumRoutes.get("/", async (c) => {
       : [],
     albumQids.length
       ? db
-          .select({ qid: musicItems.qid, label: musicItems.label })
+          .select({
+            qid: musicItems.qid,
+            label: musicItems.label,
+            kind: musicItems.kind,
+            instanceOf: musicItems.instanceOf,
+          })
           .from(musicItems)
           .where(inArray(musicItems.qid, albumQids))
       : [],
@@ -171,6 +205,26 @@ albumRoutes.get("/", async (c) => {
   for (const p of performers)
     if (p.label) artists.set(p.qid, [...(artists.get(p.qid) ?? []), p.label]);
 
+  // A release the run just created isn't in the mirror until the next dump, so
+  // go by what its latest run's form said it was.
+  const types = new Map<number, string>();
+  for (const l of labels) {
+    const type = mirrorType(l.kind, l.instanceOf);
+    if (type) types.set(l.qid, type);
+  }
+  const latestRuns = page
+    .slice(0, ALBUM_PAGE_SIZE)
+    .filter((p) => !types.has(p.albumQid!))
+    .map((p) => Number(p.latest));
+  if (latestRuns.length)
+    for (const r of await db
+      .select({ albumQid: submissions.albumQid, input: submissions.input })
+      .from(submissions)
+      .where(inArray(submissions.id, latestRuns))) {
+      const type = inputType(r.input);
+      if (type) types.set(r.albumQid!, type);
+    }
+
   c.header("Cache-Control", "no-store");
   return c.json({
     albums: groupAlbums(
@@ -184,6 +238,7 @@ albumRoutes.get("/", async (c) => {
       ),
       new Map(labels.flatMap((l) => (l.label ? [[l.qid, l.label]] : []))),
       artists,
+      types,
       user?.id ?? null,
     ),
     next: more ? Number(page[ALBUM_PAGE_SIZE - 1].latest) : null,

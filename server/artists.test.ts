@@ -234,4 +234,8 @@ describe("albumType", () => {
     expect(albumType("album", ["Q482994", "Q209939"])).toBe("Live album");
     expect(albumType("album", ["Q482994"])).toBe("Album");
   });
+
+  it("calls a single a single", () => {
+    expect(albumType("single", ["Q134556"])).toBe("Single");
+  });
 });

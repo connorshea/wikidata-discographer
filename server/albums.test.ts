@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { groupAlbums, type RunEdits, type RunRow } from "./albums.ts";
+import { groupAlbums, inputType, mirrorType, type RunEdits, type RunRow } from "./albums.ts";
 
 const run = (id: number, albumQid: number, extra: Partial<RunRow> = {}): RunRow => ({
   id,
@@ -19,6 +19,7 @@ describe("groupAlbums", () => {
     const albums = groupAlbums(
       [100, 200],
       [run(1, 100), run(2, 200), run(3, 100)],
+      new Map(),
       new Map(),
       new Map(),
       new Map(),
@@ -42,6 +43,7 @@ describe("groupAlbums", () => {
       edits,
       new Map(),
       new Map(),
+      new Map(),
       null,
     );
     expect(created.created).toBe(true);
@@ -53,7 +55,15 @@ describe("groupAlbums", () => {
   });
 
   it("counts nothing for a run with no edits", () => {
-    const [album] = groupAlbums([100], [run(1, 100)], new Map(), new Map(), new Map(), null);
+    const [album] = groupAlbums(
+      [100],
+      [run(1, 100)],
+      new Map(),
+      new Map(),
+      new Map(),
+      new Map(),
+      null,
+    );
     expect(album.runs[0]).toMatchObject({ created: 0, createdAlbum: false });
   });
 
@@ -64,6 +74,7 @@ describe("groupAlbums", () => {
       runs,
       new Map(),
       new Map([[200, "On Wikidata"]]),
+      new Map(),
       new Map(),
       null,
     );
@@ -77,9 +88,23 @@ describe("groupAlbums", () => {
       new Map(),
       new Map(),
       new Map([[100, ["Carly Rae Jepsen"]]]),
+      new Map(),
       null,
     );
     expect(albums.map((a) => a.artists)).toEqual([["Carly Rae Jepsen"], []]);
+  });
+
+  it("gives each album its type, or null", () => {
+    const albums = groupAlbums(
+      [100, 200],
+      [run(1, 100), run(2, 200)],
+      new Map(),
+      new Map(),
+      new Map(),
+      new Map([[100, "EP"]]),
+      null,
+    );
+    expect(albums.map((a) => a.type)).toEqual(["EP", null]);
   });
 
   it("marks the viewer's own runs and keeps every status", () => {
@@ -89,6 +114,7 @@ describe("groupAlbums", () => {
         run(1, 100, { status: "unknown" }),
         run(2, 100, { userId: 2, username: "Bob", status: "failed" }),
       ],
+      new Map(),
       new Map(),
       new Map(),
       new Map(),
@@ -102,6 +128,40 @@ describe("groupAlbums", () => {
   });
 
   it("skips an album with no runs", () => {
-    expect(groupAlbums([100], [], new Map(), new Map(), new Map(), null)).toEqual([]);
+    expect(groupAlbums([100], [], new Map(), new Map(), new Map(), new Map(), null)).toEqual([]);
+  });
+});
+
+describe("mirrorType", () => {
+  it("names a release's type", () => {
+    expect(mirrorType("album", [482994, 209939])).toBe("Live album");
+    expect(mirrorType("ep", [169930])).toBe("EP");
+    expect(mirrorType("single", [134556])).toBe("Single");
+  });
+
+  it("gives nothing for an item that isn't a release", () => {
+    expect(mirrorType("track", [55850593])).toBeNull();
+  });
+});
+
+describe("inputType", () => {
+  const album = (a: Record<string, unknown>) => ({ album: a });
+
+  it("reads a new release's type and form", () => {
+    expect(inputType(album({ mode: "create", type: "Q482994", form: "" }))).toBe("Album");
+    expect(inputType(album({ mode: "create", type: "Q482994", form: "Q222910" }))).toBe(
+      "Compilation",
+    );
+    expect(inputType(album({ mode: "create", type: "Q169930", form: "Q209939" }))).toBe("EP");
+    expect(inputType(album({ mode: "create", type: "Q134556" }))).toBe("Single");
+  });
+
+  it("calls an existing single a single", () => {
+    expect(inputType(album({ mode: "existing", qid: "Q5", singleQid: "Q5" }))).toBe("Single");
+  });
+
+  it("doesn't guess an existing release's type", () => {
+    expect(inputType(album({ mode: "existing", qid: "Q5", singleQid: "" }))).toBeNull();
+    expect(inputType(album({ mode: "existing", qid: "Q6", singleQid: "Q5" }))).toBeNull();
   });
 });
