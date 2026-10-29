@@ -834,9 +834,11 @@ export function releaseToForm(
 
   // A single taken from several albums gets the first one on Wikidata, as the field takes one.
   const fromGroups = type === SINGLE_CLASS ? singleFrom(rg) : [];
-  const fromAlbums = fromGroups.flatMap((g) => {
+  // One album on Wikidata may hold several of them, such as its standard and deluxe editions.
+  const fromAlbums = fromGroups.flatMap((g, i) => {
     const qid = lookups.takenFrom?.[g.id];
-    return qid ? [{ ...g, qid }] : [];
+    const earlier = fromGroups.slice(0, i).some((e) => lookups.takenFrom?.[e.id] === qid);
+    return qid && !earlier ? [{ ...g, qid }] : [];
   });
   const takenFrom = fromAlbums[0]?.qid ?? "";
   if (fromAlbums.length > 1)
@@ -963,9 +965,11 @@ export function releaseToForm(
       form,
       ids,
       release: release.id,
-      // Only a new album gets references, so an album already on Wikidata keeps
-      // none, even if it's switched to a new one, as the summary says.
-      mb: albumQid ? null : albumMb,
+      // Only a new album gets references to its date and identifiers, so an album
+      // already on Wikidata keeps none, even if it's switched to a new one, as the
+      // summary says. The album a single is taken from is added to an existing
+      // single too, so that keeps its reference.
+      mb: !albumQid ? albumMb : takenFrom ? { ...albumMb, date: null, ids: {} } : null,
       // The form looks the album up, and records it if it's a single.
       singleQid: "",
       takenFrom,

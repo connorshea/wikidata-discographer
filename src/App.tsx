@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation, useRoute, useSearch } from "wouter";
 import AuthBar from "./AuthBar.tsx";
 import { loginHref, useAuth, useLoggedOut } from "./lib/auth-context.ts";
-import { buildPlan, QID, releaseNoun, type State } from "./lib/plan.ts";
+import { buildPlan, plannedTakenFrom, QID, releaseNoun, type State } from "./lib/plan.ts";
 import { artistStart, existingAlbum } from "./lib/artist-start.ts";
 import { coerceState, EMPTY } from "./lib/state.ts";
 import { useStorageEvent } from "./components/use-storage-event.ts";
@@ -372,11 +372,7 @@ function Form() {
   } = useAlbumTracklist(state);
   const existingQid = state.album.mode === "existing" ? state.album.qid.trim() : "";
   // The album a single is taken from, for the plan panel, once it's a QID the plan takes.
-  const typedFrom = state.album.takenFrom.trim();
-  const takenFromQid =
-    releaseNoun(state.album) === "single" && QID.test(typedFrom) && !plan.fieldErrs.takenFrom
-      ? typedFrom
-      : null;
+  const takenFromQid = plannedTakenFrom(state.album);
   const lookupAlbum = useItemSummaries([existingQid, takenFromQid ?? ""], state.settings.lang);
   const albumFound = lookupAlbum(existingQid);
   const takenFromFound = takenFromQid ? lookupAlbum(takenFromQid) : undefined;

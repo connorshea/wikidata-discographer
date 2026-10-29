@@ -915,6 +915,29 @@ describe("releaseToForm", () => {
       expect(form.report.takenFromMissing).toEqual([]);
     });
 
+    it("keeps its reference, and only that one, for a single already on Wikidata", () => {
+      const form = releaseToForm(single(fromRel(ALBUM_RG, "25")), {
+        ...NONE,
+        albumQid: "Q140316456",
+        takenFrom: { [ALBUM_RG]: "Q21003456" },
+      });
+      expect(form.album.mode).toBe("existing");
+      expect(form.album.mb).toMatchObject({
+        date: null,
+        ids: {},
+        takenFrom: { value: "Q21003456", from: "releaseGroup" },
+      });
+    });
+
+    it("names an album holding several of the release groups once", () => {
+      const form = releaseToForm(single(fromRel(ALBUM_RG, "25"), fromRel(COMP_RG, "25 (Deluxe)")), {
+        ...NONE,
+        takenFrom: { [ALBUM_RG]: "Q21003456", [COMP_RG]: "Q21003456" },
+      });
+      expect(form.album.takenFrom).toBe("Q21003456");
+      expect(form.report.notes.filter((n) => n.includes("also from"))).toEqual([]);
+    });
+
     it("reports the album when Wikidata has none with its release group", () => {
       const form = releaseToForm(single(fromRel(ALBUM_RG, "25")), NONE);
       expect(form.album.takenFrom).toBe("");

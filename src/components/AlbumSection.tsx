@@ -9,6 +9,7 @@ import {
   QID,
   capitalized,
   citesMb,
+  citesMbTakenFrom,
   EP_CLASS,
   loadedReleaseGroup,
   releaseNoun,
@@ -333,7 +334,7 @@ function TakenFrom({ state, update, plan, already }: SectionProps & { already: s
         />
       )}
       <span className="sub with-badge" id="takenFrom-sub">
-        {citesMb(state, A.mb?.takenFrom, qid) ? (
+        {citesMbTakenFrom(state, qid) ? (
           <>
             <span className="mb-badge" aria-hidden="true">
               MB

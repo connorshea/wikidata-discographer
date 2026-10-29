@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/client.ts";
-import { CLASS_KINDS, KIND_NOUNS, kindOf, type MusicKind } from "../lib/music.ts";
+import { CLASS_KINDS, KIND_NOUNS, takenFromKind, type MusicKind } from "../lib/music.ts";
 import { ALBUM_CLASSES, QID } from "../lib/plan.ts";
 import type { DescribeResponse, ItemSummary } from "../lib/api-types.ts";
 import { useDebounced } from "./use-debounced.ts";
@@ -111,7 +111,7 @@ export const existingSingle = (qid: string, found: ItemLookup | undefined): bool
  * doesn't know may still be an album, so it only gets a warning.
  */
 export function takenFromProblem(classes: string[]): string | null {
-  const kind = kindOf(classes, []);
+  const kind = takenFromKind(classes);
   if (kind === "album" || kind === "ep") return null;
   if (kind) {
     const noun = KIND_NOUNS[kind];

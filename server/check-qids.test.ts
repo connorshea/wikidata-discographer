@@ -427,7 +427,7 @@ describe("checkPlanQids", () => {
     const ops = buildPlan(single).ops;
 
     it("accepts an album or EP, and one of a class the app doesn't know", async () => {
-      for (const classes of [["Q208569"], ["Q169930"], ["Q5"]]) {
+      for (const classes of [["Q208569"], ["Q169930"], ["Q11424"]]) {
         forgetCheckedQids();
         stubWiki({ instanceOf: ["Q134556"], fromClasses: { Q21003456: classes } });
         expect(await checkPlanQids(ops, single)).toEqual([]);
@@ -441,6 +441,16 @@ describe("checkPlanQids", () => {
       ]);
       stubWiki({ instanceOf: ["Q134556"], fromClasses: { Q21003456: ["Q105543609"] } });
       expect((await checkPlanQids(ops, single))[0]).toMatch(/is a composition, not an album/);
+    });
+
+    it("refuses an artist, a person included", async () => {
+      for (const classes of [["Q215380"], ["Q5"]]) {
+        forgetCheckedQids();
+        stubWiki({ instanceOf: ["Q134556"], fromClasses: { Q21003456: classes } });
+        expect(await checkPlanQids(ops, single)).toEqual([
+          "The single's “Taken from”: Q21003456 is an artist, not an album or EP. Use the album the single is taken from.",
+        ]);
+      }
     });
 
     it("names it by its field when it's missing", async () => {

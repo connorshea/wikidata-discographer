@@ -619,6 +619,27 @@ export const releaseNoun = (A: AlbumState) =>
     ? "single"
     : "album";
 
+/**
+ * The album a single is taken from, as typed, with why the plan won't take it. Only a single
+ * is taken from an album, so what's left in the field for another release is ignored.
+ */
+function takenFromField(A: AlbumState): { value: string; err: string } {
+  const value = releaseNoun(A) === "single" ? A.takenFrom.trim() : "";
+  const err =
+    value && !QID.test(value)
+      ? `"${value}" isn't a QID.`
+      : A.mode !== "create" && value === A.qid.trim()
+        ? "That's this single. Use the album it's taken from."
+        : "";
+  return { value, err };
+}
+
+/** The album the plan says a single is taken from, or null if it says none. */
+export function plannedTakenFrom(A: AlbumState): string | null {
+  const { value, err } = takenFromField(A);
+  return value && !err ? value : null;
+}
+
 /** The string with its first letter capitalised, e.g. "Single" from "single". */
 export const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -875,10 +896,30 @@ export function citesMbDate(state: State) {
   return date.ok && !!date.val && citesMb(state, state.album.mb?.date, state.settings.date.trim());
 }
 
-/** A MusicBrainz reference for a new album's detail, when `citesMb` allows one. */
-function albumMbRef(state: State, cited: MbCited | null | undefined, value: string) {
+/**
+ * Whether the album a single is taken from gets a MusicBrainz reference: it's still the one
+ * the import read from the release group's "single from" relationship, and the form still has
+ * that release group. Unlike the album's other details, this holds for an existing single too,
+ * since the run adds it there as well.
+ */
+export function citesMbTakenFrom(state: State, value: string) {
+  const A = state.album;
+  return (
+    !!A.mb?.takenFrom &&
+    A.mb.takenFrom.value === value &&
+    normalizeAlbumId("musicbrainz", A.ids.musicbrainz) === A.mb.releaseGroup
+  );
+}
+
+/** A MusicBrainz reference for a new album's detail, when `citesMb` (or `cites`) allows one. */
+function albumMbRef(
+  state: State,
+  cited: MbCited | null | undefined,
+  value: string,
+  cites = citesMb(state, cited, value),
+) {
   const mb = state.album.mb;
-  if (!mb || !cited || !citesMb(state, cited, value)) return {};
+  if (!mb || !cited || !cites) return {};
   return cited.from === "releaseGroup"
     ? statedInMb("P436", mb.releaseGroup, mb.retrieved)
     : statedInMb("P5813", mb.release, mb.retrieved);
@@ -1030,14 +1071,8 @@ export function buildPlan(state: State): Plan {
         });
     }
   }
-  // Only a single is taken from an album, so what's left in the field for another release is ignored.
-  const takenFrom = noun === "single" ? A.takenFrom.trim() : "";
-  fieldErrs.takenFrom =
-    takenFrom && !QID.test(takenFrom)
-      ? `"${takenFrom}" isn't a QID.`
-      : !creatingAlbum && takenFrom === A.qid.trim()
-        ? "That's this single. Use the album it's taken from."
-        : "";
+  const { value: takenFrom, err: takenFromErr } = takenFromField(A);
+  fieldErrs.takenFrom = takenFromErr;
   const albumErr =
     !!(fieldErrs.albumQid || fieldErrs.albumTitle || fieldErrs.albumArtists) ||
     !!fieldErrs.takenFrom ||
@@ -1343,7 +1378,12 @@ export function buildPlan(state: State): Plan {
 
   // Cited to the release group, whose "single from" relationship it was read from.
   const takenFromClaims: Claim[] = takenFrom
-    ? [{ ...claim("P13602", item(takenFrom)), ...albumMbRef(state, A.mb?.takenFrom, takenFrom) }]
+    ? [
+        {
+          ...claim("P13602", item(takenFrom)),
+          ...albumMbRef(state, A.mb?.takenFrom, takenFrom, citesMbTakenFrom(state, takenFrom)),
+        },
+      ]
     : [];
 
   // 1. The album, without its tracklist (the tracks don't exist yet).

@@ -34,7 +34,7 @@ import {
   type Entity,
 } from "./wikidata-client.ts";
 import { findByTerms } from "./mirror.ts";
-import { KIND_NOUNS, kindOf, type MusicKind } from "../src/lib/music.ts";
+import { KIND_NOUNS, kindOf, takenFromKind, type MusicKind } from "../src/lib/music.ts";
 import {
   ALBUM_CLASSES,
   buildPlan,
@@ -204,7 +204,7 @@ async function checkAlbumKind(qid: string): Promise<string | null> {
 
 /** Why a single can't be taken from this item, or null if it may be an album or EP. */
 async function checkTakenFromKind(qid: string): Promise<string | null> {
-  const kind = kindOf(await getStatementItems(qid, "P31", { retries: 1 }), []);
+  const kind = takenFromKind(await getStatementItems(qid, "P31", { retries: 1 }));
   if (!kind || kind === "album" || kind === "ep") return null;
   const noun = KIND_NOUNS[kind];
   return `The single's “Taken from”: ${qid} is ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}, not an album or EP. Use the album the single is taken from.`;

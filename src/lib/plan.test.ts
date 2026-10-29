@@ -1324,6 +1324,24 @@ describe("buildPlan", () => {
       expect(takenFrom(state)[0]).not.toHaveProperty("references");
     });
 
+    it("is cited on an existing single too", () => {
+      const state = existingSingle();
+      state.album.ids.musicbrainz = RG;
+      state.album.mb = {
+        releaseGroup: RG,
+        release: "6d42c8a3-69c3-458c-9f18-f8a503780607",
+        releaseGroupName: "Soft",
+        retrieved: "2026-10-04",
+        date: null,
+        ids: {},
+        takenFrom: { value: "Q21003456", from: "releaseGroup" },
+      };
+      expect(takenFrom(state)[0].references?.[0]).toContainEqual({
+        property: "P436",
+        value: { type: "string", value: RG },
+      });
+    });
+
     it("is added to an existing single with its tracklist, even beside another album", () => {
       const tracklist = buildPlan(existingSingle()).ops.find(
         (o) => o.op === "addClaims" && o.what === "single tracklist",
