@@ -15,8 +15,9 @@ import {
   users,
   wikidataEdits,
 } from "../db/schema.ts";
-import { submissionRoutes } from "./submissions.ts";
-import { SINGLE_CLASS, type State } from "../src/lib/plan.ts";
+import { runPlan, submissionRoutes } from "./submissions.ts";
+import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
+import { type Op, SINGLE_CLASS, type State } from "../src/lib/plan.ts";
 import { coerceState } from "../src/lib/state.ts";
 import { EXAMPLE } from "../src/lib/example.fixture.ts";
 
@@ -37,6 +38,20 @@ const FOUND = vi.hoisted(() => ({
   check: { status: "missing" } as { status: "ok" | "missing" } | { status: "redirect"; to: string },
 }));
 
+/**
+ * Wikidata for runPlan: the album it reads and edits, whether an edit is saved but
+ * its answer lost or Wikidata refuses it, and how many reads after an edit still see the album before it.
+ * Reads and edits throw while there's no album.
+ */
+const WIKIDATA = vi.hoisted(() => ({
+  album: null as Entity | null,
+  before: null as Entity | null,
+  answerLost: false,
+  refused: false,
+  staleReads: 0,
+  reads: 0,
+}));
+
 vi.mock("./auth/session.ts", () => ({
   requireUser: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
     c.set("user", USER);
@@ -48,16 +63,39 @@ vi.mock("./auth/eligibility.ts", () => ({ editEligibility: () => ({ ok: true }) 
 // A run that gets past the guards stops at the QID check, so it never starts.
 vi.mock("./check-qids.ts", () => ({ checkPlanQids: async () => ["Past the guards."] }));
 vi.mock("./recover.ts", () => ({ findCreated: async () => [], waitForCreated: async () => [] }));
-vi.mock("./wikidata-client.ts", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  editRequest: async () => {
-    throw new Error("No edits from tests");
-  },
-  getEntities: async () => {
-    throw new Error("No Wikidata reads from tests");
-  },
-  checkItems: async (qids: string[]) => new Map(qids.map((q) => [q, FOUND.check])),
-}));
+vi.mock("./wikidata-client.ts", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./wikidata-client.ts")>();
+  return {
+    ...original,
+    // Like Wikidata, the answer has only the statements sent.
+    editRequest: async (_user: unknown, params: { id: string; data: string }) => {
+      const album = WIKIDATA.album;
+      if (!album) throw new Error("No edits from tests");
+      if (WIKIDATA.refused) throw new original.WikidataEditError("permissiondenied", "Not allowed");
+      WIKIDATA.before = structuredClone(album);
+      const { claims } = JSON.parse(params.data) as { claims: WikibaseStatement[] };
+      for (const c of claims)
+        (album.claims![c.mainsnak.property] ??= []).push({ ...c, rank: c.rank ?? "normal" });
+      album.lastrevid = (album.lastrevid ?? 0) + 1;
+      if (WIKIDATA.answerLost)
+        throw new original.WikidataEditError("http", "socket hang up", { ambiguous: true });
+      return {
+        entity: {
+          id: params.id,
+          lastrevid: album.lastrevid,
+          claims: Object.groupBy(claims, (c) => c.mainsnak.property),
+        },
+      };
+    },
+    getEntities: async (qids: string[]) => {
+      if (!WIKIDATA.album) throw new Error("No Wikidata reads from tests");
+      WIKIDATA.reads++;
+      const seen = WIKIDATA.before && WIKIDATA.staleReads-- > 0 ? WIKIDATA.before : WIKIDATA.album;
+      return new Map(qids.includes(seen.id) ? [[seen.id, structuredClone(seen)]] : []);
+    },
+    checkItems: async (qids: string[]) => new Map(qids.map((q) => [q, FOUND.check])),
+  };
+});
 
 const app = new Hono().route("/api/submissions", submissionRoutes);
 
@@ -261,5 +299,119 @@ describe.skipIf(!process.env.DB_TESTS)("a run's artists", () => {
     expect(await artists(await run("running"))).toEqual([]);
     await clear();
     expect(await artists(await run("failed"))).toEqual([]);
+  });
+});
+
+describe.skipIf(!process.env.DB_TESTS)("the album's mirror row after a run", () => {
+  const ALBUM = `Q${RUN_ALBUM.qid}`;
+  const TRACK = 990000170;
+
+  beforeEach(async () => {
+    await clear();
+    await db.insert(users).values({ id: USER.id, username: USER.username });
+    // The mirror has the album as of the last dump, with no tracklist.
+    await db
+      .insert(musicItems)
+      .values({ qid: RUN_ALBUM.qid, kind: "album", label: "Homogenic", instanceOf: [], revid: 1 });
+    WIKIDATA.album = {
+      id: ALBUM,
+      lastrevid: 1,
+      labels: { en: { language: "en", value: "Homogenic" } },
+      claims: {
+        P31: [
+          {
+            mainsnak: {
+              snaktype: "value",
+              property: "P31",
+              datavalue: { type: "wikibase-entityid", value: { id: "Q482994" } },
+            },
+            rank: "normal",
+          },
+        ],
+      },
+    };
+    WIKIDATA.before = null;
+    WIKIDATA.answerLost = false;
+    WIKIDATA.refused = false;
+    WIKIDATA.staleReads = 0;
+    WIKIDATA.reads = 0;
+  });
+  afterAll(async () => {
+    WIKIDATA.album = null;
+    await clear();
+  });
+
+  async function runTracklist(albumQid: string | null = ALBUM): Promise<number> {
+    const [res] = await db.insert(submissions).values({
+      userId: USER.id,
+      editGroup: "0123456789abcdef",
+      status: "running",
+      title: ALBUM,
+      albumQid: RUN_ALBUM.qid,
+      input: newAlbum("Homogenic"),
+    });
+    const ops: Op[] = [
+      {
+        op: "addClaims",
+        target: { id: ALBUM },
+        what: "album tracklist",
+        claims: [{ property: "P658", value: { type: "item", id: `Q${TRACK}` } }],
+      },
+    ];
+    expect(
+      await runPlan(res.insertId, USER, ops, "0123456789abcdef", albumQid, {
+        refreshAtMs: [0, 10, 20],
+      }),
+    ).toBe(true);
+    return res.insertId;
+  }
+
+  async function mirrored() {
+    const [row] = await db.select().from(musicItems).where(eq(musicItems.qid, RUN_ALBUM.qid));
+    const links = await db.select().from(musicLinks).where(eq(musicLinks.qid, RUN_ALBUM.qid));
+    return { label: row.label, revid: row.revid, links: links.map((l) => [l.property, l.target]) };
+  }
+
+  it("has the tracklist the run added", async () => {
+    const id = await runTracklist();
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
+    const [run] = await db.select().from(submissions).where(eq(submissions.id, id));
+    expect(run.status).toBe("done");
+  });
+
+  it("has what an edit to any other item adds, without reading it again", async () => {
+    // As no album is given, nothing reads it again after the run.
+    await runTracklist(null);
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] });
+  });
+
+  it("has it after a failed run too, as the edit may have been saved", async () => {
+    WIKIDATA.answerLost = true;
+    const id = await runTracklist();
+    const [run] = await db.select().from(submissions).where(eq(submissions.id, id));
+    expect(run.status).toBe("failed");
+    // Read again after the run's end, which doesn't wait for it.
+    await vi.waitFor(async () =>
+      expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] }),
+    );
+  });
+
+  it("waits for Wikidata to show an unanswered edit", async () => {
+    WIKIDATA.answerLost = true;
+    WIKIDATA.staleReads = 2;
+    await runTracklist();
+    await vi.waitFor(async () =>
+      expect(await mirrored()).toEqual({ label: "Homogenic", revid: 2, links: [[658, TRACK]] }),
+    );
+    // The read before the edit, two that missed it, and the one that found it.
+    expect(WIKIDATA.reads).toBe(4);
+  });
+
+  it("doesn't read the album again when Wikidata refused the edit", async () => {
+    WIKIDATA.refused = true;
+    await runTracklist();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(WIKIDATA.reads).toBe(1);
+    expect(await mirrored()).toEqual({ label: "Homogenic", revid: 1, links: [] });
   });
 });
