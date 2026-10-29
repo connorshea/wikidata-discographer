@@ -3232,44 +3232,37 @@ section.block.locked-step {
 .album-card.bad {
   border-color: var(--danger-edge);
 }
-/* The album a single is taken from, once it's found on Wikidata. */
+/* A single's fields, two to a row: Taken from is half the card's width. */
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) {
+  .grid.two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .album-taken-from {
   margin-top: 16px;
 }
+/* The album a single is taken from, as Wikidata describes it. */
 .taken-from-hit {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 6px 6px 11px;
-  border-radius: 7px;
-  border: 1px solid var(--line);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
   font-weight: 400;
+  font-size: 13.5px;
+  padding: 8px 11px;
+  border-radius: 7px;
+  background: var(--soft-bg);
+  border: 1px solid var(--line);
 }
-.taken-from-hit.warn {
-  border-color: var(--warn-edge);
-}
-.taken-from-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.taken-from-text > * {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.taken-from-text a {
+.taken-from-hit b {
   font-weight: 600;
-  font-size: 14px;
 }
-.taken-from-text .muted {
+.taken-from-hit .muted {
   color: var(--muted);
-  font-size: 12.5px;
-}
-.taken-from-hit button {
-  flex: none;
+  font-size: 13px;
 }
 input.warn {
   border-color: var(--warn-edge);

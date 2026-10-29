@@ -165,7 +165,7 @@ export default function AlbumSection({
             </div>
           )}
           {noun === "single" && !problem && !albumTracklist && (
-            <div className="grid album-taken-from">
+            <div className="grid two album-taken-from">
               <TakenFrom state={state} update={update} plan={plan} already={takenFrom} />
             </div>
           )}
@@ -173,7 +173,8 @@ export default function AlbumSection({
       ) : (
         <div className="album-new">
           <Duplicates state={state} update={update} noun={noun} />
-          <div className="grid">
+          {/* A single's four fields sit two by two. */}
+          <div className={A.type === SINGLE_CLASS ? "grid two" : "grid"}>
             <label className="f">
               Title
               <input
@@ -282,57 +283,31 @@ function TakenFrom({ state, update, plan, already }: SectionProps & { already: s
     const f = lookup(q);
     return f?.status === "ok" && f.label ? f.label : q;
   };
-  // While it's typed in, the input stays, so it doesn't fold away under a half-typed QID.
-  const [editing, setEditing] = useState(false);
-  const picked = !editing && !err && QID.test(qid) && (ok || found?.status === "loading");
   return (
     <div className="f taken-from">
-      <label htmlFor={picked ? undefined : "takenFrom"} id="takenFrom-label">
-        Taken from
-      </label>
-      {picked ? (
-        <div
-          className={`taken-from-hit${warning ? " warn" : ""}`}
-          role="group"
-          aria-labelledby="takenFrom-label"
-          aria-describedby="takenFrom-sub"
-        >
-          <span className="taken-from-text">
-            <a
-              href={`${wikiBaseUrl}/wiki/${qid}`}
-              target="_blank"
-              rel="noreferrer"
-              title={ok?.label ?? undefined}
-            >
-              {ok ? (ok.label ?? qid) : "Looking it up…"} ↗
-            </a>
-            <span className="muted" title={ok?.description ?? undefined}>
-              <span className="mono">{qid}</span>
-              {ok?.description && ` · ${ok.description}`}
-            </span>
-          </span>
-          <button
-            type="button"
-            className="quiet small"
-            aria-label="Change the album it's taken from"
-            onClick={() => setEditing(true)}
+      <label htmlFor="takenFrom">Taken from</label>
+      <QidInput
+        id="takenFrom"
+        className={warning ? "mono warn" : "mono"}
+        placeholder="Q… or Wikidata URL"
+        value={A.takenFrom}
+        aria-invalid={!!err || found?.status === "missing" || found?.status === "redirect"}
+        aria-describedby="takenFrom-err takenFrom-sub"
+        onChange={(v) => update((s) => void (s.album.takenFrom = v))}
+      />
+      {ok && !err && (
+        <span className="taken-from-hit">
+          <b>{ok.label ?? qid}</b>
+          {ok.description && <span className="muted">{ok.description}</span>}
+          <a
+            href={`${wikiBaseUrl}/wiki/${qid}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${qid} on Wikidata`}
           >
-            Change
-          </button>
-        </div>
-      ) : (
-        <QidInput
-          id="takenFrom"
-          className={warning ? "mono warn" : "mono"}
-          placeholder="Q… or Wikidata URL"
-          value={A.takenFrom}
-          autoFocus={editing}
-          aria-invalid={!!err || found?.status === "missing" || found?.status === "redirect"}
-          aria-describedby="takenFrom-err takenFrom-sub"
-          onFocus={() => setEditing(true)}
-          onBlur={() => setEditing(false)}
-          onChange={(v) => update((s) => void (s.album.takenFrom = v))}
-        />
+            ↗
+          </a>
+        </span>
       )}
       {warning && (
         <span className="warn-note taken-from-warn">
