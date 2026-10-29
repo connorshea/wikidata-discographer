@@ -149,13 +149,14 @@ function albumSummary(state: State): string | null {
 /** A new release's noun, "single" or "album". */
 const newNoun = (state: State) => releaseNoun({ ...state.album, mode: "create" });
 
-/** What each starting point is called once the form is started from it. */
-export const START_NAMES: Record<StartingPoint, string> = {
-  mb: "MusicBrainz release",
-  existing: "Album QID",
-  search: "Search by name",
-  new: "Entered by hand",
-};
+/** What a starting point is called once the form is started from it, e.g. "Single QID". */
+export const startName = (start: StartingPoint, noun: string): string =>
+  ({
+    mb: "MusicBrainz release",
+    existing: `${capitalized(noun)} QID`,
+    search: "Search by name",
+    new: "Entered by hand",
+  })[start];
 
 export interface StartSummary {
   /** Where the form was started from, e.g. "Started from MusicBrainz". */
@@ -181,7 +182,7 @@ export function startSummary(
   const artists = albumArtists(state);
   const from = {
     mb: "Started from MusicBrainz",
-    existing: "Started from an album QID",
+    existing: `Started from ${releaseNoun(A) === "single" ? "a single" : "an album"} QID`,
     search: "Found by searching",
     new: `New ${newNoun(state)} from scratch`,
   }[start];
@@ -248,7 +249,7 @@ export function railSteps(p: ProgressInput): Step[] {
 
   const steps: Omit<Step, "locked">[] = [
     state.start
-      ? { id: "start", name: "Source", summary: START_NAMES[state.start], status: "done" }
+      ? { id: "start", name: "Source", summary: startName(state.start, noun), status: "done" }
       : { id: "start", name: "Start", summary: "Pick a starting point", status: "pending" },
     {
       id: "album",

@@ -153,6 +153,12 @@ describe("an existing single", () => {
     expect(createCounts(state, buildPlan(state)).at(-1)?.label).toBe("Single tracklist");
   });
 
+  it("is started from a single QID", () => {
+    const state = singleOf(EXAMPLE);
+    expect(railSteps(input(state))[0]).toMatchObject({ name: "Source", summary: "Single QID" });
+    expect(startSummary(state, buildPlan(state), null)?.from).toBe("Started from a single QID");
+  });
+
   it("is an album again once the QID changes", () => {
     const state = singleOf(EXAMPLE);
     state.album.qid = "Q1";
