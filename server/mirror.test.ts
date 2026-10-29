@@ -102,6 +102,25 @@ describe("entityToRow", () => {
     expect(entityToRow(entity)).toMatchObject({ released: "2009", parts: 12 });
   });
 
+  it("adds up the number of parts when it's given per disc", () => {
+    const parts = (amount: number, part?: string): WikibaseStatement =>
+      ({
+        rank: "normal",
+        mainsnak: {
+          snaktype: "value",
+          property: "P2635",
+          datavalue: { type: "quantity", value: { amount: `+${amount}`, unit: "1" } },
+        },
+        ...(part ? { qualifiers: { P518: [item(part).mainsnak] } } : {}),
+      }) as WikibaseStatement;
+    const album = (P2635: WikibaseStatement[]) =>
+      entityToRow({ id: "Q140316456", claims: { P31: [item("Q482994")], P2635 } } as Entity);
+    expect(album([parts(12, "Q1"), parts(12, "Q2")])?.parts).toBe(24);
+    // A statement for the whole work is already the total.
+    expect(album([parts(12, "Q1"), parts(24), parts(12, "Q2")])?.parts).toBe(24);
+    expect(album([parts(12, "Q1"), parts(0, "Q2")])?.parts).toBeNull();
+  });
+
   it("formats a date by its precision", () => {
     expect(dateText({ time: "+2009-07-14T00:00:00Z", precision: 11 })).toBe("2009-07-14");
     expect(dateText({ time: "+2009-07-14T00:00:00Z", precision: 10 })).toBe("2009-07");

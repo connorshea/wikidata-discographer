@@ -16,7 +16,7 @@ import type { Entity, WikibaseStatement } from "./wikidata-client.ts";
  * contents change (a new column, a class added or removed): rows from an
  * older version are then re-read from the next dump.
  */
-export const MIRROR_VERSION = 6; // 2: music_links, and curly quotes in label_search. 3: folded label_search. 4: P13602 links. 5: released and parts. 6: P1552 links
+export const MIRROR_VERSION = 7; // 2: music_links, and curly quotes in label_search. 3: folded label_search. 4: P13602 links. 5: released and parts. 6: P1552 links. 7: per-disc parts summed
 
 export interface MirrorRow {
   qid: string;
@@ -70,11 +70,20 @@ function releasedOf(statements: WikibaseStatement[] | undefined): string | null 
   return dates.length ? dates.sort()[0] : null;
 }
 
-/** Its number of parts (P2635), when that's a whole number that fits the column. */
+/**
+ * Its number of parts (P2635), when that's a whole number that fits the column.
+ * A statement without "applies to part" (P518) counts the whole work. When every
+ * statement has one, they count its discs, so they're added up.
+ */
 function partsOf(statements: WikibaseStatement[] | undefined): number | null {
-  const [s] = bestRank(statements);
-  const amount = Number((s?.mainsnak.datavalue?.value as { amount?: unknown } | undefined)?.amount);
-  return Number.isInteger(amount) && amount > 0 && amount < 2 ** 31 ? amount : null;
+  const best = bestRank(statements);
+  const whole = best.find((s) => !s.qualifiers?.P518?.length);
+  const amounts = (whole ? [whole] : best).map((s) =>
+    Number((s.mainsnak.datavalue?.value as { amount?: unknown } | undefined)?.amount),
+  );
+  if (!amounts.length || !amounts.every((n) => Number.isInteger(n) && n > 0)) return null;
+  const total = amounts.reduce((a, b) => a + b, 0);
+  return total < 2 ** 31 ? total : null;
 }
 
 /** The mirror row for an entity, or null when it isn't a music item we track. */
