@@ -165,7 +165,7 @@ export default function AlbumSection({
             </div>
           )}
           {noun === "single" && !problem && !albumTracklist && (
-            <div className="grid">
+            <div className="grid two album-taken-from">
               <TakenFrom state={state} update={update} plan={plan} already={takenFrom} />
             </div>
           )}
@@ -173,7 +173,8 @@ export default function AlbumSection({
       ) : (
         <div className="album-new">
           <Duplicates state={state} update={update} noun={noun} />
-          <div className="grid">
+          {/* A single's four fields sit two by two. */}
+          <div className={A.type === SINGLE_CLASS ? "grid two" : "grid"}>
             <label className="f">
               Title
               <input
@@ -288,6 +289,7 @@ function TakenFrom({ state, update, plan, already }: SectionProps & { already: s
       <QidInput
         id="takenFrom"
         className={warning ? "mono warn" : "mono"}
+        placeholder="Q… or Wikidata URL"
         value={A.takenFrom}
         aria-invalid={!!err || found?.status === "missing" || found?.status === "redirect"}
         aria-describedby="takenFrom-err takenFrom-sub"

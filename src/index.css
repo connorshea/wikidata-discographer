@@ -3232,6 +3232,18 @@ section.block.locked-step {
 .album-card.bad {
   border-color: var(--danger-edge);
 }
+/* A single's fields, two to a row: Taken from is half the card's width. */
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) {
+  .grid.two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.album-taken-from {
+  margin-top: 16px;
+}
 /* The album a single is taken from, as Wikidata describes it. */
 .taken-from-hit {
   display: flex;
@@ -3242,7 +3254,7 @@ section.block.locked-step {
   font-size: 13.5px;
   padding: 8px 11px;
   border-radius: 7px;
-  background: var(--bg);
+  background: var(--soft-bg);
   border: 1px solid var(--line);
 }
 .taken-from-hit b {
