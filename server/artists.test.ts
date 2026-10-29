@@ -3,11 +3,14 @@ import {
   type AlbumRow,
   artistAlbums,
   artistSingles,
+  MAX_RECENT_ARTISTS,
   queryQid,
   rankArtists,
+  recentArtists,
   type SingleRow,
 } from "./artists.ts";
 import { albumType } from "../src/lib/music.ts";
+import { coerceState } from "../src/lib/state.ts";
 
 describe("queryQid", () => {
   it("reads a QID or a Wikidata URL", () => {
@@ -224,5 +227,63 @@ describe("albumType", () => {
 
   it("calls a single a single", () => {
     expect(albumType("single", ["Q134556"])).toBe("Single");
+  });
+});
+
+describe("recentArtists", () => {
+  /** A run on `albumQid`, with a new album's form naming `mapped`'s artists. */
+  const run = (albumQid: number, createdAt: string, mapped: Record<string, string> = {}) => {
+    const input = coerceState(null);
+    input.album.mode = Object.keys(mapped).length ? "create" : "existing";
+    input.album.artists = Object.keys(mapped);
+    input.artists = mapped;
+    return { albumQid, title: `Run on Q${albumQid}`, createdAt, input };
+  };
+
+  it("takes each run's performers from the mirror, newest run first, each once", () => {
+    const linked = new Map([
+      [10, [{ qid: "Q1", label: "Carly Rae Jepsen" }]],
+      [
+        11,
+        [
+          { qid: "Q1", label: "Carly Rae Jepsen" },
+          { qid: "Q2", label: "Owl City" },
+        ],
+      ],
+    ]);
+    const got = recentArtists(
+      [run(10, "2026-10-27 12:00:00"), run(11, "2026-10-20 12:00:00")],
+      linked,
+      new Map([[10, "Day and Night"]]),
+    );
+    expect(got).toEqual([
+      {
+        qid: "Q1",
+        label: "Carly Rae Jepsen",
+        album: { qid: "Q10", label: "Day and Night" },
+        at: "2026-10-27 12:00:00",
+      },
+      {
+        qid: "Q2",
+        label: "Owl City",
+        album: { qid: "Q11", label: "Run on Q11" },
+        at: "2026-10-20 12:00:00",
+      },
+    ]);
+  });
+
+  it("falls back to a new album's form for an album the mirror doesn't have", () => {
+    const got = recentArtists(
+      [run(10, "2026-10-27 12:00:00", { "The Script": "Q459585", Unmapped: "" })],
+      new Map(),
+      new Map(),
+    );
+    expect(got.map((a) => [a.qid, a.label])).toEqual([["Q459585", "The Script"]]);
+  });
+
+  it("keeps at most MAX_RECENT_ARTISTS", () => {
+    const runs = Array.from({ length: 20 }, (_, i) => run(100 + i, "2026-10-27 12:00:00"));
+    const linked = new Map(runs.map((r) => [r.albumQid, [{ qid: `Q${r.albumQid}0`, label: "A" }]]));
+    expect(recentArtists(runs, linked, new Map())).toHaveLength(MAX_RECENT_ARTISTS);
   });
 });

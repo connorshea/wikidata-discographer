@@ -3,7 +3,8 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Hono } from "hono";
 import { artistRoutes } from "./artists.ts";
-import type { ArtistSearchResponse } from "../src/lib/api-types.ts";
+import type { AuthEnv } from "./auth/session.ts";
+import type { ArtistSearchResponse, RecentArtistsResponse } from "../src/lib/api-types.ts";
 
 const mocks = vi.hoisted(() => {
   // A query builder whose every step returns itself, and that reads as no rows.
@@ -73,5 +74,19 @@ describe("Various artists (Q3108914)", () => {
     // Not in the (empty) mirror, so it isn't an artist, but it was looked up.
     expect(res.status).toBe(404);
     expect(mocks.select).toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/artists/recent", () => {
+  it("isn't taken for an artist's QID", async () => {
+    const loggedIn = new Hono<AuthEnv>()
+      .use((c, next) => {
+        c.set("user", { id: 1 } as AuthEnv["Variables"]["user"]);
+        return next();
+      })
+      .route("/api/artists", artistRoutes);
+    const res = await loggedIn.request("/api/artists/recent");
+    expect(res.status).toBe(200);
+    expect((await res.json()) as RecentArtistsResponse).toEqual({ artists: [] });
   });
 });

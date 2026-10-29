@@ -1,4 +1,4 @@
-// The artist page: find an artist, then see their albums, EPs and singles on Wikidata
+// The artist page: find an artist, or pick a recent one, then see their albums, EPs and singles on Wikidata
 // (as of the mirror), oldest first, with which still need a tracklist. Each
 // one that does can start the form (/?album=<qid>, and &rg=<mbid> to load its
 // MusicBrainz release group). Their singles follow, in a block of their own,
@@ -11,9 +11,18 @@ import type {
   ArtistResult,
   ArtistSearchResponse,
   ArtistSingle,
+  RecentArtistsResponse,
 } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { api, FetchError } from "../lib/client.ts";
+import {
+  addViewed,
+  loadViewed,
+  mergeRecent,
+  type Recent,
+  type ViewedArtist,
+  utcTime,
+} from "../lib/recent-artists.ts";
 import { useDebounced } from "./use-debounced.ts";
 
 /** Albums shown at first, and added by each Show more. */
@@ -28,7 +37,7 @@ export default function ArtistPage({ qid }: { qid: string | null }) {
     <>
       {/* Siblings, so the keys must differ, or React keeps the old search
           beside the new one when the artist changes. */}
-      <ArtistSearch key={`search:${qid}`} />
+      <ArtistSearch key={`search:${qid}`} recent={!qid} />
       {/* Every artist endpoint needs a login. */}
       {qid && user && <ArtistAlbums key={`albums:${qid}`} qid={qid} />}
     </>
@@ -38,10 +47,22 @@ export default function ArtistPage({ qid }: { qid: string | null }) {
 /** A search's answer, tagged with the query it answers. `artists` is null if it failed. */
 type SearchResult = { q: string; artists: ArtistResult[] | null };
 
-function ArtistSearch() {
+/** The search, with the recent artists under it while nothing is typed, if `recent`. */
+function ArtistSearch({ recent }: { recent: boolean }) {
   const id = useId();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
+  const [viewed] = useState<ViewedArtist[]>(() => (recent ? loadViewed() : []));
+  const [edited, setEdited] = useState<RecentArtistsResponse["artists"]>([]);
+  useEffect(() => {
+    if (!recent || !user) return;
+    const ctl = new AbortController();
+    api<RecentArtistsResponse>("/api/artists/recent", { signal: ctl.signal })
+      // Without them, only the viewed ones are suggested.
+      .then((r) => setEdited(r.artists))
+      .catch(() => {});
+    return () => ctl.abort();
+  }, [recent, user]);
   const q = useDebounced(query.trim(), 400);
   const [result, setResult] = useState<SearchResult | null>(null);
   useEffect(() => {
@@ -98,6 +119,8 @@ function ArtistSearch() {
           </span>
         )}
       </div>
+      {/* Every artist endpoint needs a login, so logged out there's nothing to open. */}
+      {recent && user && !typed && <RecentArtists recent={mergeRecent(viewed, edited)} />}
       {!!artists?.length && (
         <ul className="artist-results">
           {artists.map((a) => (
@@ -132,6 +155,38 @@ function ArtistSearch() {
   );
 }
 
+/** The artists the user viewed or edited lately, as links to their pages. */
+function RecentArtists({ recent }: { recent: Recent[] }) {
+  const id = useId();
+  if (!recent.length) return null;
+  return (
+    <>
+      <h3 id={id} className="kicker recent-artists-head">
+        Recent artists
+      </h3>
+      <ul className="artist-results recent-artists" aria-labelledby={id}>
+        {recent.map((r) => (
+          <li key={r.qid}>
+            <Link href={`/artists/${r.qid}`} className="artist-result">
+              <span className="artist-result-text">
+                <span>
+                  <b>{r.label ?? r.qid}</b> <span className="mono muted">{r.qid}</span>
+                </span>
+                <span className="muted">
+                  {r.album ? `Edited ${r.album.label} · ${dayOf(r.at)}` : `Viewed ${dayOf(r.at)}`}
+                </span>
+              </span>
+              <span className="artist-result-go" aria-hidden="true">
+                →
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 type Filter = "all" | "todo" | "done";
 
 const FILTERS: { id: Filter; label: string; keep: (a: ArtistAlbum) => boolean }[] = [
@@ -142,9 +197,18 @@ const FILTERS: { id: Filter; label: string; keep: (a: ArtistAlbum) => boolean }[
 
 /** A run's day, e.g. "Oct 17", with the year when it isn't this year's. */
 function runDay(createdAt: string): string {
-  // Stored in UTC as "YYYY-MM-DD HH:MM:SS".
-  const d = new Date(`${createdAt.replace(" ", "T")}Z`);
+  const d = new Date(utcTime(createdAt));
   if (Number.isNaN(d.getTime())) return createdAt.slice(0, 10);
+  return shortDay(d);
+}
+
+/** A recent artist's day: "today", else as a run's. */
+function dayOf(ms: number): string {
+  const d = new Date(ms);
+  return d.toDateString() === new Date().toDateString() ? "today" : shortDay(d);
+}
+
+function shortDay(d: Date): string {
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -167,7 +231,10 @@ function ArtistAlbums({ qid }: { qid: string }) {
   useEffect(() => {
     const ctl = new AbortController();
     api<ArtistResponse>(`/api/artists/${encodeURIComponent(qid)}`, { signal: ctl.signal })
-      .then(setData)
+      .then((r) => {
+        setData(r);
+        addViewed({ qid: r.artist.qid, label: r.artist.label });
+      })
       .catch((e: unknown) => {
         if (ctl.signal.aborted) return;
         setError(
