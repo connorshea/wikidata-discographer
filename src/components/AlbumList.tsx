@@ -1,11 +1,11 @@
 // Every album the tool has created or added a tracklist to, newest run first,
 // a page at a time (GET /api/albums).
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import type { AlbumListEntry, AlbumListResponse, AlbumRun } from "../lib/api-types.ts";
+import type { AlbumListEntry, AlbumListResponse, AlbumRun, RunArtist } from "../lib/api-types.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import { api } from "../lib/client.ts";
-import { joinNames } from "../lib/plan.ts";
+import { BLOCKED_ARTISTS } from "../lib/music.ts";
 
 const STATUS: Record<AlbumRun["status"], { label: string; tone: string }> = {
   running: { label: "Running", tone: "" },
@@ -150,7 +150,11 @@ function AlbumRow({ album }: { album: AlbumListEntry }) {
         <a href={`${wikiBaseUrl}/wiki/${album.qid}`} target="_blank" rel="noreferrer">
           {album.label}
         </a>{" "}
-        {album.artists.length > 0 && <>by {joinNames(album.artists)} </>}
+        {album.artists.length > 0 && (
+          <>
+            by <ArtistLinks artists={album.artists} />{" "}
+          </>
+        )}
         <span className="muted">{album.qid}</span>
       </td>
       <td>{album.type}</td>
@@ -184,6 +188,17 @@ function AlbumRow({ album }: { album: AlbumListEntry }) {
       </td>
     </tr>
   );
+}
+
+/** Each artist linked to its page, joined like joinNames: "a, b and c". */
+function ArtistLinks({ artists }: { artists: RunArtist[] }) {
+  return artists.map((a, i) => (
+    <Fragment key={a.qid}>
+      {i > 0 && (i === artists.length - 1 ? " and " : ", ")}
+      {/* Various artists' page doesn't open. */}
+      {BLOCKED_ARTISTS.has(a.qid) ? a.label : <Link href={`/artists/${a.qid}`}>{a.label}</Link>}
+    </Fragment>
+  ));
 }
 
 function RunSummary({ run }: { run: AlbumRun }) {

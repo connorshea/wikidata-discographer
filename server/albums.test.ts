@@ -87,11 +87,11 @@ describe("groupAlbums", () => {
       [run(1, 100), run(2, 200)],
       new Map(),
       new Map(),
-      new Map([[100, ["Carly Rae Jepsen"]]]),
+      new Map([[100, [{ qid: "Q1", label: "Carly Rae Jepsen" }]]]),
       new Map(),
       null,
     );
-    expect(albums.map((a) => a.artists)).toEqual([["Carly Rae Jepsen"], []]);
+    expect(albums.map((a) => a.artists)).toEqual([[{ qid: "Q1", label: "Carly Rae Jepsen" }], []]);
   });
 
   it("gives each album its type, or null", () => {

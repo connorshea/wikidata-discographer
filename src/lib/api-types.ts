@@ -213,8 +213,8 @@ export interface AlbumListEntry {
   qid: string;
   /** The label in the mirror, else the title the latest run was given. */
   label: string;
-  /** Its performers' labels, as of the mirror. */
-  artists: string[];
+  /** Its performers that have a label, as of the mirror. */
+  artists: RunArtist[];
   /**
    * "Album", "EP", "Single", "Live album" and so on (albumType, src/lib/music.ts), as of
    * the mirror, else as the latest run's form said. Null when neither says.
