@@ -56,12 +56,6 @@ export function saveOwnRun(o: OwnRun | null, store: Store = localStorage): void 
   }
 }
 
-/** The run to show first: the album list's `?run=<id>`, else the own run. */
-export function initialRunId(search: string, own: OwnRun | null): number | null {
-  const id = Number(new URLSearchParams(search).get("run"));
-  return Number.isInteger(id) && id > 0 ? id : (own?.run ?? null);
-}
-
 /**
  * What an answer about a run means for the own run: "keep" following it (it's
  * still running, or another run), "drop" it (it ended, but the form has been
@@ -136,7 +130,7 @@ function blank(s: State, key: string): boolean {
 }
 
 /**
- * How the form compares with an opened run's: "other" if it's another form,
+ * How the form compares with a run's: "other" if it's another form,
  * "behind" if it's the run's form but lacks QIDs the run created, or "same"
  * if it's the run's form with them all. A QID put in by hand where the run
  * created another makes it "other", so writing back never replaces one.

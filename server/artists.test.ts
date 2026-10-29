@@ -66,7 +66,7 @@ describe("artistAlbums", () => {
       row(4, "Of June", "2007"),
       row(5, "The Midsummer Station", "2012-05-15"),
     ];
-    expect(artistAlbums(rows, none, null).map((a) => [a.label, a.type])).toEqual([
+    expect(artistAlbums(rows, none).map((a) => [a.label, a.type])).toEqual([
       ["Of June", "Studio album"],
       ["Shooting Star", "EP"],
       ["The Midsummer Station", "Studio album"],
@@ -76,24 +76,19 @@ describe("artistAlbums", () => {
   });
 
   it("gives each album its facts and its latest run", () => {
-    const run = (id: number, userId: number, status: string) => ({
+    const run = (id: number, status: string) => ({
       id,
       albumQid: 1,
-      userId,
       status,
       editGroup: `g${id}`,
       createdAt: "2026-10-17 18:00:00",
     });
-    const [album] = artistAlbums(
-      [row(1, "Ocean Eyes", "2009")],
-      {
-        parts: new Map([[1, 16]]),
-        tracks: new Map([[1, 14]]),
-        releaseGroups: new Map([[1, ["mbid"]]]),
-        runs: [run(3, 7, "failed"), run(9, 7, "done"), run(4, 8, "done")],
-      },
-      7,
-    );
+    const [album] = artistAlbums([row(1, "Ocean Eyes", "2009")], {
+      parts: new Map([[1, 16]]),
+      tracks: new Map([[1, 14]]),
+      releaseGroups: new Map([[1, ["mbid"]]]),
+      runs: [run(3, "failed"), run(9, "done"), run(4, "done")],
+    });
     expect(album).toEqual({
       qid: "Q1",
       label: "Ocean Eyes",
@@ -105,7 +100,6 @@ describe("artistAlbums", () => {
       run: {
         id: 9,
         status: "done",
-        mine: true,
         createdAt: "2026-10-17 18:00:00",
         editGroupUrl: "https://editgroups.toolforge.org/b/CB/g9/",
       },
@@ -135,7 +129,7 @@ describe("artistSingles", () => {
       single(3, "Vanilla Twilight", "2009-11-03"),
       single(4, "Fireflies", "2009-11-03"),
     ];
-    expect(artistSingles(rows, none, null).map((s) => s.label)).toEqual([
+    expect(artistSingles(rows, none).map((s) => s.label)).toEqual([
       "Fireflies",
       "Vanilla Twilight",
       "Good Time",
@@ -144,11 +138,10 @@ describe("artistSingles", () => {
   });
 
   it("counts its tracks", () => {
-    const [s] = artistSingles(
-      [single(1, "Fireflies", "2009")],
-      { ...none, tracks: new Map([[1, 2]]) },
-      null,
-    );
+    const [s] = artistSingles([single(1, "Fireflies", "2009")], {
+      ...none,
+      tracks: new Map([[1, 2]]),
+    });
     expect(s).toEqual({
       qid: "Q1",
       label: "Fireflies",
@@ -162,7 +155,7 @@ describe("artistSingles", () => {
   });
 
   it("passes on its number of parts", () => {
-    const [s] = artistSingles([{ ...single(1, "Fireflies", "2009"), parts: 3 }], none, null);
+    const [s] = artistSingles([{ ...single(1, "Fireflies", "2009"), parts: 3 }], none);
     expect(s.parts).toBe(3);
   });
 
@@ -186,7 +179,6 @@ describe("artistSingles", () => {
           [50, "Now That's What I Call Music! 44"],
         ]),
       },
-      null,
     );
     expect(singles.map((s) => [s.label, s.takenFrom])).toEqual([
       ["Fireflies", [{ qid: "Q40", label: "Ocean Eyes" }]],
@@ -202,29 +194,24 @@ describe("artistSingles", () => {
   });
 
   it("has no label for an album that isn't in the mirror", () => {
-    const [s] = artistSingles(
-      [single(1, "Fireflies", "2009")],
-      { ...none, takenFrom: new Map([[1, [99]]]) },
-      null,
-    );
+    const [s] = artistSingles([single(1, "Fireflies", "2009")], {
+      ...none,
+      takenFrom: new Map([[1, [99]]]),
+    });
     expect(s.takenFrom).toEqual([{ qid: "Q99", label: null }]);
   });
 
   it("passes on its release groups and the latest run on it", () => {
-    const [s] = artistSingles(
-      [single(1, "Fireflies", "2009")],
-      {
-        ...none,
-        releaseGroups: new Map([[1, ["0f9c2d8e-6b1a-4c3d-9e8f-7a6b5c4d3e2f"]]]),
-        runs: [
-          { id: 4, albumQid: 1, userId: 7, status: "failed", editGroup: "g4", createdAt: "x" },
-          { id: 9, albumQid: 1, userId: 7, status: "done", editGroup: "g9", createdAt: "y" },
-        ],
-      },
-      7,
-    );
+    const [s] = artistSingles([single(1, "Fireflies", "2009")], {
+      ...none,
+      releaseGroups: new Map([[1, ["0f9c2d8e-6b1a-4c3d-9e8f-7a6b5c4d3e2f"]]]),
+      runs: [
+        { id: 4, albumQid: 1, status: "failed", editGroup: "g4", createdAt: "x" },
+        { id: 9, albumQid: 1, status: "done", editGroup: "g9", createdAt: "y" },
+      ],
+    });
     expect(s.releaseGroups).toEqual(["0f9c2d8e-6b1a-4c3d-9e8f-7a6b5c4d3e2f"]);
-    expect(s.run).toMatchObject({ id: 9, status: "done", mine: true });
+    expect(s.run).toMatchObject({ id: 9, status: "done" });
   });
 });
 

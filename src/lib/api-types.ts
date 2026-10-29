@@ -197,8 +197,6 @@ export interface AlbumRun {
   id: number;
   status: SubmissionStatus;
   username: string;
-  /** Whether the logged-in user made it, so it can open in the run view. */
-  mine: boolean;
   createdAt: string;
   finishedAt: string | null;
   editGroupUrl: string;
@@ -257,7 +255,7 @@ export interface ArtistAlbum {
   /** Its MusicBrainz release group IDs (P436). */
   releaseGroups: string[];
   /** The latest Discographer run on it. */
-  run: Pick<AlbumRun, "id" | "status" | "mine" | "createdAt" | "editGroupUrl"> | null;
+  run: Pick<AlbumRun, "id" | "status" | "createdAt" | "editGroupUrl"> | null;
 }
 
 /** One of an artist's singles, as of the mirror. */

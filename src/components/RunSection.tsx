@@ -10,15 +10,13 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useSearch } from "wouter";
+import { Link } from "wouter";
 import { api, FetchError } from "../lib/client.ts";
 import { useAuth } from "../lib/auth-context.ts";
 import {
   adoptOwnRun,
   afterOwnRun,
   applyCreated,
-  formOfRun,
-  initialRunId,
   isGone,
   loadOwnRun,
   OWN_RUN_KEY,
@@ -135,13 +133,10 @@ export default function RunSection({
   onRunning: (r: RunningInfo | null) => void;
   /** Told while the run's QIDs are checked before it starts, so the form is locked then too. */
   onStarting: (starting: boolean) => void;
-  /** Told whether a run is on show, e.g. one opened from the album list. */
+  /** Told whether a run is on show, e.g. the one that just cleared the form. */
   onShowing: (showing: boolean) => void;
 }) {
   const { user } = useAuth();
-  // The album list's "Open run" links here with ?run=<id>.
-  const search = useSearch();
-  const [, navigate] = useLocation();
   // Only a run started from this form writes its QIDs back into it.
   const [ownRun, setOwnRun] = useState(loadOwnRun);
   const ownRunRef = useRef(ownRun);
@@ -153,7 +148,7 @@ export default function RunSection({
   // The form was cleared because its run is done: the run stays on show.
   const [cleared, setCleared] = useState(false);
   const keepRun = useRef(false);
-  const [runId, setRunId] = useState(() => initialRunId(search, ownRun));
+  const [runId, setRunId] = useState(() => ownRun?.run ?? null);
   const showing = runId !== null;
   useEffect(() => onShowing(showing), [showing, onShowing]);
   const [run, setRun] = useState<SubmissionInfo | null>(null);
@@ -193,12 +188,6 @@ export default function RunSection({
     startRef.current = state.start;
     if (was === null && state.start !== null && run && run.status !== "running") closeRun();
   }, [state.start, run, closeRun]);
-  const sectionRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (!new URLSearchParams(search).has("run")) return;
-    navigate("/", { replace: true });
-    sectionRef.current?.scrollIntoView();
-  }, [search, navigate]);
   const [starting, setStarting] = useState(false);
   useEffect(() => onStarting(starting), [starting, onStarting]);
   // What the user has confirmed so far for this start, so confirming one
@@ -268,7 +257,8 @@ export default function RunSection({
     );
   }, [runId, loggedIn, settle, dropIfGone]);
 
-  // The own run, while another is on show.
+  // The own run, while another is on show: a run started in another tab after
+  // this form's run cleared it.
   const ownRunId = ownRun?.run ?? null;
   useEffect(() => {
     if (ownRunId === null || ownRunId === runId || !loggedIn) return;
@@ -288,7 +278,7 @@ export default function RunSection({
   useEffect(() => {
     onRunning(anyRunning ? { done: runDone ?? 0, total: runTotal ?? 0 } : null);
   }, [anyRunning, runDone, runTotal, onRunning]);
-  // The user's recent runs, again whenever a run starts, ends or is opened.
+  // The user's recent runs, again whenever a run starts or ends.
   const [recent, setRecent] = useState<SubmissionListResponse["submissions"]>([]);
   const runStatus = run?.status;
   useEffect(() => {
@@ -306,18 +296,6 @@ export default function RunSection({
     [run?.title ?? "", ...recent.slice(0, RECENT).map((r) => r.title)],
     state.settings.lang,
   );
-  // Whether the form is the one the run on show started from, once it's ended.
-  const fit = useMemo(
-    () => (run && run.status !== "running" ? formOfRun(state, run) : "other"),
-    [run, state],
-  );
-  // Any run of this form, not only the own run, writes its QIDs back, so
-  // starting it again reuses them instead of creating the items twice.
-  useEffect(() => {
-    if (fit === "behind" && run && !stale) update((s) => applyCreated(s, run.edits));
-  }, [fit, run, stale, update]);
-  // A finished run of this form has nothing left to make.
-  const finished = run?.status === "done" && fit === "same";
   const start = (confirm?: Omit<SubmissionRequest, "state">) => {
     setStarting(true);
     setCleared(false);
@@ -352,7 +330,7 @@ export default function RunSection({
   const noun = releaseNoun(state.album);
   // The run can't start until everything in the checklist is done.
   const blocked = !checklistDone || !user || !plan.ready || stale;
-  const disabled = blocked || finished || running || starting;
+  const disabled = blocked || running || starting;
   const label = starting
     ? "Checking the QIDs…"
     : running
@@ -374,9 +352,6 @@ export default function RunSection({
     const found = lookup(title);
     return (found?.status === "ok" && found.label) || title;
   };
-  const doneHint = user && !stale && finished && (
-    <p className="hint">This run is done. Start a new one to make more edits.</p>
-  );
   const staleHint = user && stale && (
     <p className="hint">The form was changed in another tab. Reload this page first.</p>
   );
@@ -386,7 +361,6 @@ export default function RunSection({
       <section
         className={`block create${!state.start && !run && !held ? " locked-step" : ""}`}
         id="create"
-        ref={sectionRef}
       >
         {running ? (
           <div className="create-head">
@@ -454,7 +428,6 @@ export default function RunSection({
                   </p>
                 </div>
                 {staleHint}
-                {doneHint}
               </>
             )}
           </>
@@ -529,7 +502,6 @@ export default function RunSection({
               </p>
             )}
             {staleHint}
-            {doneHint}
           </>,
           slot,
         )}
@@ -546,18 +518,7 @@ export default function RunSection({
                 </button>
               </div>
             )}
-            {user && recent.length > 0 && (
-              <RecentRuns
-                runs={recent}
-                current={runId}
-                titleOf={titleOf}
-                onOpen={(id) => {
-                  setCleared(false);
-                  setRunId(id);
-                  sectionRef.current?.scrollIntoView();
-                }}
-              />
-            )}
+            {user && recent.length > 0 && <RecentRuns runs={recent} titleOf={titleOf} />}
           </>,
           sideSlot,
         )}
@@ -1174,18 +1135,8 @@ function ThisRun({ run, username }: { run: SubmissionInfo; username: string }) {
 
 type RecentRun = SubmissionListResponse["submissions"][number];
 
-/** Recent runs to show again, in the plan panel. */
-function RecentRuns({
-  runs,
-  current,
-  titleOf,
-  onOpen,
-}: {
-  runs: RecentRun[];
-  current: number | null;
-  titleOf: (title: string) => string;
-  onOpen: (id: number) => void;
-}) {
+/** The user's recent runs, in the plan panel, each linked to its edit group. */
+function RecentRuns({ runs, titleOf }: { runs: RecentRun[]; titleOf: (title: string) => string }) {
   return (
     <div className="card recent-runs">
       <div className="kicker" id="recent-runs">
@@ -1196,15 +1147,15 @@ function RecentRuns({
           const status = RUN_STATUS[r.status] ?? { label: r.status, tone: "" };
           return (
             <li key={r.id}>
-              <button
-                type="button"
-                aria-current={r.id === current ? "true" : undefined}
+              <a
+                href={r.editGroupUrl}
+                target="_blank"
+                rel="noreferrer"
                 title={`${r.createdAt} UTC`}
-                onClick={() => onOpen(r.id)}
               >
-                <span>{titleOf(r.title)}</span>
-                <span className={`pill ${status.tone}`}>{status.label}</span>
-              </button>
+                {titleOf(r.title)}
+              </a>
+              <span className={`pill ${status.tone}`}>{status.label}</span>
             </li>
           );
         })}

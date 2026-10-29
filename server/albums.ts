@@ -32,7 +32,6 @@ export const ALBUM_PAGE_SIZE = 50;
 export interface RunRow {
   id: number;
   albumQid: number;
-  userId: number;
   username: string;
   status: string;
   title: string;
@@ -83,7 +82,6 @@ export function groupAlbums(
   labels: Map<number, string>,
   artists: Map<number, RunArtist[]>,
   types: Map<number, string>,
-  userId: number | null,
 ): AlbumListEntry[] {
   const byAlbum = new Map<number, RunRow[]>(albumQids.map((q) => [q, []]));
   for (const r of [...runs].sort((a, b) => b.id - a.id)) byAlbum.get(r.albumQid)?.push(r);
@@ -96,7 +94,6 @@ export function groupAlbums(
         id: r.id,
         status: r.status as SubmissionStatus,
         username: r.username,
-        mine: r.userId === userId,
         createdAt: r.createdAt,
         finishedAt: r.finishedAt,
         editGroupUrl: editGroupUrl(r.editGroup),
@@ -161,7 +158,6 @@ albumRoutes.get("/", async (c) => {
           .select({
             id: submissions.id,
             albumQid: submissions.albumQid,
-            userId: submissions.userId,
             username: users.username,
             status: submissions.status,
             title: submissions.title,
@@ -245,7 +241,6 @@ albumRoutes.get("/", async (c) => {
       new Map(labels.flatMap((l) => (l.label ? [[l.qid, l.label]] : []))),
       artists,
       types,
-      user?.id ?? null,
     ),
     next: more ? Number(page[ALBUM_PAGE_SIZE - 1].latest) : null,
   } satisfies AlbumListResponse);
