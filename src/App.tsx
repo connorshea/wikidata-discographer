@@ -402,7 +402,7 @@ function Form() {
   // was sent, and writes its QIDs back by row, so the form can't change meanwhile.
   const [starting, setStarting] = useState(false);
   const locked = !!running || starting;
-  // A run on show, such as one opened from the album list, which Clear closes.
+  // A run on show, such as the one that just cleared the form, which Clear closes.
   const [showingRun, setShowingRun] = useState(false);
   const empty = isEmpty(state);
   const unreviewed = reviews.filter((r) => !r.reviewed).length;

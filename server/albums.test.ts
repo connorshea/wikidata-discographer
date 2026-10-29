@@ -93,7 +93,7 @@ describe("groupAlbums", () => {
     expect(albums.map((a) => a.type)).toEqual(["EP", null]);
   });
 
-  it("marks the viewer's own runs and keeps every status", () => {
+  it("keeps every user's runs and every status", () => {
     const [album] = groupAlbums(
       [100],
       [run(1, 100, { status: "unknown" }), run(2, 100, { username: "Bob", status: "failed" })],

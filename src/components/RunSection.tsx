@@ -257,7 +257,8 @@ export default function RunSection({
     );
   }, [runId, loggedIn, settle, dropIfGone]);
 
-  // The own run, while another is on show.
+  // The own run, while another is on show: a run started in another tab after
+  // this form's run cleared it.
   const ownRunId = ownRun?.run ?? null;
   useEffect(() => {
     if (ownRunId === null || ownRunId === runId || !loggedIn) return;
@@ -1134,7 +1135,7 @@ function ThisRun({ run, username }: { run: SubmissionInfo; username: string }) {
 
 type RecentRun = SubmissionListResponse["submissions"][number];
 
-/** Recent runs to show again, in the plan panel. */
+/** The user's recent runs, in the plan panel, each linked to its edit group. */
 function RecentRuns({ runs, titleOf }: { runs: RecentRun[]; titleOf: (title: string) => string }) {
   return (
     <div className="card recent-runs">
@@ -1145,8 +1146,15 @@ function RecentRuns({ runs, titleOf }: { runs: RecentRun[]; titleOf: (title: str
         {runs.slice(0, RECENT).map((r) => {
           const status = RUN_STATUS[r.status] ?? { label: r.status, tone: "" };
           return (
-            <li key={r.id} title={`${r.createdAt} UTC`}>
-              <span>{titleOf(r.title)}</span>
+            <li key={r.id}>
+              <a
+                href={r.editGroupUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={`${r.createdAt} UTC`}
+              >
+                {titleOf(r.title)}
+              </a>
               <span className={`pill ${status.tone}`}>{status.label}</span>
             </li>
           );
