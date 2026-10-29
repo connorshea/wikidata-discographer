@@ -106,7 +106,7 @@ export default function AlbumList() {
               setError(null);
             }}
           />
-          Only albums I've worked on
+          Only releases I've edited
         </label>
       )}
       {error && <p className="msg err">{error}</p>}
