@@ -87,6 +87,21 @@ export const ID_PROPERTIES: Readonly<Record<string, string>> = {
   P4578: "Tidal track ID",
 };
 
+/** The MusicBrainz identifiers, with the path of their pages on musicbrainz.org. */
+const MUSICBRAINZ_PATHS: Readonly<Record<string, string>> = {
+  P434: "artist",
+  P436: "release-group",
+  P5813: "release",
+  P435: "work",
+  P4404: "recording",
+};
+
+/** The MusicBrainz page for an identifier, or undefined if it isn't a MusicBrainz one. */
+export function musicBrainzUrl(property: string, value: string): string | undefined {
+  const path = MUSICBRAINZ_PATHS[property];
+  return path && `https://musicbrainz.org/${path}/${encodeURIComponent(value)}`;
+}
+
 /**
  * Item-valued properties stored in the mirror (`music_links`), so the app can
  * find existing items for a tracklist: who made them, how compositions,

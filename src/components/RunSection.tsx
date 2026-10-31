@@ -24,6 +24,7 @@ import {
   saveOwnRun,
   settleOwnRun,
 } from "../lib/own-run.ts";
+import { musicBrainzUrl } from "../lib/music.ts";
 import { EP_CLASS, type Plan, releaseNoun, type State } from "../lib/plan.ts";
 import { previewPlan } from "../lib/preview.ts";
 import type { PreviewEdit } from "../lib/preview.ts";
@@ -48,10 +49,11 @@ import type {
   SubmissionListResponse,
   SubmissionRequest,
   SubmissionStatus,
+  TakenId,
   TakenIdsConflict,
   UnknownRunConflict,
 } from "../lib/api-types.ts";
-import { WikiLink } from "./common.tsx";
+import { Qids, WikiLink } from "./common.tsx";
 import { UnreviewedNotice } from "./MatchesSection.tsx";
 import PlannedEdits from "./PlannedEdits.tsx";
 import type { SectionProps } from "./types.ts";
@@ -782,6 +784,7 @@ function TakenIdsGuard({
   disabled: boolean;
   onConfirm: () => void;
 }) {
+  const { wikiBaseUrl } = useAuth();
   const n = takenIds.length;
   return (
     <div className="msg warn">
@@ -794,8 +797,10 @@ function TakenIdsGuard({
         as a song item that is both the composition and the recording.
       </p>
       <ul>
-        {takenIds.map((p) => (
-          <li key={p}>{p}</li>
+        {takenIds.map((t) => (
+          <li key={t.text}>
+            <TakenIdText base={wikiBaseUrl} taken={t} />
+          </li>
         ))}
       </ul>
       <div className="row">
@@ -804,6 +809,23 @@ function TakenIdsGuard({
         </button>
       </div>
     </div>
+  );
+}
+
+/** A taken identifier's sentence, with its QIDs and a MusicBrainz ID linked. */
+function TakenIdText({ base, taken }: { base: string; taken: TakenId }) {
+  const { text, property, value } = taken;
+  const url = property && value ? musicBrainzUrl(property, value) : undefined;
+  const at = url ? text.indexOf(value!) : -1;
+  if (at < 0) return <Qids base={base}>{text}</Qids>;
+  return (
+    <>
+      <Qids base={base}>{text.slice(0, at)}</Qids>
+      <a href={url} target="_blank" rel="noreferrer">
+        {value}
+      </a>
+      <Qids base={base}>{text.slice(at + value!.length)}</Qids>
+    </>
   );
 }
 

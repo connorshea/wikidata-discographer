@@ -125,9 +125,21 @@ describe("checkPlanIds", () => {
       ],
     });
     expect(await checkPlanIds(ops)).toEqual([
-      "The new album “Album” would get Spotify album ID 4aawyAB9vmqN3uQ7FjRGTy, but Q20 already has it. Use Q20 as the existing album instead, so it isn't created twice.",
-      `The new track “Intro” (disc 1 track 1) would get MusicBrainz recording ID ${RECORDING}, but Q10 already has it. Put Q10 in that row's track field instead, so it isn't created twice.`,
-      "The new track “Intro” (disc 1 track 1) would get Apple Music track ID 1065973702, but Q11 and Q12 already have it. If one of them is the same track, use it in the form instead. If not, fix the ID on Wikidata or run anyway.",
+      {
+        text: "The new album “Album” would get Spotify album ID 4aawyAB9vmqN3uQ7FjRGTy, but Q20 already has it. Use Q20 as the existing album instead, so it isn't created twice.",
+        property: "P2205",
+        value: "4aawyAB9vmqN3uQ7FjRGTy",
+      },
+      {
+        text: `The new track “Intro” (disc 1 track 1) would get MusicBrainz recording ID ${RECORDING}, but Q10 already has it. Put Q10 in that row's track field instead, so it isn't created twice.`,
+        property: "P4404",
+        value: RECORDING,
+      },
+      {
+        text: "The new track “Intro” (disc 1 track 1) would get Apple Music track ID 1065973702, but Q11 and Q12 already have it. If one of them is the same track, use it in the form instead. If not, fix the ID on Wikidata or run anyway.",
+        property: "P10110",
+        value: "1065973702",
+      },
     ]);
     expect(mocks.upsertRows).toHaveBeenCalledWith(
       [{ qid: "Q10" }, { qid: "Q11" }, { qid: "Q12" }, { qid: "Q20" }],

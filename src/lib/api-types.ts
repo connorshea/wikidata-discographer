@@ -166,8 +166,16 @@ export interface RecreateConflict {
  */
 export interface TakenIdsConflict {
   error: string;
-  /** One sentence per identifier taken. */
-  takenIds: string[];
+  /** One per identifier taken. */
+  takenIds: TakenId[];
+}
+
+/** An identifier some item already has, and the sentence saying so. */
+export interface TakenId {
+  text: string;
+  /** The identifier's property and value. Absent on the closing "…and n more". */
+  property?: string;
+  value?: string;
 }
 
 /**
