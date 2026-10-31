@@ -66,6 +66,7 @@ import type {
   SubmissionStatus,
   RecreateConflict,
   RunArtist,
+  TakenId,
   TakenIdsConflict,
   UnknownRunConflict,
 } from "../src/lib/api-types.ts";
@@ -242,7 +243,7 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
   // The mirror can be a week behind, so ask Wikidata live whether an item
   // already has an identifier a new item would get. Go on only once the user
   // says to run anyway.
-  let taken: string[];
+  let taken: TakenId[];
   try {
     taken = await checkPlanIds(plan.ops);
   } catch (err) {
@@ -255,7 +256,10 @@ async function startRun(c: Context<AuthEnv>, user: AuthUser) {
     );
   }
   if (taken.length > 0 && !body?.confirmTakenIds)
-    return c.json({ error: taken.join(" "), takenIds: taken } satisfies TakenIdsConflict, 409);
+    return c.json(
+      { error: taken.map((t) => t.text).join(" "), takenIds: taken } satisfies TakenIdsConflict,
+      409,
+    );
 
   const editGroup = randomBytes(8).toString("hex");
   const albumQid = state.album.mode === "create" ? null : state.album.qid.trim();

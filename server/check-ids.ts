@@ -23,6 +23,7 @@ import { getEntities, retryAfterMs } from "./wikidata-client.ts";
 import { newItemName } from "./check-qids.ts";
 import { ID_PROPERTIES } from "../src/lib/music.ts";
 import type { Op } from "../src/lib/plan.ts";
+import type { TakenId } from "../src/lib/api-types.ts";
 
 export const SPARQL_URL = "https://query.wikidata.org/sparql";
 const TIMEOUT_MS = 30_000;
@@ -141,10 +142,10 @@ export class IdCheckError extends Error {
 
 /**
  * Problems with the identifiers the run's new items would get, one sentence
- * each: every one some item on Wikidata already has. Empty when none is
+ * each with the identifier: every one some item on Wikidata already has. Empty when none is
  * taken. Throws an IdCheckError if the Query Service can't be asked.
  */
-export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
+export async function checkPlanIds(ops: readonly Op[]): Promise<TakenId[]> {
   if (wikiOrigin() !== new URL(DEFAULT_WIKIDATA_API_URL).origin) return [];
   const ids = planIds(ops);
   if (ids.length === 0) return [];
@@ -167,7 +168,7 @@ export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
   }
   if (taken.size === 0) return [];
 
-  const problems: string[] = [];
+  const problems: TakenId[] = [];
   for (const { property, value, op } of ids) {
     const qids = [...(taken.get(`${property}\t${value}`) ?? [])].toSorted();
     if (qids.length === 0) continue;
@@ -183,13 +184,17 @@ export async function checkPlanIds(ops: readonly Op[]): Promise<string[]> {
       fix = `Put ${it} in that row's ${same} field instead, so it isn't created twice.`;
     else
       fix = `If ${it} is the same ${op.kind === "work" ? "composition" : "track"}, use it in the form instead. If not, fix the ID on Wikidata or run anyway.`;
-    problems.push(`${capitalize(newItemName(op))} would get ${name} ${value}, but ${who}. ${fix}`);
+    problems.push({
+      text: `${capitalize(newItemName(op))} would get ${name} ${value}, but ${who}. ${fix}`,
+      property,
+      value,
+    });
   }
   await addToMirror([...new Set([...taken.values()].flatMap((s) => [...s]))]);
   if (problems.length > MAX_PROBLEMS)
     return [
       ...problems.slice(0, MAX_PROBLEMS),
-      `…and ${problems.length - MAX_PROBLEMS} more identifiers other items already have.`,
+      { text: `…and ${problems.length - MAX_PROBLEMS} more identifiers other items already have.` },
     ];
   return problems;
 }
