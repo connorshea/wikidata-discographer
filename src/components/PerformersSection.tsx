@@ -184,7 +184,14 @@ export default function PerformersSection({ state, update, plan }: SectionProps)
                         : r.composer
                           ? "composer"
                           : "lyricist"}
-                      .
+                      .{" "}
+                      <a
+                        href={`${wikiBaseUrl}/w/index.php?${new URLSearchParams({ search: r.name })}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Search on Wikidata…
+                      </a>
                     </p>
                   ) : (
                     <Suggestions
